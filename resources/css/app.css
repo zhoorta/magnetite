@@ -1,0 +1,31 @@
+@import 'tailwindcss';
+
+@source '../../storage/framework/views/*.php';
+
+:root {
+    --c-bg: #0b0d14;
+    --c-surface: #141824;
+    --c-text: #e6e8ef;
+    --c-muted: #8a90a6;
+    --c-accent: #ff5a5f;
+    --c-accent2: #ffb86b;
+    --radius: 0.75rem;
+    --font-ui: ui-sans-serif, system-ui, sans-serif;
+}
+
+@theme inline {
+    --color-bg: var(--c-bg);
+    --color-surface: var(--c-surface);
+    --color-text: var(--c-text);
+    --color-muted: var(--c-muted);
+    --color-accent: var(--c-accent);
+    --color-accent2: var(--c-accent2);
+    --radius-theme: var(--radius);
+    --font-sans: var(--font-ui);
+}
+
+body {
+    background: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-ui);
+}

@@ -1,0 +1,26 @@
+[
+    {
+        "id": "late-night-fm",
+        "name": "Late-night FM",
+        "colors": { "bg": "#0b0d14", "surface": "#141824", "text": "#e6e8ef", "muted": "#8a90a6", "accent": "#ff5a5f", "accent2": "#ffb86b" },
+        "radius": "0.75rem",
+        "font": "'Space Grotesk', ui-sans-serif, system-ui, sans-serif",
+        "visualizer": { "id": "bars", "params": { "count": 48 } }
+    },
+    {
+        "id": "paper-ink",
+        "name": "Paper & ink",
+        "colors": { "bg": "#f6f1e7", "surface": "#ece4d3", "text": "#1d1b17", "muted": "#6f685a", "accent": "#1d1b17", "accent2": "#b5482f" },
+        "radius": "0.15rem",
+        "font": "Georgia, 'Times New Roman', serif",
+        "visualizer": { "id": "scope", "params": { "thickness": 2 } }
+    },
+    {
+        "id": "terminal",
+        "name": "Terminal",
+        "colors": { "bg": "#000000", "surface": "#07140a", "text": "#b6ffbd", "muted": "#4f8a57", "accent": "#39ff6a", "accent2": "#b6ff3a" },
+        "radius": "0rem",
+        "font": "ui-monospace, 'SF Mono', Menlo, monospace",
+        "visualizer": { "id": "radial", "params": { "spokes": 72 } }
+    }
+]
