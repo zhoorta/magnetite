@@ -69,3 +69,14 @@ All hold 60 fps. A frame costs 0.3 to 0.45 ms of CPU out of 16.7 ms. Caveats: ti
 `panels` in the player store is a list of `{id, params}` (max 4). The loop asks `layout(n, w, h)` for cells, then for each panel saves the context, clips to the cell, translates to its corner and calls `draw` with the cell's own `w` and `h`, so visualizers need no change (they must only use the `w`/`h` they are given, never the canvas size). The column count minimises the distance of the cell shape from 1.6:1, with a penalty for a ragged last row, so four meters become a 2x2 grid on a wide canvas. `needs` is recomputed only when the panels change.
 
 Measured with four meters at once (full screen, headless Chrome, 60 fps): level meters only (`vu-needle`, `vu-receiver`, `magic-eye`, `vu-leds`) 0.06 ms sample + 0.66 ms draw (p95 1.1); `bars`, `radial`, `scope`, `vu-wide` 0.22 + 0.52 ms. A visualizer can only be in one panel at a time because its meter state is per module.
+
+## Worklet meters (2026-10-08)
+
+`worklet/meter-processor.js` holds the DSP (`MeterDsp`, plain class, tested in Node) and the processor that wraps it. Decisions and numbers:
+
+- Loudness follows BS.1770-4: K-weighting (head shelf plus RLB high-pass, coefficients computed for the actual sample rate), channel weights 1 for L and R, 100 ms sub-blocks, momentary = last 4, short-term = last 30, integrated = 400 ms blocks every 100 ms, absolute gate -70 LUFS, relative gate -10 LU. Short-term shows nothing until 3 s have played. The integrated value and true-peak hold reset when a new track starts (`engine.play(url)` posts `reset`). Stereo only: a mono source feeds both channels, surround is not weighted.
+- True peak is a 49-tap Blackman-windowed sinc, 4x, each phase normalised to unity DC gain; phase 0 lands exactly on the input samples. Annex 2 of BS.1770 gives its own 48-tap coefficients; this is the same idea, not the same numbers, so it may differ from a certified meter by a few hundredths of a dB.
+- Correlation is `sum(LR) / sqrt(sum(LL) * sum(RR))` with a 0.3 s exponential average; the goniometer plots mid on the vertical axis and side across, scaled so a full-scale mono signal just reaches the circle, with the last 1024 samples (23 ms at 44.1 kHz) per message.
+- The worklet runs always, off the main thread; the `needs` contract only matters for what the main thread computes. Its output is silence connected to the destination, so the heard signal is untouched.
+- Verified: Node tests against analytic values (see `PLAN.md`) and headless Chrome on a real file (loud master: -9.3 LUFS, -0.4 dBTP, correlation 0.87). Not verified: Safari, or any comparison with a reference meter.
+- Gotcha found on the way: `php artisan serve` handles one request at a time, so `addModule` called after the audio request had started stayed pending forever. The file is therefore fetched in the engine constructor and loaded from a Blob URL.
