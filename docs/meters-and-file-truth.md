@@ -87,3 +87,10 @@ Measured with four meters at once (full screen, headless Chrome, 60 fps): level 
 - The level of a band is the sum of the powers of its bins, in dB, plus 11.18 dB: Web Audio scales the spectrum by 1/N after a Blackman window, so a full-scale sine's bins add up to -11.18 dB. The result reads dB relative to a full-scale sine. It is a true power measure, not a peak: broadband music reads many dB under its waveform peaks, and wider bands hold more bins, so white noise reads 3 dB higher per octave while pink noise reads flat (music is closer to pink).
 - It is not an IEC 61260 filter bank: bands come from FFT bins with a Blackman window, so the skirts are those of the window, and at 40 Hz (a 9 Hz wide band against a 2.7 Hz bin) a pure tone leaks about 20 dB into the neighbour. Good for looking, not for certifying a room.
 - Ballistics (instant rise, release, peak hold) are in the visualizer, using the frame time, because the analyser's own smoothing is turned off.
+
+## Spectrogram (2026-10-08)
+
+- Input `spectrum`: a 2048-point analyser with smoothing 0 and floor -120 dB, read as float dB; every sample also carries `playing` (the audio element is not paused) and `sampleRate`.
+- Each pixel row is a frequency on a log axis (20 Hz at the bottom, 20 kHz at the top, linearly interpolated between bins; the lowest octave is blocky because a bin is 21.5 Hz wide at 44.1 kHz). A fixed tilt of 2 dB per octave around 1 kHz brightens the treble. Colour comes from a 256-entry table built from the theme colours and rebuilt (which clears the picture) when they change.
+- The picture is a canvas owned by the module, copied onto itself shifted left by the number of pixels the elapsed time asks for (14 s from edge to edge by default), and the new columns are written with `putImageData`. A resized cell starts a new picture. Only one spectrogram can exist at a time, as with the other meters that keep state per module.
+- Not done: a time axis, a choice of colour map, a frozen "capture" of the whole track at scan time (that would be a file-truth feature: the same picture, drawn offline from the decoded file).
