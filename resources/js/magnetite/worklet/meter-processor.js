@@ -2,8 +2,8 @@
 // windows at animation-frame rate, which is not enough for gated loudness).
 //
 //   - LUFS: K-weighting and gating from ITU-R BS.1770-4 / EBU R128 (momentary 400 ms, short-term 3 s, integrated)
-//   - true peak: 4x oversampling with a 49-tap windowed-sinc interpolator (BS.1770 Annex 2 uses 48 taps; this
-//     filter has the same length and puts phase 0 exactly on the input samples)
+//   - true peak: 4x oversampling with a Kaiser-windowed sinc interpolator (BS.1770 Annex 2 specifies a 48-tap
+//     filter; this one is longer, so it stays flat closer to Nyquist, and puts phase 0 exactly on the input samples)
 //   - phase correlation (0.3 s exponential average) and the last GONIO_LEN samples for the goniometer
 //
 // Self-contained on purpose: it is loaded with audioWorklet.addModule and also imported by the Node tests.
@@ -15,7 +15,9 @@ const REL_GATE = -10; // LU below the ungated mean
 const OFFSET = -0.691;
 const CORR_TAU = 0.3; // seconds
 const OVERSAMPLE = 4;
-const TAPS_PER_PHASE = 12;
+const TAPS_PER_PHASE = 48;
+const RING = 64; // power of two >= TAPS_PER_PHASE + 1: the last samples of each channel, for the interpolator
+const KAISER_BETA = 7; // about 70 dB of image rejection
 
 const energyToLufs = (e) => (e > 0 ? OFFSET + 10 * Math.log10(e) : -Infinity);
 const lufsToEnergy = (l) => 10 ** ((l - OFFSET) / 10);
@@ -67,18 +69,35 @@ class Biquad {
     }
 }
 
-/** Polyphase 4x interpolator coefficients: phase p uses taps[p][k] on the sample k steps back. */
+/** Zeroth-order modified Bessel function of the first kind, for the Kaiser window. */
+function besselI0(x) {
+    let sum = 1;
+    let term = 1;
+    for (let k = 1; k < 40; k++) {
+        term *= (x / (2 * k)) ** 2;
+        sum += term;
+    }
+
+    return sum;
+}
+
+/**
+ * Polyphase 4x interpolator: phase p uses taps[p][k] on the sample k steps back. A Kaiser-windowed sinc with
+ * 48 taps per phase (193 in all): flat to well above 20 kHz at 44.1 kHz, so a peak made of high frequencies is
+ * not underestimated, and it passes the input samples through unchanged in phase 0.
+ */
 function interpolator() {
     const n = OVERSAMPLE * TAPS_PER_PHASE + 1;
     const mid = (n - 1) / 2;
     const taps = Array.from({ length: OVERSAMPLE }, () => new Float64Array(TAPS_PER_PHASE + 1));
+    const norm = besselI0(KAISER_BETA);
 
     for (let i = 0; i < n; i++) {
         const x = (i - mid) / OVERSAMPLE;
         const sinc = x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
-        const t = (2 * Math.PI * i) / (n - 1);
-        const blackman = 0.42 - 0.5 * Math.cos(t) + 0.08 * Math.cos(2 * t);
-        taps[i % OVERSAMPLE][Math.floor(i / OVERSAMPLE)] = sinc * blackman;
+        const r = (2 * i) / (n - 1) - 1;
+        const kaiser = besselI0(KAISER_BETA * Math.sqrt(Math.max(0, 1 - r * r))) / norm;
+        taps[i % OVERSAMPLE][Math.floor(i / OVERSAMPLE)] = sinc * kaiser;
     }
 
     // Each phase must pass DC with gain 1, or a steady level would read high or low.
@@ -91,14 +110,22 @@ function interpolator() {
 }
 
 export class MeterDsp {
-    constructor(sampleRate) {
+    /**
+     * `live` (the default) keeps the integrated value up to date after every 100 ms block, which costs more the
+     * longer the programme is. Offline analysis passes `{ live: false }` and reads `integratedLufs()` once at
+     * the end; `{ lra: true }` also keeps the short-term values that `loudnessRange()` needs.
+     */
+    constructor(sampleRate, { live = true, lra = false } = {}) {
+        this.live = live;
+        this.keepShortTerm = lra;
         this.fs = sampleRate;
         this.filters = [0, 1].map(() => kWeighting(sampleRate).map((c) => new Biquad(c)));
         this.blockLen = Math.round(sampleRate * 0.1);
         this.taps = interpolator();
         this.corrAlpha = Math.exp(-1 / (sampleRate * CORR_TAU));
         this.gonio = new Float32Array(GONIO_LEN * 2);
-        this.history = [0, 1].map(() => new Float64Array(TAPS_PER_PHASE + 1));
+        this.history = [0, 1].map(() => new Float64Array(RING * 2)); // each sample is written twice (see process) so a window is contiguous
+        this.lebesgue = Math.max(...this.taps.map((phase) => phase.reduce((s, v) => s + Math.abs(v), 0)));
         this.reset();
     }
 
@@ -109,6 +136,10 @@ export class MeterDsp {
         this.gated = []; // 400 ms block energies above the absolute gate, for the integrated value
         this.integrated = -Infinity;
         this.tp = [0, 0]; // true peak since reset, linear
+        this.ringPos = 0;
+        this.lastLoud = [-1e9, -1e9]; // sample index of the last sample big enough to matter for the true peak
+        this.index = 0;
+        this.shortTerm = []; // mean energy of each 3 s window, every 100 ms (only with { lra: true })
         this.sLL = 0;
         this.sRR = 0;
         this.sLR = 0;
@@ -121,7 +152,9 @@ export class MeterDsp {
     /** Feed one block of left and right samples. */
     process(left, right) {
         const a = this.corrAlpha;
-        const hist = this.history;
+        const [ringL, ringR] = this.history;
+        const L = this.lebesgue;
+        const tp = this.tp;
 
         for (let i = 0; i < left.length; i++) {
             const l = left[i];
@@ -133,9 +166,18 @@ export class MeterDsp {
             this.blockSum += kl * kl + kr * kr;
             if (++this.blockCount === this.blockLen) this.endBlock();
 
-            // true peak
-            this.tp[0] = Math.max(this.tp[0], this.truePeak(hist[0], l));
-            this.tp[1] = Math.max(this.tp[1], this.truePeak(hist[1], r));
+            // True peak. The interpolated values around a sample can exceed it by at most the sum of the filter
+            // taps (`lebesgue`) times the biggest sample in the window, so the 4x filter only runs while a recent
+            // sample is big enough to set a new maximum; in quiet passages that is almost never.
+            const pos = this.ringPos;
+            ringL[pos] = ringL[pos + RING] = l;
+            ringR[pos] = ringR[pos + RING] = r;
+            const idx = this.index++;
+            if (Math.abs(l) * L > tp[0]) this.lastLoud[0] = idx;
+            if (Math.abs(r) * L > tp[1]) this.lastLoud[1] = idx;
+            if (idx - this.lastLoud[0] <= TAPS_PER_PHASE) tp[0] = Math.max(tp[0], this.truePeak(ringL, pos));
+            if (idx - this.lastLoud[1] <= TAPS_PER_PHASE) tp[1] = Math.max(tp[1], this.truePeak(ringR, pos));
+            this.ringPos = (pos + 1) & (RING - 1);
 
             // correlation and goniometer
             this.sLL = this.sLL * a + l * l * (1 - a);
@@ -147,15 +189,17 @@ export class MeterDsp {
         }
     }
 
-    /** Peak of the 4 interpolated values around the newest sample, and push the sample into the history. */
-    truePeak(h, x) {
-        h.copyWithin(1, 0);
-        h[0] = x;
-
-        let peak = 0;
-        for (const phase of this.taps) {
+    /**
+     * Largest of the 4 interpolated values for the window ending at ring position `pos` (the newest sample).
+     * Phase 0 is the input itself, delayed by half the filter (the 25th tap), so only 3 phases are filtered.
+     */
+    truePeak(ring, pos) {
+        const base = pos + RING;
+        let peak = Math.abs(ring[base - TAPS_PER_PHASE / 2]);
+        for (let p = 1; p < OVERSAMPLE; p++) {
+            const phase = this.taps[p];
             let y = 0;
-            for (let k = 0; k < phase.length; k++) y += phase[k] * h[k];
+            for (let k = 0; k < TAPS_PER_PHASE; k++) y += phase[k] * ring[base - k];
             peak = Math.max(peak, Math.abs(y));
         }
 
@@ -174,8 +218,10 @@ export class MeterDsp {
         if (this.blocks.length >= 4) {
             const e400 = this.mean(this.blocks.slice(-4));
             if (energyToLufs(e400) > ABS_GATE) this.gated.push(e400);
-            this.integrated = this.integratedLufs();
+            if (this.live) this.integrated = this.integratedLufs();
         }
+
+        if (this.keepShortTerm && this.blocks.length >= 30) this.shortTerm.push(this.mean(this.blocks));
     }
 
     mean(list) {
@@ -199,6 +245,24 @@ export class MeterDsp {
         }
 
         return n ? energyToLufs(sum / n) : -Infinity;
+    }
+
+    /**
+     * Loudness range in LU (EBU Tech 3342): the spread between the 10th and 95th percentile of the short-term
+     * loudness, after dropping values under -70 LUFS and under 20 LU below the mean of the rest.
+     * Needs `{ lra: true }`; 0 when there is not enough programme.
+     */
+    loudnessRange() {
+        const above = this.shortTerm.filter((e) => energyToLufs(e) > ABS_GATE);
+        if (!above.length) return 0;
+
+        const threshold = energyToLufs(this.mean(above)) - 20;
+        const values = above.map(energyToLufs).filter((l) => l > threshold).sort((x, y) => x - y);
+        if (values.length < 2) return 0;
+
+        const at = (p) => values[Math.round((values.length - 1) * p)];
+
+        return at(0.95) - at(0.1);
     }
 
     /** Current readings. `gonio` is a fresh interleaved L,R copy in time order, oldest first. */

@@ -28,6 +28,14 @@ class Album extends Model
         };
     }
 
+    /** Album dynamic range: the rounded mean of the track scores, as the DR database does. Null until analysed. */
+    public function getDrAttribute(): ?int
+    {
+        $scores = $this->tracks->pluck('dr')->filter(fn ($v) => $v !== null);
+
+        return $scores->isEmpty() ? null : (int) round($scores->avg());
+    }
+
     public function tracks(): HasMany
     {
         return $this->hasMany(Track::class)->orderByRaw('coalesce(disc_number, 1)')->orderBy('track_number')->orderBy('title');

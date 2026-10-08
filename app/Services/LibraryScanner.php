@@ -108,7 +108,13 @@ class LibraryScanner
             }
         }
 
-        Track::updateOrCreate(['path' => $relative], [
+        // Measurements belong to the exact bytes they were taken from: a changed file needs a new analysis.
+        $before = Track::where('path', $relative)->first(['id', 'size', 'mtime']);
+        $changed = $before && ($before->size !== $file->getSize() || $before->mtime !== $file->getMTime())
+            ? ['analysis' => null, 'analysis_version' => null, 'analyzed_at' => null, 'dr' => null, 'pcm_sha1' => null]
+            : [];
+
+        Track::updateOrCreate(['path' => $relative], $changed + [
             'album_id' => $album?->id,
             'title' => $first('title') ?? $this->titleFromFilename($file->getFilenameWithoutExtension()),
             'artist' => $artist,

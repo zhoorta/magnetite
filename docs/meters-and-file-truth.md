@@ -29,6 +29,8 @@ Design:
 
 ## File truth (scan time)
 
+Built: see `docs/file-truth.md`. The original sketch follows.
+
 Measured once by `magnetite:scan`, stored per track, never at playback:
 
 - integrated LUFS and loudness range: ffmpeg `ebur128` filter

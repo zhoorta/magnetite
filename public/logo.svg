@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="256" height="256" role="img" aria-label="Magnetite">
+  <defs>
+    <linearGradient id="bars" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7cf2d4"/>
+      <stop offset="1" stop-color="#4aa8ff"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#4aa8ff" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#4aa8ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#0f1115"/>
+  <circle cx="64" cy="64" r="60" fill="url(#glow)"/>
+  <!-- octahedron: four facets -->
+  <path d="M64 16 L24 64 L64 64 Z" fill="#3b4252"/>
+  <path d="M64 16 L104 64 L64 64 Z" fill="#5a6478"/>
+  <path d="M24 64 L64 112 L64 64 Z" fill="#232834"/>
+  <path d="M104 64 L64 112 L64 64 Z" fill="#2f3646"/>
+  <path d="M64 16 L104 64 L64 112 L24 64 Z" fill="none" stroke="#8b96ad" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- equalizer bars across the middle -->
+  <g fill="url(#bars)">
+    <rect x="41"   y="50" width="6" height="28" rx="3"/>
+    <rect x="51"   y="38" width="6" height="52" rx="3"/>
+    <rect x="61"   y="26" width="6" height="76" rx="3"/>
+    <rect x="71"   y="44" width="6" height="40" rx="3"/>
+    <rect x="81"   y="54" width="6" height="20" rx="3"/>
+  </g>
+</svg>
