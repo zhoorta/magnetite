@@ -21,6 +21,8 @@ export class AudioEngine {
         if (this.ctx) return;
 
         this.ctx = new AudioContext();
+        // Surface the state ('running', 'suspended', 'interrupted') so the UI can say when sound is blocked.
+        this.ctx.onstatechange = () => this.onState?.(this.ctx.state);
         const source = this.ctx.createMediaElementSource(this.el);
 
         // Mixed analyser for the spectrum and waveform visualizers.
@@ -47,13 +49,33 @@ export class AudioEngine {
 
     async play(url) {
         this.ensureGraph();
-        await this.ctx.resume();
+
+        // Not awaited: without a user gesture the browser leaves this pending until one happens, and the
+        // track must still start so the user sees it playing and any later click can unlock the sound.
+        this.unlock();
 
         if (url) {
             this.el.src = url;
         }
 
         return this.el.play();
+    }
+
+    /** Ask the browser to start the audio graph; resolves to whether sound can come out now. */
+    async unlock() {
+        if (!this.ctx) return false;
+
+        if (this.ctx.state !== 'running') {
+            try {
+                await this.ctx.resume();
+            } catch {
+                // stays suspended; the UI shows it
+            }
+        }
+
+        this.onState?.(this.ctx.state);
+
+        return this.ctx.state === 'running';
     }
 
     pause() {

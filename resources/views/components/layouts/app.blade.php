@@ -71,6 +71,8 @@
                 </div>
 
                 <p x-show="$store.player.error" x-text="$store.player.error" class="text-xs text-accent2"></p>
+                <p x-show="$store.player.playing && ['suspended', 'interrupted'].includes($store.player.audioState)"
+                   class="text-xs text-accent2">Sound is blocked by the browser. Click anywhere on the page to enable it.</p>
 
                 <div class="flex items-center gap-3 text-xs text-muted">
                     <span x-text="$store.player.fmt($store.player.time)" class="w-10 text-right tabular-nums"></span>

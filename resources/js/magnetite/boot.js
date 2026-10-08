@@ -47,6 +47,7 @@ Alpine.store('player', {
     duration: 0,
     expanded: false,
     error: null,
+    audioState: 'idle', // AudioContext state once the graph exists: running, suspended, interrupted
     failedIndex: null,
     themes,
     themeId: themes[0].id,
@@ -67,6 +68,13 @@ Alpine.store('player', {
         if (this.engine) return;
 
         this.engine = new AudioEngine(audio);
+        this.engine.onState = (state) => (this.audioState = state);
+
+        // Browsers keep audio suspended until the user interacts; any click or key press is enough to unlock it.
+        const unlock = () => this.engine.unlock();
+        for (const type of ['pointerdown', 'keydown']) {
+            document.addEventListener(type, unlock, { passive: true });
+        }
         this.canvas = canvas;
 
         audio.addEventListener('timeupdate', () => (this.time = audio.currentTime));
