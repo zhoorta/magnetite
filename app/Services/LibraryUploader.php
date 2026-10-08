@@ -1,0 +1,265 @@
+<?php
+
+namespace App\Services;
+
+use App\Support\TrackLibrary;
+use RuntimeException;
+use Throwable;
+use ZipArchive;
+
+/**
+ * Unpacks an uploaded zip into the music folder. This is the one place Magnetite writes to the library, so it is strict:
+ * only audio and cover images are extracted, paths that try to leave the folder abort the whole archive, symlinks and
+ * hidden files are dropped, nothing that already exists is overwritten, the unpacked size is counted while copying
+ * (the sizes a zip declares can lie) and a failed archive leaves nothing behind.
+ */
+class LibraryUploader
+{
+    private const COVER_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+
+    private const CHUNK = 1024 * 1024;
+
+    /** @return array{folder: string, added: int, existing: int, skipped: int, bytes: int} */
+    public function extract(string $zipPath, string $originalName): array
+    {
+        $base = $this->libraryRoot();
+        $maxFiles = (int) config('magnetite.upload.max_files');
+        $maxBytes = (int) (config('magnetite.upload.max_unpacked_mb') * 1024 * 1024);
+
+        $zip = new ZipArchive;
+        if ($zip->open($zipPath, ZipArchive::RDONLY) !== true) {
+            throw new RuntimeException('This is not a readable zip file.');
+        }
+
+        try {
+            if ($zip->numFiles > $maxFiles * 4) {
+                throw new RuntimeException('The zip has too many entries.');
+            }
+
+            [$entries, $skipped] = $this->plan($zip);
+
+            if (count($entries) > $maxFiles) {
+                throw new RuntimeException("The zip has more than {$maxFiles} music files.");
+            }
+
+            if (! collect($entries)->contains(fn ($e) => TrackLibrary::contentType($e['path']) !== null)) {
+                throw new RuntimeException('There is no audio in this zip (mp3, m4a, flac, ogg, opus or wav).');
+            }
+
+            if (array_sum(array_column($entries, 'size')) > $maxBytes) {
+                throw new RuntimeException('The zip is too large once unpacked.');
+            }
+
+            $prefix = $this->needsFolder($entries) ? $this->folderName($originalName).'/' : '';
+
+            return $this->write($zip, $base, $entries, $prefix, $maxBytes) + ['skipped' => $skipped];
+        } finally {
+            $zip->close();
+        }
+    }
+
+    private function libraryRoot(): string
+    {
+        $base = realpath(TrackLibrary::path());
+
+        if ($base === false || ! is_dir($base) || ! is_writable($base)) {
+            throw new RuntimeException('The music folder does not exist or is not writable.');
+        }
+
+        return $base;
+    }
+
+    /**
+     * Decide what to extract. Returns the wanted entries and how many were left out.
+     *
+     * @return array{0: list<array{index: int, name: string, path: string, size: int}>, 1: int}
+     */
+    private function plan(ZipArchive $zip): array
+    {
+        $entries = [];
+        $skipped = 0;
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $stat = $zip->statIndex($i);
+            $name = (string) $stat['name'];
+
+            if (str_ends_with($name, '/')) {
+                continue;
+            }
+
+            $path = $this->safePath($name);
+
+            if ($path === null || $this->isSymlink($zip, $i) || ! $this->wanted($path)) {
+                $skipped++;
+
+                continue;
+            }
+
+            $entries[] = ['index' => $i, 'name' => $name, 'path' => $path, 'size' => (int) $stat['size']];
+        }
+
+        return [$entries, $skipped];
+    }
+
+    /**
+     * The cleaned relative path, null for entries to ignore (hidden files, macOS resource forks). A path that tries to
+     * leave the folder or is not a plain relative path aborts the whole archive.
+     */
+    private function safePath(string $name): ?string
+    {
+        if (! mb_check_encoding($name, 'UTF-8')) {
+            $name = mb_convert_encoding($name, 'UTF-8', 'CP437'); // zips from older Windows tools
+        }
+
+        $name = str_replace('\\', '/', $name);
+
+        if (preg_match('/[\x00-\x1f\x7f]/', $name) || str_starts_with($name, '/') || preg_match('#^[A-Za-z]:#', $name)) {
+            throw new RuntimeException('The zip contains an unsafe file name.');
+        }
+
+        $segments = array_values(array_filter(explode('/', $name), fn ($s) => $s !== '' && $s !== '.'));
+
+        foreach ($segments as $segment) {
+            if ($segment === '..' || strlen($segment) > 255) {
+                throw new RuntimeException('The zip contains an unsafe file name.');
+            }
+        }
+
+        foreach ($segments as $segment) {
+            if (str_starts_with($segment, '.') || $segment === '__MACOSX') {
+                return null;
+            }
+        }
+
+        return $segments === [] ? null : implode('/', $segments);
+    }
+
+    private function isSymlink(ZipArchive $zip, int $index): bool
+    {
+        $zip->getExternalAttributesIndex($index, $opsys, $attributes);
+
+        return $opsys === ZipArchive::OPSYS_UNIX && ((($attributes >> 16) & 0170000) === 0120000);
+    }
+
+    private function wanted(string $path): bool
+    {
+        return TrackLibrary::contentType($path) !== null
+            || in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), self::COVER_EXTENSIONS, true);
+    }
+
+    /** A zip with loose files, or several top folders, goes into a folder named after the zip so it does not clutter the library. */
+    private function needsFolder(array $entries): bool
+    {
+        $tops = collect($entries)->map(fn ($e) => str_contains($e['path'], '/') ? strstr($e['path'], '/', true) : null);
+
+        return $tops->contains(null) || $tops->unique()->count() > 1;
+    }
+
+    private function folderName(string $originalName): string
+    {
+        $name = trim(preg_replace('/[^\p{L}\p{N} ._()-]+/u', '_', pathinfo($originalName, PATHINFO_FILENAME)), ' ._');
+
+        return $name === '' ? 'Upload '.date('Y-m-d H.i') : mb_substr($name, 0, 120);
+    }
+
+    /** @return array{folder: string, added: int, existing: int, bytes: int} */
+    private function write(ZipArchive $zip, string $base, array $entries, string $prefix, int $maxBytes): array
+    {
+        $created = [];
+        $existing = 0;
+        $total = 0;
+
+        try {
+            foreach ($entries as $entry) {
+                $destination = $base.'/'.$prefix.$entry['path'];
+                $directory = dirname($destination);
+
+                if (! is_dir($directory) && ! mkdir($directory, 0755, true) && ! is_dir($directory)) {
+                    throw new RuntimeException('Could not create a folder in the music folder.');
+                }
+
+                // Resolve what is really there: a symlink inside the library must not lead the write elsewhere.
+                $real = realpath($directory);
+                if ($real === false || ($real !== $base && ! str_starts_with($real, $base.'/'))) {
+                    throw new RuntimeException('The zip would write outside the music folder.');
+                }
+
+                $destination = $real.'/'.basename($destination);
+
+                if (file_exists($destination) || is_link($destination)) {
+                    $existing++;
+
+                    continue;
+                }
+
+                $total += $this->copy($zip, $entry, $destination, $maxBytes - $total);
+                $created[] = $destination;
+            }
+        } catch (Throwable $e) {
+            foreach ($created as $file) {
+                @unlink($file);
+            }
+
+            throw $e instanceof RuntimeException ? $e : new RuntimeException('Could not unpack the zip: '.$e->getMessage(), 0, $e);
+        }
+
+        return [
+            'folder' => rtrim($prefix, '/') ?: strstr($entries[0]['path'], '/', true),
+            'added' => count($created),
+            'existing' => $existing,
+            'bytes' => $total,
+        ];
+    }
+
+    /** Stream one entry to disk, counting what is really written. Returns the bytes written. */
+    private function copy(ZipArchive $zip, array $entry, string $destination, int $allowance): int
+    {
+        $in = $zip->getStream($entry['name']);
+        $partial = $destination.'.part';
+        $out = $in ? @fopen($partial, 'xb') : false;
+
+        if (! $in || ! $out) {
+            $in && fclose($in);
+
+            throw new RuntimeException('Could not read or write '.$entry['path'].'.');
+        }
+
+        $written = 0;
+
+        try {
+            while (! feof($in)) {
+                $chunk = fread($in, self::CHUNK);
+
+                if ($chunk === false) {
+                    throw new RuntimeException('Could not read '.$entry['path'].' from the zip.');
+                }
+
+                $written += strlen($chunk);
+
+                if ($written > $allowance) {
+                    throw new RuntimeException('The zip is too large once unpacked.');
+                }
+
+                fwrite($out, $chunk);
+            }
+        } catch (Throwable $e) {
+            fclose($in);
+            fclose($out);
+            @unlink($partial);
+
+            throw $e;
+        }
+
+        fclose($in);
+        fclose($out);
+        chmod($partial, 0644);
+
+        if (! rename($partial, $destination)) {
+            @unlink($partial);
+
+            throw new RuntimeException('Could not save '.$entry['path'].'.');
+        }
+
+        return $written;
+    }
+}

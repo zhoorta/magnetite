@@ -1,12 +1,14 @@
 <?php
 
 use App\Models\Track;
+use App\Models\User;
 use App\Services\LibraryScanner;
 use App\Services\TranscodeCache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
+    $this->actingAs(User::factory()->create());
     Storage::fake('local');
     config(['magnetite.music_path' => base_path('tests/Fixtures/music')]);
     app(LibraryScanner::class)->scan();

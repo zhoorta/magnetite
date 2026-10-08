@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Track;
+use App\Models\User;
 use App\Services\LibraryScanner;
 use App\Services\TrackAnalyzer;
 use App\Support\FileTruth;
@@ -9,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Process\Process;
 
 beforeEach(function () {
+    $this->actingAs(User::factory()->create());
     Storage::fake('local');
     $this->music = sys_get_temp_dir().'/magnetite-analyze-'.uniqid();
     File::copyDirectory(base_path('tests/Fixtures/music'), $this->music);

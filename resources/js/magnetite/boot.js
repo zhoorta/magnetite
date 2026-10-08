@@ -3,6 +3,7 @@ import { AudioEngine, SILENCE } from './engine';
 import { visualizers } from './visualizers';
 import { layout, MAX_PANELS } from './layout';
 import themes from './themes.json';
+import uploader from './upload';
 
 const STORAGE_KEY = 'magnetite.theme';
 const VARS_KEY = 'magnetite.vars';
@@ -38,6 +39,8 @@ function readColors() {
         font: cs.getPropertyValue('--font-ui').trim() || 'sans-serif',
     };
 }
+
+Alpine.data('uploader', uploader);
 
 Alpine.store('player', {
     // state

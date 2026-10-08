@@ -1,36 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ $title ?? "Magnetite" }}</title>
-    {{-- Apply the saved theme before first paint so a full reload does not flash the default colours.
-         boot.js saves the resolved theme (colours, radius, font) under this key when it is chosen. --}}
-    <script>
-        try {
-            const v = JSON.parse(localStorage.getItem('magnetite.vars'));
-            if (v) {
-                const root = document.documentElement;
-                for (const [k, c] of Object.entries(v.colors)) root.style.setProperty('--c-' + k, c);
-                root.style.setProperty('--radius', v.radius);
-                root.style.setProperty('--font-ui', v.font);
-            }
-        } catch {}
-    </script>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
-    @livewireScriptConfig
+    <x-layouts.head :title="$title ?? 'Magnetite'" />
 </head>
 <body class="min-h-screen bg-bg text-text antialiased">
     <header class="border-b border-white/10">
-        <nav class="mx-auto flex max-w-3xl items-center gap-6 px-4 py-4 text-sm">
-            <span class="font-semibold tracking-wide text-accent">Magnetite</span>
+        <nav class="mx-auto flex {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} items-center gap-6 px-4 py-4 text-sm">
+            <a href="{{ route('welcome') }}" wire:navigate class="font-semibold tracking-wide text-accent">Magnetite</a>
             <a href="{{ route('library') }}" wire:navigate class="hover:text-accent">Library</a>
             <a href="{{ route('themes') }}" wire:navigate class="hover:text-accent">Themes</a>
             <a href="{{ route('about') }}" wire:navigate class="hover:text-accent">About</a>
+            @auth
+                <a href="{{ route('upload') }}" wire:navigate class="hover:text-accent">Upload</a>
+                <form method="POST" action="{{ route('logout') }}" class="ml-auto">
+                    @csrf
+                    <button type="submit" class="text-muted hover:text-accent">Sign out</button>
+                </form>
+            @endauth
         </nav>
     </header>
 
-    <main class="mx-auto max-w-3xl px-4 pb-72 pt-8">
+    <main class="mx-auto {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} px-4 pb-72 pt-8">
         {{ $slot }}
     </main>
 

@@ -2,15 +2,16 @@
 
 namespace App\Console\Commands;
 
+use App\Jobs\ScanLibrary;
 use App\Services\LibraryScanner;
 use App\Support\TrackLibrary;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('magnetite:scan {--force : Re-read every file, not just new or changed ones}')]
+#[Signature('magnetite:scan {--force : Re-read every file, not just new or changed ones} {--queue : Hand the scan to the queue worker instead of running it here}')]
 #[Description('Scan the music folder and sync tracks, albums and covers')]
-class ScanLibrary extends Command
+class ScanLibraryCommand extends Command
 {
     public function handle(LibraryScanner $scanner): int
     {
@@ -18,6 +19,13 @@ class ScanLibrary extends Command
             $this->error('Music folder not found: '.TrackLibrary::path());
 
             return self::FAILURE;
+        }
+
+        if ($this->option('queue')) {
+            ScanLibrary::request((bool) $this->option('force'));
+            $this->info('Scan queued. A queue worker (php artisan queue:work) has to be running.');
+
+            return self::SUCCESS;
         }
 
         $this->info('Scanning '.TrackLibrary::path());
