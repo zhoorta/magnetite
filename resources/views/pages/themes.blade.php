@@ -1,7 +1,7 @@
 <x-layouts.app title="Themes · Magnetite">
     <h1 class="mb-6 text-2xl font-semibold">Themes</h1>
 
-    <div x-data class="grid gap-4 sm:grid-cols-3">
+    <div x-data class="grid gap-4 sm:grid-cols-2">
         <template x-for="t in $store.player.themes" :key="t.id">
             <button type="button"
                     class="rounded-theme border p-4 text-left"

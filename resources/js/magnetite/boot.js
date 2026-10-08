@@ -1,9 +1,10 @@
 import { Livewire, Alpine } from '../../../vendor/livewire/livewire/dist/livewire.esm';
-import { AudioEngine } from './engine';
+import { AudioEngine, SILENCE } from './engine';
 import { visualizers } from './visualizers';
 import themes from './themes.json';
 
 const STORAGE_KEY = 'magnetite.theme';
+const VARS_KEY = 'magnetite.vars';
 
 function safeStorage(fn) {
     try {
@@ -26,7 +27,15 @@ function applyTheme(theme) {
 function readColors() {
     const cs = getComputedStyle(document.documentElement);
     const get = (n) => cs.getPropertyValue(`--c-${n}`).trim();
-    return { bg: get('bg'), accent: get('accent'), accent2: get('accent2'), text: get('text') };
+    return {
+        bg: get('bg'),
+        surface: get('surface'),
+        text: get('text'),
+        muted: get('muted'),
+        accent: get('accent'),
+        accent2: get('accent2'),
+        font: cs.getPropertyValue('--font-ui').trim() || 'sans-serif',
+    };
 }
 
 Alpine.store('player', {
@@ -84,7 +93,11 @@ Alpine.store('player', {
         this.vizParams = theme.visualizer.params;
         applyTheme(theme);
         this.colors = readColors();
-        safeStorage((s) => s.setItem(STORAGE_KEY, id));
+        safeStorage((s) => {
+            s.setItem(STORAGE_KEY, id);
+            // Read by the inline script in the layout's <head> to avoid a flash on full reloads.
+            s.setItem(VARS_KEY, JSON.stringify({ colors: theme.colors, radius: theme.radius, font: theme.font }));
+        });
     },
 
     setViz(id) {
@@ -157,19 +170,29 @@ Alpine.store('player', {
     loop() {
         const g = this.canvas.getContext('2d');
 
-        const frame = () => {
+        let last = performance.now();
+
+        const frame = (now = performance.now()) => {
             this.raf = requestAnimationFrame(frame);
 
-            // Nothing to draw before the first gesture, and no point drawing in a hidden tab.
-            if (document.hidden) return;
+            // No point drawing in a hidden tab.
+            if (document.hidden) {
+                last = now;
+
+                return;
+            }
+
+            // Seconds since the previous frame, capped so a stalled tab does not make meters jump.
+            const dt = Math.min(0.1, (now - last) / 1000);
+            last = now;
 
             const { width: w, height: h } = this.canvas;
             g.clearRect(0, 0, w, h);
 
-            const sample = this.engine.sample();
-            if (!sample) return;
+            // Before the first gesture there is no audio graph yet: draw the idle state.
+            const sample = this.engine.sample() ?? SILENCE;
 
-            visualizers[this.vizId].draw(g, sample, { w, h, colors: this.colors, params: this.vizParams });
+            visualizers[this.vizId].draw(g, sample, { w, h, colors: this.colors, params: this.vizParams, dt });
         };
 
         frame();

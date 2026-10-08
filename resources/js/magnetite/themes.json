@@ -5,15 +5,23 @@
         "colors": { "bg": "#0b0d14", "surface": "#141824", "text": "#e6e8ef", "muted": "#8a90a6", "accent": "#ff5a5f", "accent2": "#ffb86b" },
         "radius": "0.75rem",
         "font": "'Space Grotesk', ui-sans-serif, system-ui, sans-serif",
-        "visualizer": { "id": "bars", "params": { "count": 48 } }
+        "visualizer": { "id": "vu-leds", "params": {} }
     },
     {
         "id": "paper-ink",
         "name": "Paper & ink",
-        "colors": { "bg": "#f6f1e7", "surface": "#ece4d3", "text": "#1d1b17", "muted": "#6f685a", "accent": "#1d1b17", "accent2": "#b5482f" },
+        "colors": { "bg": "#f6f1e7", "surface": "#ece4d3", "text": "#1d1b17", "muted": "#6f685a", "accent": "#b5482f", "accent2": "#1d1b17" },
         "radius": "0.15rem",
         "font": "Georgia, 'Times New Roman', serif",
-        "visualizer": { "id": "scope", "params": { "thickness": 2 } }
+        "visualizer": { "id": "vu-needle", "params": {} }
+    },
+    {
+        "id": "vintage-vu",
+        "name": "Vintage VU",
+        "colors": { "bg": "#17110b", "surface": "#241a10", "text": "#f3e3c0", "muted": "#a08a62", "accent": "#e8432e", "accent2": "#ffb347" },
+        "radius": "0.5rem",
+        "font": "'Courier New', ui-monospace, monospace",
+        "visualizer": { "id": "vu-needle", "params": { "face": "#f0d79a", "ink": "#2a1d0e", "response": 0.3 } }
     },
     {
         "id": "terminal",
