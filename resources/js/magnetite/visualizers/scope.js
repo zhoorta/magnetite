@@ -1,5 +1,6 @@
 export default {
     id: 'scope',
+    needs: ['wave'],
     label: 'Scope',
     params: { thickness: 2.5 },
 

@@ -57,13 +57,23 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <select class="rounded-theme border border-white/10 bg-bg px-2 py-1 text-xs"
-                                :value="$store.player.vizId"
-                                @change="$store.player.setViz($event.target.value)">
-                            <template x-for="v in $store.player.visualizerList" :key="v.id">
-                                <option :value="v.id" x-text="v.label" :selected="v.id === $store.player.vizId"></option>
-                            </template>
-                        </select>
+                        <template x-for="(panel, i) in $store.player.panels" :key="i">
+                            <span class="flex items-center">
+                                <select class="rounded-theme border border-white/10 bg-bg px-2 py-1 text-xs"
+                                        :value="panel.id"
+                                        @change="$store.player.setPanel(i, $event.target.value)">
+                                    <template x-for="v in $store.player.optionsFor(i)" :key="v.id">
+                                        <option :value="v.id" x-text="v.label" :selected="v.id === panel.id"></option>
+                                    </template>
+                                </select>
+                                <button type="button" x-show="$store.player.panels.length > 1" title="Remove this meter"
+                                        class="px-1 text-xs text-muted hover:text-accent"
+                                        @click="$store.player.removePanel(i)">&times;</button>
+                            </span>
+                        </template>
+                        <button type="button" x-show="$store.player.canAddPanel" title="Show another meter"
+                                class="rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
+                                @click="$store.player.addPanel()">+</button>
                         <button type="button" class="rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
                                 @click="$store.player.expanded = ! $store.player.expanded"
                                 x-text="$store.player.expanded ? 'Close' : 'Full screen'"></button>

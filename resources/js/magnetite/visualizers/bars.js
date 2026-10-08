@@ -1,5 +1,6 @@
 export default {
     id: 'bars',
+    needs: ['freq'],
     label: 'Bars',
     params: { count: 56, gap: 3 },
 

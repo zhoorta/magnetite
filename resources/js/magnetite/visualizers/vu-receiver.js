@@ -7,6 +7,7 @@ const meters = stereoMeters();
 /** A hi-fi receiver's backlit dial pair: amber light from behind, black needle, metal bezel and glass glare. */
 export default {
     id: 'vu-receiver',
+    needs: ['levels'],
     label: 'VU receiver',
     params: {
         min: -30,

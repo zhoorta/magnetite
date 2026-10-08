@@ -10,6 +10,7 @@ const DEG = Math.PI / 180;
  */
 export default {
     id: 'magic-eye',
+    needs: ['levels'],
     label: 'Magic eyes',
     params: {
         min: -36, // dBFS where the shadow is fully open

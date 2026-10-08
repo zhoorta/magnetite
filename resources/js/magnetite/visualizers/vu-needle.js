@@ -6,6 +6,7 @@ const meters = stereoMeters();
 
 export default {
     id: 'vu-needle',
+    needs: ['levels'],
     label: 'VU needles',
     params: {
         min: -30, // dBFS at the left end of the scale

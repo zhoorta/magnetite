@@ -1,5 +1,6 @@
 export default {
     id: 'radial',
+    needs: ['freq'],
     label: 'Radial',
     params: { spokes: 96, inner: 0.22 },
 

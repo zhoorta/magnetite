@@ -1,6 +1,7 @@
 import { Livewire, Alpine } from '../../../vendor/livewire/livewire/dist/livewire.esm';
 import { AudioEngine, SILENCE } from './engine';
 import { visualizers } from './visualizers';
+import { layout, MAX_PANELS } from './layout';
 import themes from './themes.json';
 
 const STORAGE_KEY = 'magnetite.theme';
@@ -51,13 +52,13 @@ Alpine.store('player', {
     failedIndex: null,
     themes,
     themeId: themes[0].id,
-    vizId: themes[0].visualizer.id,
-    vizParams: themes[0].visualizer.params,
+    panels: [], // the visible meters: [{ id, params }], at most MAX_PANELS; set by the theme, editable in the player
 
     // internals
     engine: null,
     canvas: null,
     colors: null,
+    needs: [], // union of the inputs the visible panels read, so the engine computes nothing else
     raf: null,
 
     get current() {
@@ -97,8 +98,7 @@ Alpine.store('player', {
         if (!theme) return;
 
         this.themeId = id;
-        this.vizId = theme.visualizer.id;
-        this.vizParams = theme.visualizer.params;
+        this.setPanels((theme.visualizers ?? [theme.visualizer]).map(({ id, params }) => ({ id, params })));
         applyTheme(theme);
         this.colors = readColors();
         safeStorage((s) => {
@@ -108,9 +108,32 @@ Alpine.store('player', {
         });
     },
 
-    setViz(id) {
-        this.vizId = id;
-        this.vizParams = {}; // fall back to the visualizer's own defaults
+    setPanels(panels) {
+        this.panels = panels;
+        this.needs = [...new Set(panels.flatMap((p) => visualizers[p.id].needs))];
+    },
+
+    /** Swap the meter in one panel; the new one starts with its own default parameters. */
+    setPanel(i, id) {
+        this.setPanels(this.panels.map((p, j) => (j === i ? { id, params: {} } : p)));
+    },
+
+    addPanel() {
+        const free = this.visualizerList.find((v) => !this.panels.some((p) => p.id === v.id));
+        if (free && this.panels.length < MAX_PANELS) this.setPanels([...this.panels, { id: free.id, params: {} }]);
+    },
+
+    removePanel(i) {
+        if (this.panels.length > 1) this.setPanels(this.panels.filter((_, j) => j !== i));
+    },
+
+    /** Visualizers a panel can switch to: its own plus any not already shown in another panel. */
+    optionsFor(i) {
+        return this.visualizerList.filter((v) => v.id === this.panels[i].id || !this.panels.some((p) => p.id === v.id));
+    },
+
+    get canAddPanel() {
+        return this.panels.length < MAX_PANELS && this.panels.length < this.visualizerList.length;
     },
 
     setQueue(tracks, index = 0) {
@@ -198,9 +221,26 @@ Alpine.store('player', {
             g.clearRect(0, 0, w, h);
 
             // Before the first gesture there is no audio graph yet: draw the idle state.
-            const sample = this.engine.sample() ?? SILENCE;
+            const t0 = performance.now();
+            const sample = this.engine.sample(this.needs) ?? SILENCE;
+            const t1 = performance.now();
 
-            visualizers[this.vizId].draw(g, sample, { w, h, colors: this.colors, params: this.vizParams, dt });
+            // Each panel draws into its own clipped cell, so a visualizer only ever sees its own w and h.
+            const panels = this.panels;
+            const cells = layout(panels.length, w, h);
+            for (let i = 0; i < panels.length; i++) {
+                const { x, y, w: cw, h: ch } = cells[i];
+                g.save();
+                g.beginPath();
+                g.rect(x, y, cw, ch);
+                g.clip();
+                g.translate(x, y);
+                visualizers[panels[i].id].draw(g, sample, { w: cw, h: ch, colors: this.colors, params: panels[i].params, dt });
+                g.restore();
+            }
+
+            // Dev probe for the frame budget: set `window.__magnetitePerf = []` in the console to collect timings (ms).
+            window.__magnetitePerf?.push({ viz: panels.map((p) => p.id).join('+'), sample: t1 - t0, draw: performance.now() - t1, dt });
         };
 
         frame();

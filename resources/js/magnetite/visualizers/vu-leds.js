@@ -5,6 +5,7 @@ const TICKS = [-48, -36, -24, -12, -6, 0];
 
 export default {
     id: 'vu-leds',
+    needs: ['levels'],
     label: 'LED meters',
     params: {
         min: -48,

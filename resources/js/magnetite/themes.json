@@ -70,15 +70,21 @@
         },
         "radius": "0rem",
         "font": "ui-monospace, 'SF Mono', Menlo, monospace",
-        "visualizer": {
-            "id": "vu-wide",
-            "params": {
-                "face": "#020a04",
-                "ink": "#39ff6a",
-                "needle": "#b6ff3a",
-                "zone": "#ff4d3d"
+        "visualizers": [
+            {
+                "id": "vu-wide",
+                "params": {
+                    "face": "#020a04",
+                    "ink": "#39ff6a",
+                    "needle": "#b6ff3a",
+                    "zone": "#ff4d3d"
+                }
+            },
+            {
+                "id": "scope",
+                "params": {}
             }
-        }
+        ]
     },
     {
         "id": "tube-radio",

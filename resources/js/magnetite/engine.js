@@ -45,6 +45,7 @@ export class AudioEngine {
 
         this.freq = new Uint8Array(this.analyser.frequencyBinCount);
         this.wave = new Uint8Array(this.analyser.fftSize);
+        this.shared = { freq: this.freq, wave: this.wave, levels: { l: { rms: 0, peak: 0 }, r: { rms: 0, peak: 0 } } };
     }
 
     async play(url) {
@@ -82,19 +83,26 @@ export class AudioEngine {
         this.el.pause();
     }
 
-    sample() {
+    /**
+     * Latest measurements, computed only for the inputs in `needs` ('freq', 'wave', 'levels'); the rest of
+     * the returned object keeps its previous value. The object and its arrays are reused every call.
+     */
+    sample(needs) {
         if (!this.analyser) return null;
 
-        this.analyser.getByteFrequencyData(this.freq);
-        this.analyser.getByteTimeDomainData(this.wave);
+        const s = this.shared;
+        if (needs.includes('freq')) this.analyser.getByteFrequencyData(this.freq);
+        if (needs.includes('wave')) this.analyser.getByteTimeDomainData(this.wave);
+        if (needs.includes('levels')) {
+            this.level(this.channels[0], s.levels.l);
+            this.level(this.channels[1], s.levels.r);
+        }
 
-        const [l, r] = this.channels.map((c) => this.level(c));
-
-        return { freq: this.freq, wave: this.wave, levels: { l, r } };
+        return s;
     }
 
-    /** Linear RMS and peak (0..1, full scale = 1) of the latest window of one channel. */
-    level({ node, buf }) {
+    /** Linear RMS and peak (0..1, full scale = 1) of the latest window of one channel, written into `out`. */
+    level({ node, buf }, out) {
         node.getFloatTimeDomainData(buf);
 
         let sum = 0;
@@ -106,6 +114,7 @@ export class AudioEngine {
             if (a > peak) peak = a;
         }
 
-        return { rms: Math.sqrt(sum / buf.length), peak };
+        out.rms = Math.sqrt(sum / buf.length);
+        out.peak = peak;
     }
 }

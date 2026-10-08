@@ -11,6 +11,7 @@ const meters = stereoMeters();
  */
 export default {
     id: 'vu-wide',
+    needs: ['levels'],
     label: 'Wide meters',
     params: {
         min: -30,

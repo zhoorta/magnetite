@@ -32,6 +32,18 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
 
 ## Next
 - [ ] More meters, in the order the author liked them (restrained, instrument-like ones; no busy visualizers): goniometer plus phase correlation (needs the L/R sample buffers exposed from the engine), third-octave analyser with peak hold, LUFS loudness (K-weighting and gating needed to be accurate), PPM, crest factor, nixie or 7-segment dB readout, BPM display
+- [ ] Meters phase (decided 2026-10-08, design in `docs/meters-and-file-truth.md`): several instrument meters at once, built by us, non-commercial so "VU-style" ballistics are fine but LUFS maths must be right
+  - [x] Meter contract, first half (2026-10-08): every visualizer declares `needs` (`freq`, `wave`, `levels`) and `engine.sample(needs)` computes only those into one reused object (no per-frame allocation). Sample cost fell from 0.14 to 0.21 ms to 0.03 to 0.15 ms (level meters 0.05 ms). The union over visible panels is done with the layout; `lufs` and `stereo` inputs come with those meters
+  - [ ] One shared analysis stage (one FFT feeding spectrum, third-octave and spectrogram), one `requestAnimationFrame` loop, static chrome on a cached offscreen layer, no per-frame allocation
+  - [ ] Pause drawing for hidden meters and `document.hidden`; cap meters at 30 fps
+  - [x] Layout that shows several meters at once (2026-10-08): up to 4 panels on the one canvas, each drawn in its own clipped cell with its own `w`/`h` (`layout.js` picks the column count that gives cells near 1.6:1 and prefers even rows: side by side in the dock, 2x2 in full screen). The player has a selector per panel, `×` to remove and `+` to add (no duplicates); a theme can set `visualizers: [...]` instead of `visualizer`. `needs` is now the union over the panels. Four meters cost 0.5 to 0.7 ms of CPU per frame, 60 fps. Not done: the choice is not saved across reloads (the theme sets it), the Terminal theme now uses wide meters plus the scope
+  - [x] Profile the current render loop (2026-10-08): 60 fps in headless Chrome for every visualizer, CPU cost per frame 0.3 to 0.45 ms of the 16.7 ms budget (sample 0.14 to 0.21 ms for the 3 analysers and 2 channel buffers, draw 0.09 to 0.25 ms; p95 at most 0.5 ms). Plenty of room. Details in `docs/meters-and-file-truth.md`
+- [ ] File truth phase (scan-time measurements, shown in a per-track panel): integrated LUFS and loudness range (ffmpeg `ebur128`), true peak, DR score, clipping count, spectral cutoff estimate (flags lossy-as-FLAC and fake hi-res), stored per track
+  - [ ] Album and track badges, filter "suspect files"
+  - [ ] Edition compare: same album, different masters, loudness-matched A/B
+- [ ] Source of metadata (optional enrichment, MusicBrainz first, others behind ToS limits): MusicBrainz, Cover Art Archive, AcoustID, LRCLIB, ListenBrainz; Discogs and Last.fm only as optional extras
+- [ ] Idea parked: cloud use as self-hosted with bring-your-own storage (S3, B2, WebDAV, Storage Box); no hosted copies of audio, no public sharing (copyright), no paid tier
+- [ ] Idea parked: theme gallery with import by URL
 - [ ] Add a volume control (there is none)
 - [ ] Test in Safari, the author's own browser, not just headless Chrome: audio unlock, the meters, ALAC played natively (the ffmpeg conversion is not needed there)
 
