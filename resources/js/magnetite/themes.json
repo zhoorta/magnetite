@@ -2,33 +2,118 @@
     {
         "id": "late-night-fm",
         "name": "Late-night FM",
-        "colors": { "bg": "#0b0d14", "surface": "#141824", "text": "#e6e8ef", "muted": "#8a90a6", "accent": "#ff5a5f", "accent2": "#ffb86b" },
+        "colors": {
+            "bg": "#0b0d14",
+            "surface": "#141824",
+            "text": "#e6e8ef",
+            "muted": "#8a90a6",
+            "accent": "#ff5a5f",
+            "accent2": "#ffb86b"
+        },
         "radius": "0.75rem",
         "font": "'Space Grotesk', ui-sans-serif, system-ui, sans-serif",
-        "visualizer": { "id": "vu-leds", "params": {} }
+        "visualizer": {
+            "id": "vu-leds",
+            "params": {}
+        }
     },
     {
         "id": "paper-ink",
         "name": "Paper & ink",
-        "colors": { "bg": "#f6f1e7", "surface": "#ece4d3", "text": "#1d1b17", "muted": "#6f685a", "accent": "#b5482f", "accent2": "#1d1b17" },
+        "colors": {
+            "bg": "#f6f1e7",
+            "surface": "#ece4d3",
+            "text": "#1d1b17",
+            "muted": "#6f685a",
+            "accent": "#b5482f",
+            "accent2": "#1d1b17"
+        },
         "radius": "0.15rem",
         "font": "Georgia, 'Times New Roman', serif",
-        "visualizer": { "id": "vu-needle", "params": {} }
+        "visualizer": {
+            "id": "vu-needle",
+            "params": {}
+        }
     },
     {
         "id": "vintage-vu",
         "name": "Vintage VU",
-        "colors": { "bg": "#17110b", "surface": "#241a10", "text": "#f3e3c0", "muted": "#a08a62", "accent": "#e8432e", "accent2": "#ffb347" },
+        "colors": {
+            "bg": "#17110b",
+            "surface": "#241a10",
+            "text": "#f3e3c0",
+            "muted": "#a08a62",
+            "accent": "#e8432e",
+            "accent2": "#ffb347"
+        },
         "radius": "0.5rem",
         "font": "'Courier New', ui-monospace, monospace",
-        "visualizer": { "id": "vu-needle", "params": { "face": "#f0d79a", "ink": "#2a1d0e", "response": 0.3 } }
+        "visualizer": {
+            "id": "vu-needle",
+            "params": {
+                "face": "#f0d79a",
+                "ink": "#2a1d0e",
+                "response": 0.3
+            }
+        }
     },
     {
         "id": "terminal",
         "name": "Terminal",
-        "colors": { "bg": "#000000", "surface": "#07140a", "text": "#b6ffbd", "muted": "#4f8a57", "accent": "#39ff6a", "accent2": "#b6ff3a" },
+        "colors": {
+            "bg": "#000000",
+            "surface": "#07140a",
+            "text": "#b6ffbd",
+            "muted": "#4f8a57",
+            "accent": "#39ff6a",
+            "accent2": "#b6ff3a"
+        },
         "radius": "0rem",
         "font": "ui-monospace, 'SF Mono', Menlo, monospace",
-        "visualizer": { "id": "radial", "params": { "spokes": 72 } }
+        "visualizer": {
+            "id": "vu-wide",
+            "params": {
+                "face": "#020a04",
+                "ink": "#39ff6a",
+                "needle": "#b6ff3a",
+                "zone": "#ff4d3d"
+            }
+        }
+    },
+    {
+        "id": "tube-radio",
+        "name": "Tube radio",
+        "colors": {
+            "bg": "#120d08",
+            "surface": "#1d140c",
+            "text": "#ead9b0",
+            "muted": "#8f7a55",
+            "accent": "#c9953a",
+            "accent2": "#7dff6a"
+        },
+        "radius": "0.4rem",
+        "font": "Georgia, 'Times New Roman', serif",
+        "visualizer": {
+            "id": "magic-eye",
+            "params": {}
+        }
+    },
+    {
+        "id": "amber-receiver",
+        "name": "Amber receiver",
+        "colors": {
+            "bg": "#0d0905",
+            "surface": "#1a1208",
+            "text": "#ffd9a0",
+            "muted": "#9a7a4a",
+            "accent": "#ff9d2e",
+            "accent2": "#ffb347"
+        },
+        "radius": "0.35rem",
+        "font": "'Helvetica Neue', Helvetica, Arial, sans-serif",
+        "visualizer": {
+            "id": "vu-receiver",
+            "params": {}
+        }
     }
 ]

@@ -24,14 +24,21 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
 - [x] Theme flash on full reload removed (2026-10-08): an inline head script applies the saved theme before first paint; measured per frame, only the saved colour is shown now (it used to show the default for a frame). `wire:navigate` never flashed
 - [x] Name check (2026-10-08): usable, with caveats. Packagist: no `magnetite` vendor or package. npm: `magnetite` is a 0.0.0 placeholder from 2022, `magnetite-player` is free. GitHub: the `magnetite` user is taken, and `scryst/magnetite` is a one-star MIT macOS music player in Swift created 2026-09-24 (same name, same category). Domains: .com, .app (bought 2026-09-01) and .dev taken, .io registered; .fm, .music, .audio, .pt had no registration found (RDAP is unreliable for some ccTLDs, confirm at a registrar)
 - [x] Level meters (2026-10-08): `vu-needle` (analog dials with a red zone, clip lamp, 300 ms ballistics) and `vu-leds` (segmented bars with peak hold) visualizers, per-channel L/R RMS and peak from a channel splitter and one analyser per channel (the heard signal is untouched), idle state drawn before the first play, themes pick their meter, new "Vintage VU" theme. Verified with exact test tones: left-only tone leaves the right meter silent, levels within about 0.3 dB of the expected -9.0 dBFS RMS / -6.0 peak (MP3 test files)
+- [x] MilkDrop (Butterchurn) tried and removed (2026-10-08): it worked (lazy-loaded WebGL visualizer, per-theme presets, overlay) but the author did not like it, so the adapter, the packages and the WebGL canvas machinery are gone. Not planned again; if a WebGL visualizer is ever wanted it needs a second canvas because a canvas keeps one context type
+- [x] Audio unlock (2026-10-08): playback no longer waits on `AudioContext.resume()`; any click or key press unlocks a suspended context, and the player shows "Sound is blocked by the browser" while it plays suspended. Written after a "can't hear sound" report that I could not reproduce in headless Chrome (it was fixed on the author's Safari after this change, so a suspended context is the likely cause, though the exact trigger was not confirmed): the Web Audio routing was traced in headless Chrome (source to analyser to speakers intact, also with MilkDrop; element not muted, volume 1, context running). The blocked state itself could not be tested because headless Chrome does not enforce the policy
+- [x] Magic eye meter (2026-10-08): `magic-eye` visualizer, one 6E5/EM84-style tube per channel (glass, phosphor target that brightens with level, shadow wedge that closes as the level rises, cathode cap), glow colour from the theme's second accent, new "Tube radio" theme. Checked with the exact-level test tones: left-only leaves the right eye wide open and dim, stereo closes both equally, readable in the small dock
+- [x] More VU looks (2026-10-08): `vu-receiver` (amber backlit dial pair with metal bezel, screws and glass glare, "Amber receiver" theme) and `vu-wide` (long shallow cassette-deck style meters that stack on tall canvases and sit side by side in the dock; Terminal theme now uses it in green with a red zone). The dial drawing is shared in `dial.js` with `vu-needle`, whose look is unchanged. Checked with the left-only test tone in full screen and in the dock
+- [ ] More VU looks not built: twin needles on one dial, 270 degree round gauge, VFD bar graph, vertical channel strips, studio black face, reel-to-reel cream and chrome; needle overshoot and bounce; 0 VU calibration choice
 
 ## Next
+- [ ] More meters, in the order the author liked them (restrained, instrument-like ones; no busy visualizers): goniometer plus phase correlation (needs the L/R sample buffers exposed from the engine), third-octave analyser with peak hold, LUFS loudness (K-weighting and gating needed to be accurate), PPM, crest factor, nixie or 7-segment dB readout, BPM display
+- [ ] Add a volume control (there is none)
+- [ ] Test in Safari, the author's own browser, not just headless Chrome: audio unlock, the meters, ALAC played natively (the ffmpeg conversion is not needed there)
 
 - [ ] Optional: `magnetite:scan --transcode` to pre-convert ALAC; cap or document the cache size (about the size of the ALAC files, 37 MB for the 4 tracks tried)
 - [ ] Trademark search for "Magnetite" (EUIPO TMview, Portuguese INPI), and decide whether to buy a domain (.fm, .music, .audio and .pt showed no registration; .com, .app and .dev are taken)
 - [ ] Tune visualizers further with varied music (radial and scope looked good; bars are better after the tilt)
 - [ ] Pest tests for theme JSON validation (stream, cover, scanner and library page are covered, 14 tests)
-- [ ] Butterchurn adapter (lazy-loaded) behind the same visualizer contract; theme integration by curated presets per theme plus an optional CSS tint (untested), not by recolouring presets
 - [ ] Theme editor with live preview, export and import
 - [ ] Fullscreen now-playing polish, playlists, keyboard shortcuts
 - [ ] Flux UI for library, queue and settings screens
@@ -40,7 +47,6 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
 ## Known risks
 
 - Mobile Safari: strict `AudioContext` and background playback rules.
-- Butterchurn needs WebGL 2 and is heavy; lazy-load.
 - Albums without an album-artist tag are grouped by title within their folder; a compilation split across folders becomes several albums.
 - The scan runs synchronously from the command; move it to a queued job when the library page offers a rescan button.
 - Gapless playback and crossfade need a second element; skipped for v1.
