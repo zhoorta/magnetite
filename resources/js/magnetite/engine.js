@@ -1,9 +1,11 @@
 // Owns the <audio> element and the Web Audio graph. The graph is created lazily
 // on the first user gesture (autoplay policy) and exactly once per element.
 
+import { bandsFromSpectrum, BAND_LABELS, BAND_FLOOR } from './bands';
 import meterWorklet from './worklet/meter-processor.js?worker&url';
 
 const FFT = 2048;
+const RTA_FFT = 16384; // 2.7 Hz bins at 44.1 kHz: the lowest third-octave bands are only 4 to 5 Hz wide
 const LEVEL_WINDOW = 1024; // ~23 ms at 44.1 kHz: long enough for a stable RMS, short enough to track peaks
 
 /** What visualizers get before anything has played, so they can draw an idle state instead of nothing. */
@@ -13,6 +15,7 @@ export const SILENCE = {
     levels: { l: { rms: 0, peak: 0 }, r: { rms: 0, peak: 0 } },
     lufs: { m: -Infinity, s: -Infinity, i: -Infinity, tpL: 0, tpR: 0 },
     stereo: { corr: 0, gonio: new Float32Array(2) },
+    bands: new Float32Array(BAND_LABELS.length).fill(BAND_FLOOR),
 };
 
 const idleLufs = () => ({ ...SILENCE.lufs });
@@ -59,6 +62,15 @@ export class AudioEngine {
             return { node: a, buf: new Float32Array(LEVEL_WINDOW) };
         });
 
+        // Long FFT for the third-octave analyser, also listening only. Smoothing is off: the meter has its own ballistics.
+        this.rta = this.ctx.createAnalyser();
+        this.rta.fftSize = RTA_FFT;
+        this.rta.smoothingTimeConstant = 0;
+        this.rta.minDecibels = -140;
+        source.connect(this.rta);
+        this.rtaDb = new Float32Array(this.rta.frequencyBinCount);
+        this.bands = new Float32Array(BAND_LABELS.length).fill(BAND_FLOOR);
+
         this.startMeterWorklet(source);
 
         this.freq = new Uint8Array(this.analyser.frequencyBinCount);
@@ -69,6 +81,7 @@ export class AudioEngine {
             levels: { l: { rms: 0, peak: 0 }, r: { rms: 0, peak: 0 } },
             lufs: this.lufs,
             stereo: this.stereo,
+            bands: this.bands,
         };
     }
 
@@ -144,7 +157,7 @@ export class AudioEngine {
     }
 
     /**
-     * Latest measurements, computed only for the inputs in `needs` ('freq', 'wave', 'levels'); the rest of
+     * Latest measurements, computed only for the inputs in `needs` ('freq', 'wave', 'levels', 'bands'); the rest of
      * the returned object keeps its previous value. 'lufs' and 'stereo' come from the worklet and are always
      * current. The object and its arrays are reused every call.
      */
@@ -154,6 +167,10 @@ export class AudioEngine {
         const s = this.shared;
         if (needs.includes('freq')) this.analyser.getByteFrequencyData(this.freq);
         if (needs.includes('wave')) this.analyser.getByteTimeDomainData(this.wave);
+        if (needs.includes('bands')) {
+            this.rta.getFloatFrequencyData(this.rtaDb);
+            bandsFromSpectrum(this.rtaDb, this.ctx.sampleRate, RTA_FFT, this.bands);
+        }
         if (needs.includes('levels')) {
             this.level(this.channels[0], s.levels.l);
             this.level(this.channels[1], s.levels.r);

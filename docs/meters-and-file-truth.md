@@ -80,3 +80,10 @@ Measured with four meters at once (full screen, headless Chrome, 60 fps): level 
 - The worklet runs always, off the main thread; the `needs` contract only matters for what the main thread computes. Its output is silence connected to the destination, so the heard signal is untouched.
 - Verified: Node tests against analytic values (see `PLAN.md`) and headless Chrome on a real file (loud master: -9.3 LUFS, -0.4 dBTP, correlation 0.87). Not verified: Safari, or any comparison with a reference meter.
 - Gotcha found on the way: `php artisan serve` handles one request at a time, so `addModule` called after the audio request had started stayed pending forever. The file is therefore fetched in the engine constructor and loaded from a Blob URL.
+
+## Third-octave analyser (2026-10-08)
+
+- Bands are the 31 ISO 266 preferred centres, exact base-2 edges (`centre * 2^(+-1/6)`), from `bands.js`. A bin belongs to the band that contains its frequency; a band narrower than one bin (only possible at very low FFT sizes or sample rates) takes the nearest bin.
+- The level of a band is the sum of the powers of its bins, in dB, plus 11.18 dB: Web Audio scales the spectrum by 1/N after a Blackman window, so a full-scale sine's bins add up to -11.18 dB. The result reads dB relative to a full-scale sine. It is a true power measure, not a peak: broadband music reads many dB under its waveform peaks, and wider bands hold more bins, so white noise reads 3 dB higher per octave while pink noise reads flat (music is closer to pink).
+- It is not an IEC 61260 filter bank: bands come from FFT bins with a Blackman window, so the skirts are those of the window, and at 40 Hz (a 9 Hz wide band against a 2.7 Hz bin) a pure tone leaks about 20 dB into the neighbour. Good for looking, not for certifying a room.
+- Ballistics (instant rise, release, peak hold) are in the visualizer, using the frame time, because the analyser's own smoothing is turned off.
