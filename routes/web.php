@@ -22,7 +22,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => view('pages.welcome'))->name('welcome');
 Route::get('/themes', fn () => view('pages.themes'))->name('themes');
-Route::get('/about', fn () => view('pages.about'))->name('about');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');

@@ -4,24 +4,31 @@
     <x-layouts.head :title="$title ?? 'Magnetite'" />
 </head>
 <body class="min-h-screen bg-bg text-text antialiased">
-    <header class="border-b border-white/10">
-        <nav class="mx-auto flex {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} items-center gap-6 px-4 py-4 text-sm">
+    <header class="border-b border-white/10" x-data="{ menu: false }" @keydown.escape.window="menu = false">
+        <nav class="mx-auto flex {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 text-sm sm:flex-nowrap">
             <a href="{{ route('welcome') }}" wire:navigate class="font-semibold tracking-wide text-accent">Magnetite</a>
-            <a href="{{ route('library') }}" wire:navigate class="hover:text-accent">Library</a>
-            @auth
-                <a href="{{ route('shared') }}" wire:navigate class="hover:text-accent">Shared</a>
-                <a href="{{ route('playlists') }}" wire:navigate class="hover:text-accent">Playlists</a>
-            @endauth
-            <a href="{{ route('themes') }}" wire:navigate class="hover:text-accent">Themes</a>
-            <a href="{{ route('about') }}" wire:navigate class="hover:text-accent">About</a>
-            @auth
-                <a href="{{ route('upload') }}" wire:navigate class="hover:text-accent">Upload</a>
-                <a href="{{ route('storage') }}" wire:navigate class="hover:text-accent">Storage</a>
-                <form method="POST" action="{{ route('logout') }}" class="ml-auto">
-                    @csrf
-                    <button type="submit" class="text-muted hover:text-accent">Sign out</button>
-                </form>
-            @endauth
+            <button type="button" class="-mr-1 ml-auto rounded-theme p-1.5 text-muted hover:text-accent sm:hidden" aria-label="Menu" :aria-expanded="menu" @click="menu = ! menu">
+                <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
+                    <path x-show="! menu" d="M4 6h16M4 12h16M4 18h16"/>
+                    <path x-show="menu" x-cloak d="M6 6l12 12M18 6L6 18"/>
+                </svg>
+            </button>
+            <div :class="menu ? 'flex' : 'hidden'" class="basis-full -mx-2 flex-col gap-1 sm:contents [&_a]:block [&_a]:rounded-theme [&_a]:px-2 [&_a]:py-2 [&_a:hover]:bg-white/10 sm:[&_a]:p-0 sm:[&_a:hover]:bg-transparent [&_button]:rounded-theme [&_button]:px-2 [&_button]:py-2 [&_button:hover]:bg-white/10 sm:[&_button]:p-0 sm:[&_button:hover]:bg-transparent">
+                <a href="{{ route('library') }}" wire:navigate class="hover:text-accent">Library</a>
+                @auth
+                    <a href="{{ route('shared') }}" wire:navigate class="hover:text-accent">Shared</a>
+                    <a href="{{ route('playlists') }}" wire:navigate class="hover:text-accent">Playlists</a>
+                @endauth
+                <a href="{{ route('themes') }}" wire:navigate class="hover:text-accent">Themes</a>
+                @auth
+                    <a href="{{ route('upload') }}" wire:navigate class="hover:text-accent">Upload</a>
+                    <a href="{{ route('storage') }}" wire:navigate class="hover:text-accent">Storage</a>
+                    <form method="POST" action="{{ route('logout') }}" class="sm:ml-auto">
+                        @csrf
+                        <button type="submit" class="text-muted hover:text-accent">Sign out</button>
+                    </form>
+                @endauth
+            </div>
         </nav>
     </header>
 
