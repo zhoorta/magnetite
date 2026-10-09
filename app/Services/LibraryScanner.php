@@ -117,10 +117,11 @@ class LibraryScanner
                 ['year' => $this->year($first('year') ?? $first('recording_time') ?? $first('date') ?? $first('creation_date'))],
             );
 
-            if ($album->cover === null) {
+            // A cover from the user's own files replaces one that was downloaded.
+            if ($album->cover === null || $album->cover_source !== null) {
                 $cover = $this->coverFor($tags, $file);
                 if ($cover !== null) {
-                    $album->update(['cover' => $cover]);
+                    $album->update(['cover' => $cover, 'cover_source' => null]);
                 }
             }
         }

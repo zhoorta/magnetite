@@ -23,4 +23,10 @@ return [
         'max_unpacked_mb' => (int) env('MAGNETITE_UPLOAD_MAX_UNPACKED_MB', 6144),
         'max_files' => (int) env('MAGNETITE_UPLOAD_MAX_FILES', 5000),
     ],
+
+    // Missing covers can be looked up online (MusicBrainz / Cover Art Archive, then iTunes): only the artist and the
+    // album title leave the server. MusicBrainz asks for a contact in the User-Agent, e.g. "Magnetite/1.0 (you@example.com)".
+    'covers' => [
+        'user_agent' => env('MAGNETITE_COVERS_USER_AGENT', 'Magnetite/1.0'),
+    ],
 ];

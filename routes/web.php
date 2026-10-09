@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CoverController;
+use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\MeterSettingController;
@@ -45,6 +46,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/stream/{track}', StreamController::class)->whereNumber('track')->name('stream');
     Route::get('/cover/{album}', CoverController::class)->whereNumber('album')->name('cover');
+
+    Route::get('/covers/find', [CoverSearchController::class, 'show'])->name('covers.find.show');
+    Route::post('/covers/find', [CoverSearchController::class, 'store'])->name('covers.find');
+    Route::post('/cover/{album}/find', [CoverSearchController::class, 'album'])->whereNumber('album')->name('cover.find');
 
     Route::get('/upload', [UploadController::class, 'create'])->name('upload');
     Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');

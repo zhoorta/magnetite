@@ -19,4 +19,9 @@ class AlbumPolicy
     {
         return $album->user_id === $user->id;
     }
+
+    public function update(User $user, Album $album): bool
+    {
+        return $album->user_id === $user->id;
+    }
 }

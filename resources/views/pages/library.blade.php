@@ -2,6 +2,7 @@
     // One shape for both kinds of section: a list of tracks with their file-truth findings.
     $rows = fn ($tracks) => $tracks->map(fn ($t) => $t->toLibrary($copies[$t->id] ?? []))->values();
     $analysed = $albums->flatMap->tracks->merge($loose)->contains(fn ($t) => $t->analysis !== null);
+    $missing = $albums->whereNull('cover')->count();
 @endphp
 <x-layouts.app title="Library · Magnetite">
     <div x-data="{
@@ -17,6 +18,20 @@
                 });
                 if (r.ok) this.shares[kind] = on ? this.shares[kind].filter((x) => x !== id) : [...this.shares[kind], id];
             },
+            csrf() { return document.querySelector('meta[name=csrf-token]').content; },
+            covers: { state: 'idle', done: 0, total: 0, found: 0 },
+            async findCovers() {
+                const r = await fetch('/covers/find', { method: 'POST', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } });
+                if (! r.ok) return;
+                this.covers = await r.json();
+                while (['queued', 'running'].includes(this.covers.state)) {
+                    await new Promise((res) => setTimeout(res, 2000));
+                    const p = await fetch('/covers/find', { headers: { 'Accept': 'application/json' } });
+                    if (! p.ok) return;
+                    this.covers = await p.json();
+                }
+                if (this.covers.found > 0) Livewire.navigate(window.location.href);
+            },
             worst(t) { const l = t.truth.flags.map((f) => f.level); return l.includes('problem') ? 'problem' : l.includes('warn') ? 'warn' : null; },
             shown(t) { return ! this.onlyIssues || this.worst(t) !== null; },
             drClass(c) { return { excellent: 'text-emerald-500 bg-emerald-500/15', good: 'text-lime-500 bg-lime-500/15', fair: 'text-amber-500 bg-amber-500/15', poor: 'text-red-500 bg-red-500/15' }[c]; },
@@ -31,6 +46,16 @@
         }">
         <div class="mb-6 flex items-center justify-between gap-4">
             <h1 class="text-2xl font-semibold">Library</h1>
+            @if ($missing > 0)
+                <button type="button" class="ml-auto rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent disabled:opacity-60"
+                        title="Look up the {{ $missing }} missing cover(s) online (MusicBrainz, iTunes). Only artist and album title are sent."
+                        :disabled="['queued', 'running'].includes(covers.state)" @click="findCovers()">
+                    <span x-show="! ['queued', 'running', 'done'].includes(covers.state)">Find missing covers</span>
+                    <span x-show="covers.state === 'queued'" x-cloak>Waiting for the queue worker…</span>
+                    <span x-show="covers.state === 'running'" x-cloak x-text="'Searching ' + covers.done + '/' + covers.total + '…'"></span>
+                    <span x-show="covers.state === 'done'" x-cloak x-text="covers.found + ' of ' + covers.total + ' found'"></span>
+                </button>
+            @endif
             @if ($analysed)
                 <label class="flex cursor-pointer items-center gap-2 text-xs text-muted">
                     <input type="checkbox" x-model="onlyIssues" class="accent-[var(--c-accent)]">
@@ -49,12 +74,25 @@
 
         <div class="space-y-8">
             @foreach ($albums as $album)
-                <section x-data="{ tracks: @js($rows($album->tracks)) }"
+                <section x-data="{
+                            tracks: @js($rows($album->tracks)),
+                            cover: @js((bool) $album->cover), searching: false, noMatch: false,
+                            async findCover() {
+                                this.searching = true; this.noMatch = false;
+                                const r = await fetch('{{ route('cover.find', $album) }}', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' } }).catch(() => null);
+                                this.searching = false;
+                                if (r && r.ok && (await r.json()).source) this.cover = true; else this.noMatch = true;
+                            },
+                         }"
                          x-show="! onlyIssues || tracks.some((t) => worst(t) !== null)" class="flex gap-4">
                     <div class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
-                        @if ($album->cover)
-                            <img src="{{ route('cover', $album) }}" alt="" loading="lazy" class="h-full w-full object-cover">
-                        @endif
+                        <template x-if="cover"><img src="{{ route('cover', $album) }}" alt="" loading="lazy" class="h-full w-full object-cover"></template>
+                        @unless ($album->cover)
+                            <button type="button" x-show="! cover" class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-muted hover:text-accent"
+                                    title="Look this cover up online (MusicBrainz, iTunes). Only artist and album title are sent."
+                                    :disabled="searching" @click="findCover()"
+                                    x-text="searching ? 'Searching…' : noMatch ? 'No match' : 'Find cover'"></button>
+                        @endunless
                     </div>
 
                     <div class="min-w-0 flex-1">
