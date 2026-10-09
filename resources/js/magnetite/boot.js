@@ -7,6 +7,7 @@ import uploader from './upload';
 
 const STORAGE_KEY = 'magnetite.theme';
 const VARS_KEY = 'magnetite.vars';
+const METERS_KEY = 'magnetite.meters'; // 'off' when the person removed every meter; a theme change must not bring them back
 
 function safeStorage(fn) {
     try {
@@ -101,7 +102,7 @@ Alpine.store('player', {
         if (!theme) return;
 
         this.themeId = id;
-        this.setPanels((theme.visualizers ?? [theme.visualizer]).map(({ id, params }) => ({ id, params })));
+        this.setPanels(this.metersOff() ? [] : this.themePanels(theme));
         applyTheme(theme);
         this.colors = readColors();
         safeStorage((s) => {
@@ -109,6 +110,14 @@ Alpine.store('player', {
             // Read by the inline script in the layout's <head> to avoid a flash on full reloads.
             s.setItem(VARS_KEY, JSON.stringify({ colors: theme.colors, radius: theme.radius, font: theme.font }));
         });
+    },
+
+    themePanels(theme) {
+        return (theme.visualizers ?? [theme.visualizer]).map(({ id, params }) => ({ id, params }));
+    },
+
+    metersOff() {
+        return safeStorage((s) => s.getItem(METERS_KEY)) === 'off';
     },
 
     setPanels(panels) {
@@ -122,12 +131,23 @@ Alpine.store('player', {
     },
 
     addPanel() {
+        // With no meters, bring back the theme's own.
+        if (this.panels.length === 0) {
+            safeStorage((s) => s.removeItem(METERS_KEY));
+            this.setPanels(this.themePanels(themes.find((t) => t.id === this.themeId)));
+
+            return;
+        }
+
         const free = this.visualizerList.find((v) => !this.panels.some((p) => p.id === v.id));
         if (free && this.panels.length < MAX_PANELS) this.setPanels([...this.panels, { id: free.id, params: {} }]);
     },
 
     removePanel(i) {
-        if (this.panels.length > 1) this.setPanels(this.panels.filter((_, j) => j !== i));
+        this.setPanels(this.panels.filter((_, j) => j !== i));
+
+        // Removing the last meter is a choice worth remembering; the player then shows the cover and title instead.
+        if (this.panels.length === 0) safeStorage((s) => s.setItem(METERS_KEY, 'off'));
     },
 
     /** Visualizers a panel can switch to: its own plus any not already shown in another panel. */
@@ -136,7 +156,7 @@ Alpine.store('player', {
     },
 
     get canAddPanel() {
-        return this.panels.length < MAX_PANELS && this.panels.length < this.visualizerList.length;
+        return this.panels.length === 0 || (this.panels.length < MAX_PANELS && this.panels.length < this.visualizerList.length);
     },
 
     setQueue(tracks, index = 0) {
@@ -209,8 +229,8 @@ Alpine.store('player', {
         const frame = (now = performance.now()) => {
             this.raf = requestAnimationFrame(frame);
 
-            // No point drawing in a hidden tab.
-            if (document.hidden) {
+            // No point drawing in a hidden tab, or when there are no meters (the canvas is hidden too).
+            if (document.hidden || this.panels.length === 0) {
                 last = now;
 
                 return;
