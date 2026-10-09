@@ -1,12 +1,16 @@
 package app.magnetite.player
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -25,7 +29,16 @@ class PlaybackService : MediaSessionService() {
         val api = (application as MagnetiteApp).api
         val http = OkHttpDataSource.Factory(api.client)
 
-        val player = ExoPlayer.Builder(this)
+        // The renderers are the stock ones; only the audio sink gets MeterTap added to its processors.
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+                DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf(MeterTap))
+                    .build()
+        }
+        val player = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(http))
             .setAudioAttributes(AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).setUsage(C.USAGE_MEDIA).build(), true)
             .setHandleAudioBecomingNoisy(true)

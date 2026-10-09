@@ -27,6 +27,11 @@ class Session(context: Context) {
         get() = prefs.getString("username", null)
         set(v) = prefs.edit().apply { if (v == null) remove("username") else putString("username", v) }.apply()
 
+    /** Survives sign-out, to prefill the sign-in form. */
+    var lastUsername: String
+        get() = prefs.getString("last_username", "") ?: ""
+        set(v) = prefs.edit().putString("last_username", v).apply()
+
     val signedIn: Boolean get() = !token.isNullOrEmpty() && serverUrl.isNotEmpty()
 
     fun clear() {

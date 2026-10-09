@@ -5,12 +5,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -20,6 +25,7 @@ import kotlinx.coroutines.launch
 import app.magnetite.ui.AlbumScreen
 import app.magnetite.ui.LibraryScreen
 import app.magnetite.ui.LoginScreen
+import app.magnetite.ui.MagnetiteTheme
 import app.magnetite.ui.MiniPlayer
 import app.magnetite.ui.NowPlayingScreen
 import app.magnetite.ui.PlaylistScreen
@@ -39,22 +45,24 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as MagnetiteApp
 
-        // Android 13+ shows the media notification only with this permission; playback works without it.
-        requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        // Android 13+ shows the media notification only with the first; playback works without it.
+        // Android 17+ blocks connections to a private-network server (home, 10.0.2.2) without the second.
+        requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS, "android.permission.ACCESS_LOCAL_NETWORK"), 1)
 
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            MagnetiteTheme {
                 var signedIn by remember { mutableStateOf(app.session.signedIn) }
                 var tab by remember { mutableStateOf(Tab.Library) }
                 var detail by remember { mutableStateOf<Detail?>(null) }
                 var showNowPlaying by remember { mutableStateOf(false) }
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
+                androidx.compose.runtime.LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
 
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f)) {
                         val d = detail
                         when {
-                            !signedIn -> LoginScreen(app.api, app.session.serverUrl) { signedIn = true }
+                            !signedIn -> LoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
                             showNowPlaying -> NowPlayingScreen(app.player, onClose = { showNowPlaying = false })
                             d is Detail.Album -> AlbumScreen(app.api, app.player, d.id, onBack = { detail = null })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
@@ -77,16 +85,21 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     if (signedIn && !showNowPlaying) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         MiniPlayer(app.player) { showNowPlaying = true }
-                        NavigationBar {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Row(Modifier.fillMaxWidth().height(40.dp)) {
                             Tab.entries.forEach { t ->
-                                NavigationBarItem(
-                                    selected = tab == t && detail == null,
-                                    onClick = { tab = t; detail = null },
-                                    icon = {},
-                                    label = { Text(t.label) },
-                                    alwaysShowLabel = true,
-                                )
+                                val selected = tab == t && detail == null
+                                Box(
+                                    Modifier.weight(1f).fillMaxHeight().clickable { tab = t; detail = null },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        t.label, style = MaterialTheme.typography.labelLarge,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                     }

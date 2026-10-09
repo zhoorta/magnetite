@@ -1,6 +1,8 @@
 package app.magnetite.data
 
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -22,11 +24,17 @@ class ApiException(message: String, val code: Int = 0) : IOException(message)
 class Api(private val session: Session) {
     val json = Json { ignoreUnknownKeys = true }
 
+    /** Called (on the main thread) when the server refuses the stored token: revoked, or the user is gone. */
+    var onUnauthorized: (() -> Unit)? = null
+
     val client: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor { chain ->
             val token = session.token
             val request = if (token != null) chain.request().newBuilder().header("Authorization", "Bearer $token").build() else chain.request()
-            chain.proceed(request)
+            chain.proceed(request).also {
+                // Covers, streams and API calls all pass here; a sign-in attempt has no token yet, so wrong passwords do not count.
+                if (it.code == 401 && token != null) Handler(Looper.getMainLooper()).post { onUnauthorized?.invoke() }
+            }
         }
         .build()
 
@@ -61,6 +69,7 @@ class Api(private val session: Session) {
         return json.decodeFromString<SignedIn>(body).also {
             session.token = it.token
             session.username = it.user.username
+            session.lastUsername = it.user.username
         }
     }
 
@@ -71,6 +80,26 @@ class Api(private val session: Session) {
 
     suspend fun albums(page: Int): Page<Album> =
         json.decodeFromString(call(get("/albums?page=$page")))
+
+    suspend fun folders(): List<Folder> =
+        json.decodeFromString<Envelope<List<Folder>>>(call(get("/folders"))).data
+
+    suspend fun createFolder(name: String, parentId: Int?) {
+        call(send("/folders", "POST", buildJsonObject { put("name", name); if (parentId != null) put("parent_id", parentId) }))
+    }
+
+    suspend fun renameFolder(id: Int, name: String) {
+        call(send("/folders/$id", "PATCH", buildJsonObject { put("name", name) }))
+    }
+
+    /** Albums and subfolders move up to the parent; no music is deleted. */
+    suspend fun deleteFolder(id: Int) {
+        call(Request.Builder().url(url("/folders/$id")).header("Accept", "application/json").delete().build())
+    }
+
+    private fun send(path: String, method: String, body: JsonObject) =
+        Request.Builder().url(url(path)).header("Accept", "application/json")
+            .method(method, body.toString().toRequestBody("application/json".toMediaType())).build()
 
     suspend fun album(id: Int): Album =
         json.decodeFromString<Envelope<Album>>(call(get("/albums/$id"))).data

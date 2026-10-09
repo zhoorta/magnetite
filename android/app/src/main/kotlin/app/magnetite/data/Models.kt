@@ -30,6 +30,15 @@ data class Album(
     @SerialName("track_count") val trackCount: Int? = null,
     val tracks: List<Track> = emptyList(),
     @SerialName("shared_by") val sharedBy: String? = null,
+    @SerialName("folder_id") val folderId: Int? = null,
+)
+
+@Serializable
+data class Folder(
+    val id: Int,
+    @SerialName("parent_id") val parentId: Int? = null,
+    val name: String,
+    @SerialName("album_count") val albumCount: Int = 0,
 )
 
 @Serializable

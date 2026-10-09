@@ -1,6 +1,7 @@
 package app.magnetite.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,15 +57,19 @@ fun NowPlayingScreen(player: PlayerController, onClose: () -> Unit) {
         TopAppBar(title = { Text("Now playing") }, navigationIcon = { TextButton(onClose) { Text("Back") } })
     }) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp),
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(16.dp))
-            Cover(player.coverUrl, Modifier.fillMaxWidth())
+            Cover(player.coverUrl, Modifier.fillMaxWidth(0.6f))
             Spacer(Modifier.height(24.dp))
             Text(player.title ?: "", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
             Text(player.artist ?: "", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
+            SpectrumPanel(player.isPlaying)
+            Spacer(Modifier.height(8.dp))
+            ScopePanel(player.isPlaying)
+            Spacer(Modifier.height(8.dp))
 
             val duration = player.durationMs.coerceAtLeast(1L)
             val shown = dragging ?: (player.positionMs.toFloat() / duration)
@@ -84,11 +89,9 @@ fun NowPlayingScreen(player: PlayerController, onClose: () -> Unit) {
 
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton({ player.previous() }) { Text("Prev") }
-                Button({ player.toggle() }, Modifier.widthIn(min = 120.dp)) {
-                    Text(if (player.isPlaying) "Pause" else "Play")
-                }
-                TextButton({ player.next() }) { Text("Next") }
+                TransportButton(Icon.Previous, "Previous", { player.previous() }, size = 64.dp)
+                TransportButton(if (player.isPlaying) Icon.Pause else Icon.Play, if (player.isPlaying) "Pause" else "Play", { player.toggle() }, size = 80.dp)
+                TransportButton(Icon.Next, "Next", { player.next() }, size = 64.dp)
             }
         }
     }

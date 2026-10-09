@@ -25,9 +25,9 @@ import app.magnetite.data.Api
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(api: Api, lastServer: String, onSignedIn: () -> Unit) {
+fun LoginScreen(api: Api, lastServer: String, lastUsername: String, onSignedIn: () -> Unit) {
     var server by remember { mutableStateOf(lastServer) }
-    var username by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf(lastUsername) }
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -38,7 +38,7 @@ fun LoginScreen(api: Api, lastServer: String, onSignedIn: () -> Unit) {
             Modifier.fillMaxSize().padding(padding).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp, androidx.compose.ui.Alignment.CenterVertically),
         ) {
-            Text("Magnetite", style = MaterialTheme.typography.headlineLarge)
+            Logo(Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
             OutlinedTextField(
                 server, { server = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("Server (https://…)") },
