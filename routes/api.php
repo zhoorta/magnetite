@@ -18,6 +18,7 @@ use App\Http\Controllers\FolderController as FolderWrites;
 use App\Http\Controllers\LibraryEditController;
 use App\Http\Controllers\LibraryRemoveController;
 use App\Http\Controllers\MeterSettingController;
+use App\Http\Controllers\PlaylistController as PlaylistWrites;
 use App\Http\Controllers\ScanController;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +45,7 @@ Route::prefix('v1')->group(function () {
 
         // Changing the library needs a token that may write. The work and the rules are the web controllers', so both agree.
         Route::middleware('abilities:library:write')->group(function () {
+            Route::put('/playlists/{playlist}/order', [PlaylistWrites::class, 'reorder'])->whereNumber('playlist')->name('api.playlists.order');
             Route::post('/analysis', [AnalysisController::class, 'store'])->name('api.analysis.store');
             Route::post('/scan', [ScanController::class, 'store'])->name('api.scan.store');
             Route::post('/folders', [FolderWrites::class, 'store'])->name('api.folders.store');

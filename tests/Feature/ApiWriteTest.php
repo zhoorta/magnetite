@@ -2,6 +2,7 @@
 
 use App\Models\Album;
 use App\Models\Folder;
+use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
 use App\Models\User;
@@ -89,6 +90,30 @@ describe('folders', function () {
         $this->patchJson("/api/v1/folders/{$folder->id}", ['name' => 'Mine'], $h)->assertNotFound();
         $this->deleteJson("/api/v1/folders/{$folder->id}", [], $h)->assertNotFound();
         $this->putJson("/api/v1/albums/{$this->album->id}/folder", ['folder_id' => $folder->id], $h)->assertUnprocessable();
+    });
+});
+
+describe('playlist order', function () {
+    beforeEach(function () {
+        $this->playlist = Playlist::create(['user_id' => $this->alice->id, 'name' => 'Mine']);
+        $this->one = Track::where('user_id', $this->alice->id)->where('title', 'First Song')->sole();
+        $this->two = Track::where('user_id', $this->alice->id)->where('title', 'Second Song')->sole();
+        $this->playlist->tracks()->attach($this->one->id, ['position' => 1]);
+        $this->playlist->tracks()->attach($this->two->id, ['position' => 2]);
+    });
+
+    it('reorders my playlist', function () {
+        $this->putJson("/api/v1/playlists/{$this->playlist->id}/order", ['ids' => [$this->two->id, $this->one->id]], writer($this->alice))->assertOk();
+
+        expect($this->playlist->fresh()->tracks->pluck('title')->all())->toBe(['Second Song', 'First Song']);
+    });
+
+    it('refuses a read-only token', function () {
+        $this->putJson("/api/v1/playlists/{$this->playlist->id}/order", ['ids' => [$this->two->id, $this->one->id]], writer($this->alice, readOnly: true))->assertForbidden();
+    });
+
+    it('answers 404 for someone else\'s playlist', function () {
+        $this->putJson("/api/v1/playlists/{$this->playlist->id}/order", ['ids' => [$this->two->id, $this->one->id]], writer($this->bob))->assertNotFound();
     });
 });
 
