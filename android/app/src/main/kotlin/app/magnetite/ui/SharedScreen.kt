@@ -38,18 +38,20 @@ fun SharedScreen(api: Api, player: PlayerController, onOpenAlbum: (Int) -> Unit,
     var shared by remember { mutableStateOf<Shared?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        try { shared = api.shared() } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
+    suspend fun load() {
+        try { shared = api.shared(); error = null } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
     }
+    LaunchedEffect(Unit) { load() }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Shared") }) }) { padding ->
         val s = shared
+        PullRefresh(padding, ::load) {
         if (s == null) {
-            Text(error ?: "Loading…", Modifier.padding(padding).padding(16.dp))
+            ScrollingMessage(error ?: "Loading…")
         } else if (s.albums.isEmpty() && s.tracks.isEmpty() && s.playlists.isEmpty()) {
-            Text("Nothing is shared yet.", Modifier.padding(padding).padding(16.dp))
+            ScrollingMessage("Nothing is shared yet.")
         } else {
-            LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(Modifier.fillMaxSize()) {
                 if (s.albums.isNotEmpty()) item { Heading("Albums") }
                 items(s.albums, key = { "a${it.id}" }) { album ->
                     Row(Modifier.fillMaxWidth().clickable { onOpenAlbum(album.id) }.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -70,6 +72,7 @@ fun SharedScreen(api: Api, player: PlayerController, onOpenAlbum: (Int) -> Unit,
                 if (s.playlists.isNotEmpty()) item { Heading("Playlists") }
                 items(s.playlists, key = { "p${it.id}" }) { PlaylistRow(it) { onOpenPlaylist(it.id) } }
             }
+        }
         }
     }
 }

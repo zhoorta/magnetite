@@ -111,3 +111,7 @@ The app has the web's nine meters under the same ids (`vu-wide`, `vu-needle`, `v
 - Library: long-press an album and drag it onto a folder row (or onto another album, to join that album's folder); the target row lights up, the list scrolls when the finger nears an edge, and `PUT /albums/{id}/folder` runs on drop. Folders themselves cannot be dragged yet.
 - Playlist: long-press a track and drag it up or down in a playlist of your own; `PUT /api/v1/playlists/{id}/order` (the web controller, needs `library:write`) saves the order on drop and the list reloads if that fails. Shared playlists are read-only.
 - `ui/Drag.kt` holds the shared gesture (`dragRow`); the finger position is kept in viewport coordinates so a scrolling list does not shift the dragged row.
+
+## Pull to refresh (2026-10-09)
+
+Library, Shared, Playlists, a playlist and an album reload when pulled down (`ui/Refresh.kt`: `PullRefresh` around the list, `ScrollingMessage` so the empty and loading states can be pulled too). The Library reload reloads folders and albums and keeps the expanded folders; a failed reload keeps what is on screen.

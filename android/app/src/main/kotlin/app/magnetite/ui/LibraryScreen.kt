@@ -71,18 +71,20 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onS
     var dialog by remember { mutableStateOf<FolderDialog?>(null) }
     var menuFor by remember { mutableStateOf<Int?>(null) }
 
-    fun refresh() = scope.launch {
+    suspend fun reload() {
         try {
             val f = api.folders()
             folders.clear(); folders.addAll(f)
             albums.clear(); page = 0; lastPage = 1
             loadMore()
+            error = null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             error = e.message
         }
     }
+    fun refresh() = scope.launch { reload() }
 
     // Albums are paged and a folder's albums can be on any page, so load them all; the folder list is flat.
     LaunchedEffect(Unit) {
@@ -164,7 +166,8 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onS
             },
         )
     }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), state = list) {
+        PullRefresh(padding, ::reload) {
+        LazyColumn(Modifier.fillMaxSize(), state = list) {
             fun tree(parent: Int?, depth: Int): List<Pair<Int, Any>> =
                 folders.filter { it.parentId == parent }.flatMap { f ->
                     listOf<Pair<Int, Any>>(depth to f) +
@@ -234,6 +237,7 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onS
             item {
                 error?.let { Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
             }
+        }
         }
     }
 }

@@ -41,17 +41,20 @@ fun PlaylistsScreen(api: Api, onOpen: (Int) -> Unit) {
     var playlists by remember { mutableStateOf<List<PlaylistSummary>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        try { playlists = api.playlists() } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
+    suspend fun load() {
+        try { playlists = api.playlists(); error = null } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
     }
+    LaunchedEffect(Unit) { load() }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Playlists") }) }) { padding ->
         val list = playlists
-        when {
-            list == null -> Text(error ?: "Loading…", Modifier.padding(padding).padding(16.dp))
-            list.isEmpty() -> Text("No playlists yet.", Modifier.padding(padding).padding(16.dp))
-            else -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                items(list, key = { it.id }) { PlaylistRow(it) { onOpen(it.id) } }
+        PullRefresh(padding, ::load) {
+            when {
+                list == null -> ScrollingMessage(error ?: "Loading…")
+                list.isEmpty() -> ScrollingMessage("No playlists yet.")
+                else -> LazyColumn(Modifier.fillMaxSize()) {
+                    items(list, key = { it.id }) { PlaylistRow(it) { onOpen(it.id) } }
+                }
             }
         }
     }

@@ -33,9 +33,10 @@ fun AlbumScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Unit)
     var album by remember { mutableStateOf<Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(id) {
-        try { album = api.album(id) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { error = e.message }
+    suspend fun load() {
+        try { album = api.album(id); error = null } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { error = e.message }
     }
+    LaunchedEffect(id) { load() }
 
     androidx.activity.compose.BackHandler(onBack = onBack)
 
@@ -43,10 +44,11 @@ fun AlbumScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Unit)
         TopAppBar(title = { Text(album?.title ?: "") }, navigationIcon = { TransportButton(Icon.Back, "Back", onBack) })
     }) { padding ->
         val a = album
+        PullRefresh(padding, ::load) {
         if (a == null) {
-            Text(error ?: "Loading…", Modifier.padding(padding).padding(16.dp))
+            ScrollingMessage(error ?: "Loading…")
         } else {
-            LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Row(Modifier.padding(16.dp)) {
                         Cover(a.coverUrl, Modifier.size(120.dp))
@@ -60,6 +62,7 @@ fun AlbumScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Unit)
                     TrackRow(track, player.currentId == track.id.toString(), { player.play(a.tracks, track) }, leading = "${track.number ?: ""}")
                 }
             }
+        }
         }
     }
 }

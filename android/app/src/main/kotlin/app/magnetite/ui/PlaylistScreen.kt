@@ -39,11 +39,12 @@ fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Un
     val drag = remember { DragState() }
     val scope = rememberCoroutineScope()
 
-    fun load() = scope.launch {
+    suspend fun load() {
         try {
             val p = api.playlist(id)
             playlist = p
             rows.clear(); rows.addAll(p.tracks.mapIndexed { i, t -> i to t })
+            error = null
         } catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
     }
     LaunchedEffect(id) {
@@ -55,11 +56,12 @@ fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Un
         TopAppBar(title = { Text(playlist?.name ?: "") }, navigationIcon = { TransportButton(Icon.Back, "Back", onBack) })
     }) { padding ->
         val p = playlist
+        PullRefresh(padding, ::load) {
         if (p == null) {
-            Text(error ?: "Loading…", Modifier.padding(padding).padding(16.dp))
+            ScrollingMessage(error ?: "Loading…")
         } else {
             // Long-press a track and drag it to a new place; your own playlists only. The order is saved when you let go.
-            LazyColumn(Modifier.fillMaxSize().padding(padding), state = list) {
+            LazyColumn(Modifier.fillMaxSize(), state = list) {
                 itemsIndexed(rows, key = { _, r -> r.first }) { i, (uid, track) ->
                     TrackRow(
                         track, player.currentId == track.id.toString(), { player.play(rows.map { it.second }, track) }, leading = "${i + 1}",
@@ -79,6 +81,7 @@ fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Un
                     )
                 }
             }
+        }
         }
     }
 }
