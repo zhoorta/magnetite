@@ -52,7 +52,7 @@
                 <dl x-show="result?.ok && result?.folder" class="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-1">
                     <dt class="text-muted">Ferrite folder</dt><dd x-text="result?.folder"></dd>
                     <dt class="text-muted">Access</dt>
-                    <dd x-text="result?.access === 'read+write' ? 'Read and add files' : 'Read only (uploads are off)'"></dd>
+                    <dd x-text="{ 'read+write+trash': 'Read, add files and move files to Ferrite\'s trash', 'read+write': 'Read and add files (deleting is off)' }[result?.access] ?? 'Read only (uploads and deleting are off)'"></dd>
                     <dt class="text-muted">Token expires</dt>
                     <dd>
                         <span x-text="result?.expires_at ?? 'never'"></span>

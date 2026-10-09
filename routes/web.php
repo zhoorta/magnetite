@@ -5,6 +5,7 @@ use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\IdentifyController;
 use App\Http\Controllers\LibraryController;
+use App\Http\Controllers\LibraryRemoveController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController;
@@ -59,6 +60,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/covers/find', [CoverSearchController::class, 'show'])->name('covers.find.show');
     Route::post('/covers/find', [CoverSearchController::class, 'store'])->name('covers.find');
     Route::post('/cover/{album}/find', [CoverSearchController::class, 'album'])->whereNumber('album')->name('cover.find');
+
+    Route::delete('/library/albums/{album}', [LibraryRemoveController::class, 'album'])->whereNumber('album')->name('library.albums.destroy');
+    Route::delete('/library/tracks/{track}', [LibraryRemoveController::class, 'track'])->whereNumber('track')->name('library.tracks.destroy');
 
     Route::get('/identify', [IdentifyController::class, 'show'])->name('identify.show');
     Route::post('/identify', [IdentifyController::class, 'store'])->name('identify.store');

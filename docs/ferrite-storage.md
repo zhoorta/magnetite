@@ -93,7 +93,7 @@ Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalS
 
 - `FerriteStore::put($localFile, $path)` uses Ferrite's chunked upload API (a write token, `on_conflict=fail`): it returns `added`, `existing` (409 with the same sha256) or `conflict` (409 with another hash, or a name taken while the file was on its way; nothing is replaced). It follows the chunk size Ferrite gives, resumes from the offset Ferrite reports after a 409, and polls until the file is stored (up to ten minutes).
 - `LibraryUploader::extract()` keeps every rule it had (types, traversal, symlinks, hidden files, counted size, no audio, limits) and, for a Ferrite library, copies each entry to a temporary file (counting the real bytes) and `put()`s it. It first checks `GET /root`: a read-only token says so before anything is unpacked. The folder quota (`users.quota_mb`) applies to local libraries only; Ferrite's own quota applies to the rest.
-- No rollback: the token cannot delete, so a failure halfway leaves what arrived. The error says "N of M files had arrived; send the same zip again to finish", and sending it again counts the arrived ones as already there.
+- No rollback (the token may be unable to trash; with a trash token a rollback would be possible but is not built): so a failure halfway leaves what arrived. The error says "N of M files had arrived; send the same zip again to finish", and sending it again counts the arrived ones as already there.
 - The result has a new `conflicts` count, shown on the upload page. The scan is queued after any upload that added files, as before.
 - Checked against a real Ferrite (MySQL, token limited to a folder): five files in 0.35 s, the same zip again 0.09 s with everything already there, then the scan read them back.
 
@@ -120,3 +120,7 @@ Step 1 is done (2026-10-09). `App\Contracts\LibraryStore` has `isAvailable()`, `
 3. `magnetite:storage:test`, the Storage page, error messages.
 4. Writing: `put()`, `LibraryUploader` through the store, partial-failure reporting.
 5. Tests: Range and `If-Range` pass-through, a 401 mid-scan, a changed hash replaces the track, a removed file removes it, token never in logs or responses, no redirect following, cache eviction (pinned files kept), prefetch (queued once, no double download, `.part` never served, skipped when already cached or too big, a cache hit answers Range), the zip rules unchanged.
+
+## Deleting (2026-10-09)
+
+Ferrite's API got a `trash` token ability (Settings > API tokens > "Read, add files and move files to the trash"): `DELETE /api/v1/files/{id}` moves a file to Ferrite's trash, never purges it, and the owner restores or purges from the web app (Ferrite `docs/api.md`). `GET /root` then says `access: read+write+trash`. `FerriteStore::canTrash()` / `delete()` use it; `LibraryStore::delete()` is the same call for a local folder, where it unlinks the file and removes folders it leaves empty. `LibraryRemover` checks the token before the first file, removes file then row, stops at the first error, and removes albums left empty. Delete buttons on albums and tracks in `/library`, owner only (404 for others). Cover images and other non-music files are left in place. A remote album that comes back after a restore in Ferrite returns with the next scan.

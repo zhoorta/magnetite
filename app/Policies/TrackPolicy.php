@@ -15,6 +15,12 @@ class TrackPolicy
             || ($track->album?->share()->exists() ?? false);
     }
 
+    /** Only the owner removes a track from the library. */
+    public function delete(User $user, Track $track): bool
+    {
+        return $track->user_id === $user->id;
+    }
+
     /** Only the owner changes what is shared. */
     public function share(User $user, Track $track): bool
     {

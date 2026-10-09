@@ -26,6 +26,13 @@ interface LibraryStore
     /** A local file that holds the bytes of a music file, for the tools that need one (getID3, ffmpeg, Node). Null when it is not there. */
     public function fetch(string $path): ?string;
 
+    /**
+     * Remove one music file from the library: deleted from disk for a local folder, moved to the trash of the remote
+     * store (where the owner can restore it) for Ferrite. A file that is already gone counts as removed. Throws
+     * RuntimeException, with a message for the owner, when the store does not allow it or cannot be reached.
+     */
+    public function delete(string $path): void;
+
     /** Bytes of the conventional cover image (`cover.jpg`, `folder.png`...) in the same folder as a music file, if any. */
     public function folderCover(string $path): ?string;
 }

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -69,7 +70,34 @@ class FerriteStore implements LibraryStore
     /** Whether the token may add files, per `GET /root`. Throws FerriteException when Ferrite cannot be used. */
     public function canWrite(): bool
     {
-        return ($this->root()['access'] ?? 'read') === 'read+write';
+        return str_starts_with($this->root()['access'] ?? 'read', 'read+write');
+    }
+
+    /** Whether the token may move files to Ferrite's trash (it never purges), per `GET /root`. */
+    public function canTrash(): bool
+    {
+        return ($this->root()['access'] ?? 'read') === 'read+write+trash';
+    }
+
+    public function delete(string $path): void
+    {
+        $file = $this->locate($path);
+        if ($file === null || $file->key === null) {
+            return; // not in Ferrite (any more)
+        }
+
+        try {
+            $this->send(fn (PendingRequest $http) => $http->delete($this->api('files/'.rawurlencode($file->key))), [200, 404]);
+        } catch (FerriteException $e) {
+            throw new RuntimeException($e->getMessage() === 'The Ferrite token is not allowed to do that.'
+                ? 'The Ferrite token cannot move files to the trash. Make a new token in Ferrite with the trash access and run magnetite:storage again.'
+                : $e->getMessage(), 0, $e);
+        }
+
+        if (($local = $this->cached($file)) !== null) {
+            @unlink($local);
+        }
+        unset($this->index[$path]);
     }
 
     /**
