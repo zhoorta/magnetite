@@ -166,7 +166,7 @@
         <div class="space-y-8">
             @foreach ($albums as $album)
                 <section x-data="{
-                            tracks: @js($rows($album->tracks)),
+                            tracks: @js($rows($album->tracks)), expanded: false,
                             cover: @js((bool) $album->cover), web: @js($album->cover_source !== null), v: @js(substr((string) $album->cover, 0, 10)),
                             searching: false, noMatch: false, note: '',
                             // No cover yet: look one up. A cover from the web: look for a different match (the old one stays when there is none).
@@ -196,9 +196,9 @@
                     </div>
 
                     <div class="min-w-0 flex-1">
-                        <h2 class="flex items-center gap-1.5 font-semibold"><span class="truncate">{{ $album->title }}</span>
+                        <h2 class="flex cursor-pointer items-center gap-1.5 font-semibold" @click="expanded = ! expanded"><span class="truncate">{{ $album->title }}</span>
                             <svg x-show="isShared('albums', {{ $album->id }})" x-cloak viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-muted" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Shared"><title>Shared with everyone who has an account</title><circle cx="4" cy="8" r="1.8"/><circle cx="12" cy="3.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M5.6 7.1l4.8-2.7M5.6 8.9l4.8 2.7"/></svg></h2>
-                        <div class="mb-2 flex items-center gap-2 text-sm text-muted">
+                        <div class="mb-1 flex items-center gap-2 text-sm text-muted">
                             <span x-show="note" x-text="note" x-cloak class="shrink-0 text-xs text-accent2"></span>
                             <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->released) · {{ $album->released }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
                             @if ($album->dr !== null)
@@ -233,7 +233,14 @@
                             </x-menu>
                         </div>
 
-                        @include('pages.partials.track-list')
+                        <button type="button" class="mb-2 flex items-center gap-1 text-xs text-muted hover:text-accent" :aria-expanded="expanded"
+                                @click="expanded = ! expanded">
+                            <span x-text="expanded ? '▾' : '▸'"></span><span x-text="$store.player.summary(tracks)"></span>
+                        </button>
+
+                        <div x-show="expanded" x-cloak>
+                            @include('pages.partials.track-list')
+                        </div>
                     </div>
                 </section>
             @endforeach

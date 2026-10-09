@@ -483,6 +483,13 @@ Alpine.store('player', {
         return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
     },
 
+    // "12 tracks · 48 min", or "1 h 12 min" from an hour up.
+    summary(tracks) {
+        const min = Math.round(tracks.reduce((sum, t) => sum + (t.duration || 0), 0) / 60);
+        const time = min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`;
+        return `${tracks.length} ${tracks.length === 1 ? 'track' : 'tracks'} · ${time}`;
+    },
+
     visualizerList: Object.values(visualizers).map(({ id, label }) => ({ id, label })),
 });
 

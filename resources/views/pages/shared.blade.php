@@ -43,7 +43,7 @@
             @endif
 
             @foreach ($albums as $album)
-                <section x-data="{ tracks: @js($rows($album->tracks)) }" class="flex gap-4">
+                <section x-data="{ tracks: @js($rows($album->tracks)), expanded: false }" class="flex gap-4">
                     <div class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
                         @if ($album->cover)
                             <img src="{{ $album->coverUrl() }}" alt="" loading="lazy" class="h-full w-full object-cover">
@@ -51,8 +51,8 @@
                     </div>
 
                     <div class="min-w-0 flex-1">
-                        <h2 class="truncate font-semibold">{{ $album->title }}</h2>
-                        <div class="mb-2 flex items-center gap-2 text-sm text-muted">
+                        <h2 class="cursor-pointer truncate font-semibold" @click="expanded = ! expanded">{{ $album->title }}</h2>
+                        <div class="mb-1 flex items-center gap-2 text-sm text-muted">
                             <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->released) · {{ $album->released }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
                             <span class="ml-auto shrink-0 text-xs">shared by {{ $owner($album->user) }}</span>
                             <x-playlist-menu :item="'{ kind: \'album\', id: '.$album->id.', title: '.\Illuminate\Support\Js::from($album->title).' }'"
@@ -63,7 +63,14 @@
                             @endif
                         </div>
 
-                        @include('pages.partials.shared-track-list')
+                        <button type="button" class="mb-2 flex items-center gap-1 text-xs text-muted hover:text-accent" :aria-expanded="expanded"
+                                @click="expanded = ! expanded">
+                            <span x-text="expanded ? '▾' : '▸'"></span><span x-text="$store.player.summary(tracks)"></span>
+                        </button>
+
+                        <div x-show="expanded" x-cloak>
+                            @include('pages.partials.shared-track-list')
+                        </div>
                     </div>
                 </section>
             @endforeach
