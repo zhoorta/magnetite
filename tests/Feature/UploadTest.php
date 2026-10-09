@@ -191,6 +191,7 @@ it('says so when the music folder cannot be written', function () {
 
 it('leaves the scan to the queue instead of holding the request', function () {
     Queue::fake();
+    config(['queue.default' => 'database']); // sync never leaves a job waiting
 
     upload(zipUpload(['Album/one.mp3' => song()]))
         ->assertOk()->assertJsonPath('scan.state', 'queued');
@@ -201,6 +202,7 @@ it('leaves the scan to the queue instead of holding the request', function () {
 
 it('queues one scan for several uploads that arrive before the worker starts', function () {
     Queue::fake();
+    config(['queue.default' => 'database']); // sync never leaves a job waiting
 
     upload(zipUpload(['A/one.mp3' => song()], 'a.zip'));
     upload(zipUpload(['B/two.mp3' => song()], 'b.zip'));

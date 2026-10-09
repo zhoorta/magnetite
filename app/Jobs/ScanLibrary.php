@@ -31,7 +31,8 @@ class ScanLibrary implements ShouldQueue
      */
     public static function request(User $user, bool $force = false): void
     {
-        if (ScanStatus::pending($user->id) && ! $force) {
+        // With the sync driver the job runs inside dispatch(), so a leftover flag is from a request that died, never a waiting job.
+        if (ScanStatus::pending($user->id) && ! $force && config('queue.default') !== 'sync') {
             return;
         }
 

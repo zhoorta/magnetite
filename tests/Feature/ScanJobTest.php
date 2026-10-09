@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('local');
     Cache::flush();
+    config(['queue.default' => 'database']); // the tests run on sync, which never leaves a job waiting
     makeLibrary();
 });
 
@@ -98,4 +99,13 @@ it('scans from the command, now or through the queue', function () {
     Queue::fake([]);
     $this->artisan('magnetite:scan')->assertSuccessful();
     expect(Track::count())->toBeGreaterThan(0);
+});
+
+it('runs at once with the sync driver, even when a stale queued flag is left over', function () {
+    config(['queue.default' => 'sync']);
+    ScanStatus::queued($this->user->id);
+
+    ScanLibrary::request($this->user);
+
+    expect(ScanStatus::get($this->user->id)['state'])->toBe('done');
 });
