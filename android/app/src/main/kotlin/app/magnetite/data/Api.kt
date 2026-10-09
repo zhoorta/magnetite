@@ -79,6 +79,16 @@ class Api(private val session: Session) {
         session.clear()
     }
 
+    /** Puts an album in a folder, or back at the top level when [folderId] is null. */
+    suspend fun moveAlbum(albumId: Int, folderId: Int?) {
+        call(send("/albums/$albumId/folder", "PUT", buildJsonObject { if (folderId != null) put("folder_id", folderId) else put("folder_id", kotlinx.serialization.json.JsonNull) }))
+    }
+
+    /** The playlist's new order, as track ids. */
+    suspend fun reorderPlaylist(id: Int, trackIds: List<Int>) {
+        call(send("/playlists/$id/order", "PUT", buildJsonObject { put("ids", kotlinx.serialization.json.JsonArray(trackIds.map { kotlinx.serialization.json.JsonPrimitive(it) })) }))
+    }
+
     /** The user's meter list (`users.meters`), in panel order; the server default is one wide meter. */
     suspend fun meters(): List<String> =
         json.parseToJsonElement(call(get("/me"))).jsonObject["meters"]?.let { json.decodeFromJsonElement<List<String>>(it) } ?: listOf("vu-wide")

@@ -1,5 +1,6 @@
 package app.magnetite.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
@@ -99,6 +100,11 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onS
 
     val expanded = remember { mutableStateListOf<Int>() }
 
+    // Long-press an album and drag it onto a folder (or onto another album, to join that album's folder).
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    val drag = remember { DragState() }
+    var hover by remember { mutableStateOf<Any?>(null) }
+
     dialog?.let { d ->
         var name by remember(d) { mutableStateOf((d as? FolderDialog.Rename)?.name ?: "") }
         var problem by remember(d) { mutableStateOf<String?>(null) }
@@ -158,7 +164,7 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onS
             },
         )
     }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), state = list) {
             fun tree(parent: Int?, depth: Int): List<Pair<Int, Any>> =
                 folders.filter { it.parentId == parent }.flatMap { f ->
                     listOf<Pair<Int, Any>>(depth to f) +
@@ -169,7 +175,7 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onS
                 if (r is Folder) {
                     val open = r.id in expanded
                     Row(
-                        Modifier.fillMaxWidth().combinedClickable(
+                        Modifier.fillMaxWidth().background(if (hover == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent).combinedClickable(
                             onClick = { if (open) expanded.remove(r.id) else expanded.add(r.id) },
                             onLongClick = { menuFor = r.id },
                         )
@@ -185,7 +191,35 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onS
                     }
                 } else {
                     val album = r as Album
-                    Row(Modifier.fillMaxWidth().clickable { onOpen(album.id) }.padding(start = 16.dp + 20.dp * depth, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+                    val key = "a${album.id}"
+                    Row(
+                        Modifier.fillMaxWidth()
+                            .background(if (hover == key) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent)
+                            .dragRow(
+                                drag, list, scope, key,
+                                onMove = { y ->
+                                    hover = list.rowAt(y, key)?.key?.takeIf { it != "a${album.id}" }
+                                },
+                                onDrop = {
+                                    val target = hover as? String
+                                    hover = null
+                                    // where the album would go: a folder row is the folder, an album row is that album's folder
+                                    val to: Int? = when {
+                                        target == null -> album.folderId
+                                        target.startsWith("f") -> target.drop(1).toInt()
+                                        else -> albums.firstOrNull { "a${it.id}" == target }?.folderId
+                                    }
+                                    if (target != null && to != album.folderId) {
+                                        scope.launch {
+                                            try { api.moveAlbum(album.id, to); if (to != null && to !in expanded) expanded.add(to); refresh() }
+                                            catch (e: CancellationException) { throw e } catch (e: Exception) { error = e.message }
+                                        }
+                                    }
+                                },
+                            )
+                            .clickable { onOpen(album.id) }
+                            .padding(start = 16.dp + 20.dp * depth, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    ) {
                         Cover(album.coverUrl, Modifier.size(56.dp))
                         Column(Modifier.padding(start = 12.dp)) {
                             Text(album.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)

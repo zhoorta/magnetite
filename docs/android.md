@@ -105,3 +105,9 @@ The app has the web's nine meters under the same ids (`vu-wide`, `vu-needle`, `v
 - `player/Loudness.kt` is a port of `worklet/meter-processor.js`, fed per frame from `MeterTap`: K-weighted momentary, short-term and integrated LUFS (gated), true peak (4x, 12 taps per phase instead of 48), correlation, and the last 1024 samples for the goniometer. It resets at every track change (`PlaybackService`).
 - Third-octave is 31 bands from 25 Hz (FFT 8192, so the lowest bands are one bin wide); the spectrogram is a 160x64 bitmap that scrolls about 13 s. The goniometer has no afterglow.
 - Not done: LRA, K-meter and the digital readout (not on the web either), per-theme looks, a hidden-meter pause.
+
+## Drag and drop (2026-10-09)
+
+- Library: long-press an album and drag it onto a folder row (or onto another album, to join that album's folder); the target row lights up, the list scrolls when the finger nears an edge, and `PUT /albums/{id}/folder` runs on drop. Folders themselves cannot be dragged yet.
+- Playlist: long-press a track and drag it up or down in a playlist of your own; `PUT /api/v1/playlists/{id}/order` (the web controller, needs `library:write`) saves the order on drop and the list reloads if that fails. Shared playlists are read-only.
+- `ui/Drag.kt` holds the shared gesture (`dragRow`); the finger position is kept in viewport coordinates so a scrolling list does not shift the dragged row.

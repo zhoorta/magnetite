@@ -18,9 +18,9 @@ import app.magnetite.data.Track
 
 /** One track in a list. Tracks the viewer may not play (`open = false`) are dimmed and do nothing when tapped. */
 @Composable
-fun TrackRow(track: Track, playing: Boolean, onClick: () -> Unit, leading: String? = null) {
+fun TrackRow(track: Track, playing: Boolean, onClick: () -> Unit, leading: String? = null, modifier: Modifier = Modifier) {
     Row(
-        Modifier.fillMaxWidth().alpha(if (track.open) 1f else 0.4f)
+        modifier.fillMaxWidth().alpha(if (track.open) 1f else 0.4f)
             .clickable(enabled = track.open, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
