@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Jobs\AnalyzeTracks;
 use App\Models\Album;
+use App\Models\AlbumSuggestion;
 use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
+use App\Services\AlbumIdentifier;
 use App\Support\FileTruth;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -14,7 +16,7 @@ use Illuminate\View\View;
 class LibraryController extends Controller
 {
     /** The signed-in user's own albums and tracks, and nobody else's; shared music from others is on /shared. */
-    public function library(Request $request): View
+    public function library(Request $request, AlbumIdentifier $identifier): View
     {
         $me = $request->user();
 
@@ -26,12 +28,18 @@ class LibraryController extends Controller
         // Duplicates are found across the user's own library only, so a hash never reveals a file someone keeps privately.
         $copies = FileTruth::copies(Track::where('user_id', $me->id)->get(['id', 'title', 'artist', 'path', 'duration', 'pcm_sha1']));
 
+        // Suggestions for folders whose tracks are still without an album (a rescan may have removed some of them).
+        $looseIds = $loose->pluck('id')->flip();
+        $suggestions = AlbumSuggestion::where('user_id', $me->id)->whereNull('dismissed_at')->orderBy('folder')->get()
+            ->filter(fn (AlbumSuggestion $s) => collect($s->candidates[0]['tracks'] ?? [])->contains(fn ($t) => $looseIds->has($t['id'])))->values();
+        $toIdentify = $identifier->pending($me)->count();
+
         $shared = [
             'albums' => SharedItem::where('user_id', $me->id)->whereNotNull('album_id')->pluck('album_id')->all(),
             'tracks' => SharedItem::where('user_id', $me->id)->whereNotNull('track_id')->pluck('track_id')->all(),
         ];
 
-        return view('pages.library', ['albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'toAnalyse' => AnalyzeTracks::missing($me)->count()]);
+        return view('pages.library', ['albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'toAnalyse' => AnalyzeTracks::missing($me)->count(), 'suggestions' => $suggestions, 'toIdentify' => $toIdentify]);
     }
 
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */

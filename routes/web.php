@@ -3,6 +3,7 @@
 use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
+use App\Http\Controllers\IdentifyController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\MeterSettingController;
@@ -58,6 +59,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/covers/find', [CoverSearchController::class, 'show'])->name('covers.find.show');
     Route::post('/covers/find', [CoverSearchController::class, 'store'])->name('covers.find');
     Route::post('/cover/{album}/find', [CoverSearchController::class, 'album'])->whereNumber('album')->name('cover.find');
+
+    Route::get('/identify', [IdentifyController::class, 'show'])->name('identify.show');
+    Route::post('/identify', [IdentifyController::class, 'store'])->name('identify.store');
+    Route::post('/identify/{suggestion}/accept', [IdentifyController::class, 'accept'])->whereNumber('suggestion')->name('identify.accept');
+    Route::delete('/identify/{suggestion}', [IdentifyController::class, 'dismiss'])->whereNumber('suggestion')->name('identify.dismiss');
 
     Route::get('/storage', [StorageController::class, 'show'])->name('storage');
     Route::post('/storage/test', [StorageController::class, 'test'])->name('storage.test');

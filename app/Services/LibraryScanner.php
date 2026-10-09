@@ -105,6 +105,28 @@ class LibraryScanner
             ? trim($tags[$key][0])
             : null;
 
+        $technical = [
+            'duration' => isset($info['playtime_seconds']) ? round((float) $info['playtime_seconds'], 2) : null,
+            'codec' => $this->codec($info, $local),
+            'mime' => TrackLibrary::contentType($relative),
+            'bitrate' => isset($info['audio']['bitrate']) ? (int) $info['audio']['bitrate'] : null,
+            'size' => $file->size,
+            'mtime' => $file->mtime,
+            'store_key' => $file->key,
+            'store_hash' => $file->hash,
+        ];
+
+        // Album, title and numbers the owner confirmed (docs/identify-albums.md) are not read from the tags again.
+        $confirmed = $user->tracks()->where('path', $relative)->where('identified', true)->first();
+        if ($confirmed) {
+            $changed = $confirmed->size !== $file->size || $confirmed->mtime !== $file->mtime
+                ? ['analysis' => null, 'analysis_version' => null, 'analyzed_at' => null, 'dr' => null, 'pcm_sha1' => null]
+                : [];
+            $confirmed->update($changed + $technical);
+
+            return;
+        }
+
         $artist = $first('artist');
         $albumTitle = $first('album');
         // Only an explicit album-artist tag names the album's artist. Without one, tracks are grouped by
@@ -144,15 +166,7 @@ class LibraryScanner
             'artist' => $artist,
             'track_number' => $this->number($first('track_number') ?? $first('track')),
             'disc_number' => $this->number($first('part_of_a_set') ?? $first('disc_number')),
-            'duration' => isset($info['playtime_seconds']) ? round((float) $info['playtime_seconds'], 2) : null,
-            'codec' => $this->codec($info, $local),
-            'mime' => TrackLibrary::contentType($relative),
-            'bitrate' => isset($info['audio']['bitrate']) ? (int) $info['audio']['bitrate'] : null,
-            'size' => $file->size,
-            'mtime' => $file->mtime,
-            'store_key' => $file->key,
-            'store_hash' => $file->hash,
-        ]);
+        ] + $technical);
     }
 
     /**

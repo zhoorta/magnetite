@@ -32,6 +32,27 @@
                 }
                 if (this.covers.found > 0) Livewire.navigate(window.location.href);
             },
+            identify: { state: 'idle', done: 0, total: 0, found: 0 },
+            async findAlbums() {
+                const r = await fetch('/identify', { method: 'POST', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } });
+                if (! r.ok) return;
+                this.identify = await r.json();
+                while (['queued', 'running'].includes(this.identify.state)) {
+                    await new Promise((res) => setTimeout(res, 2000));
+                    const p = await fetch('/identify', { headers: { 'Accept': 'application/json' } });
+                    if (! p.ok) return;
+                    this.identify = await p.json();
+                }
+                Livewire.navigate(window.location.href);
+            },
+            async answer(id, accept, candidate) {
+                const r = await fetch('/identify/' + id + (accept ? '/accept' : ''), {
+                    method: accept ? 'POST' : 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: accept ? JSON.stringify({ candidate }) : undefined,
+                });
+                if (r.ok) Livewire.navigate(window.location.href);
+            },
             analysis: { state: 'idle', done: 0, total: 0, failed: 0 },
             analysisError: null,
             init() {
@@ -78,6 +99,15 @@
                     <span x-show="covers.state === 'queued'" x-cloak>Waiting for the queue worker…</span>
                     <span x-show="covers.state === 'running'" x-cloak x-text="'Searching ' + covers.done + '/' + covers.total + '…'"></span>
                     <span x-show="covers.state === 'done'" x-cloak x-text="covers.found + ' of ' + covers.total + ' found'"></span>
+                </button>
+            @endif
+            @if ($toIdentify > 0)
+                <button type="button" class="rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent disabled:opacity-60"
+                        title="Suggest what the {{ $toIdentify }} folder(s) of tracks without an album tag might be, from the folder and file names and from MusicBrainz (track count and length). Only guessed names are sent. Nothing changes until you accept."
+                        :disabled="['queued', 'running'].includes(identify.state)" @click="findAlbums()">
+                    <span x-show="! ['queued', 'running'].includes(identify.state)">Suggest albums</span>
+                    <span x-show="identify.state === 'queued'" x-cloak>Waiting for the queue worker…</span>
+                    <span x-show="identify.state === 'running'" x-cloak x-text="'Looking ' + identify.done + '/' + identify.total + '…'"></span>
                 </button>
             @endif
             @if ($toAnalyse > 0)
@@ -157,6 +187,34 @@
             @if ($loose->isNotEmpty())
                 <section x-data="{ tracks: @js($rows($loose)) }" x-show="! onlyIssues || tracks.some((t) => worst(t) !== null)">
                     <h2 class="mb-2 font-semibold">Without album tag</h2>
+                    @foreach ($suggestions as $s)
+                        <div class="mb-4 rounded-theme border border-white/10 bg-surface p-3 text-sm">
+                            <div class="mb-2 flex items-center gap-2">
+                                <span class="min-w-0 flex-1 truncate text-muted" title="{{ $s->folder }}">Folder <strong class="text-text">{{ basename($s->folder) }}</strong> · {{ count($s->candidates[0]['tracks']) }} track(s)</span>
+                                <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent" @click="answer({{ $s->id }}, false)">Dismiss</button>
+                            </div>
+                            @foreach ($s->candidates as $i => $c)
+                                <details class="mb-1 rounded-theme border border-white/5 px-2 py-1">
+                                    <summary class="flex cursor-pointer items-center gap-2">
+                                        <span class="min-w-0 flex-1 truncate"><strong>{{ $c['title'] }}</strong>@if ($c['artist']) · {{ $c['artist'] }}@endif @if ($c['year']) · {{ $c['year'] }}@endif</span>
+                                        <span class="shrink-0 text-xs text-muted">
+                                            @if ($c['source'] === 'musicbrainz')
+                                                MusicBrainz{{ ['titles' => ' (by track titles)', 'fingerprint' => ' (by fingerprints)'][$c['via'] ?? ''] ?? '' }} · {{ $c['matched'] }}/{{ count($c['tracks']) }} track(s) fit @if ($c['release_tracks'] !== count($c['tracks'])) · release has {{ $c['release_tracks'] }}@endif
+                                            @else
+                                                From the folder and file names
+                                            @endif
+                                        </span>
+                                        <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent" @click.prevent="answer({{ $s->id }}, true, {{ $i }})">Use this</button>
+                                    </summary>
+                                    <ol class="mt-2 space-y-0.5 text-xs text-muted">
+                                        @foreach ($c['tracks'] as $t)
+                                            <li class="flex gap-2"><span class="w-8 shrink-0 text-right tabular-nums">{{ $t['number'] ?? '–' }}</span><span class="min-w-0 flex-1 truncate">{{ $t['from'] }} → <span class="text-text">{{ $t['title'] }}</span></span>@if ($t['matched'] !== null)<span class="{{ $t['matched'] ? 'text-emerald-500' : 'text-amber-500' }}">{{ $t['matched'] ? 'length fits' : 'length differs' }}</span>@endif</li>
+                                        @endforeach
+                                    </ol>
+                                </details>
+                            @endforeach
+                        </div>
+                    @endforeach
                     @include('pages.partials.track-list')
                 </section>
             @endif

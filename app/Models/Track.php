@@ -18,7 +18,7 @@ class Track extends Model
 
     protected function casts(): array
     {
-        return ['analysis' => 'array', 'analyzed_at' => 'datetime'];
+        return ['analysis' => 'array', 'analyzed_at' => 'datetime', 'identified' => 'boolean'];
     }
 
     /** Codecs the major browsers cannot decode (Safari can play ALAC, Chrome and Firefox cannot). */
