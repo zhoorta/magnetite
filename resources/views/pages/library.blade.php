@@ -195,12 +195,16 @@
         }">
         <div class="mb-6 flex items-center justify-between gap-4">
             <h1 class="text-2xl font-semibold">Library</h1>
-            <button type="button" class="shrink-0 rounded-theme border border-white/10 px-3 py-1 text-sm hover:text-accent" @click="openFolder('create')">New folder</button>
-            {{-- Progress of what the ⋯ menus started: measuring files, looking for albums. --}}
-            <p x-show="['queued', 'running'].includes(analysis.state)" x-cloak class="min-w-0 truncate text-xs text-muted">
-                <span x-show="analysis.state === 'queued'">Analysis: waiting for the queue worker…</span>
-                <span x-show="analysis.state === 'running'" x-text="'Analysing ' + analysis.done + '/' + analysis.total + (analysis.current ? ' · ' + analysis.current : '') + (analysis.failed ? ' · ' + analysis.failed + ' failed' : '')"></span>
-            </p>
+            <div class="flex min-w-0 items-center justify-end gap-4">
+                {{-- Progress of what the ⋯ menus started: measuring files, looking for albums. --}}
+                <p x-show="['queued', 'running'].includes(analysis.state)" x-cloak class="min-w-0 truncate text-xs text-muted">
+                    <span x-show="analysis.state === 'queued'">Analysis: waiting for the queue worker…</span>
+                    <span x-show="analysis.state === 'running'" x-text="'Analysing ' + analysis.done + '/' + analysis.total + (analysis.current ? ' · ' + analysis.current : '') + (analysis.failed ? ' · ' + analysis.failed + ' failed' : '')"></span>
+                </p>
+                <button type="button" class="shrink-0 rounded-theme border border-white/10 p-1.5 text-muted hover:text-accent" title="New folder" aria-label="New folder" @click="openFolder('create')">
+                    <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v4"/><path d="M18 14v6M15 17h6"/></svg>
+                </button>
+            </div>
         </div>
 
         @if ($albums->isEmpty() && $loose->isEmpty())
