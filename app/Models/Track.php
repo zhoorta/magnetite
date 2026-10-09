@@ -94,7 +94,8 @@ class Track extends Model
     /** Player shape plus the file-truth findings, for the library page. */
     public function toLibrary(array $copies = []): array
     {
-        return $this->toPlayer() + ['truth' => $this->toTruth($copies)];
+        // `edit`: what the owner may correct, as stored (the track's own artist, not the album's).
+        return $this->toPlayer() + ['edit' => ['title' => $this->title, 'artist' => $this->artist, 'track_number' => $this->track_number], 'truth' => $this->toTruth($copies)];
     }
 
     /** Shape sent to the player. */

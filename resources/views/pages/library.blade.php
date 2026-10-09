@@ -19,16 +19,76 @@
             },
             async remove(kind, id, title, count) {
                 const what = kind === 'albums' ? '“' + title + '” and its ' + count + ' file(s)' : '“' + title + '”';
-                const ask = @js($trashOnly)
-                    ? 'Move ' + what + ' to the trash in Ferrite? You can restore them there.'
-                    : 'Delete ' + what + ' from the music folder? This cannot be undone.';
-                if (! confirm(ask)) return;
+                const trash = @js($trashOnly);
+                const sure = await this.$store.dialog.confirm({
+                    title: kind === 'albums' ? 'Delete this album?' : 'Delete this track?',
+                    message: trash
+                        ? 'Move ' + what + ' to the trash in Ferrite? You can restore them there.'
+                        : 'Delete ' + what + ' from the music folder? This cannot be undone.',
+                    confirmLabel: trash ? 'Move to trash' : 'Delete',
+                    danger: true,
+                });
+                if (! sure) return;
                 const r = await fetch('/library/' + kind + '/' + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } });
                 const body = await r.json().catch(() => ({}));
-                if (! r.ok || body.error) alert(body.error || body.message || 'Could not remove it.');
+                if (! r.ok || body.error) await this.$store.dialog.notice(body.error || body.message || 'Could not remove it.', 'Could not delete');
                 if (r.ok || body.removed) Livewire.navigate(window.location.href);
             },
             csrf() { return document.querySelector('meta[name=csrf-token]').content; },
+            // Details looked up online for an album that already has its real name:
+            // { id, title, loading, album: { release_date, label }, candidates, pick, parts: { date, label, titles }, error, saving }.
+            titles: null,
+            async findTitles(id, title) {
+                this.titles = { id, title, loading: true, album: {}, candidates: [], pick: 0, parts: { date: false, label: false, titles: false }, error: '', saving: false };
+                const t = this.titles;
+                const r = await fetch('/library/albums/' + id + '/titles/find', { method: 'POST', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } }).catch(() => null);
+                const body = r ? await r.json().catch(() => ({})) : {};
+                if (r && r.ok) { t.album = body.album; t.candidates = body.candidates; this.pickRelease(0); } else t.error = body.message || 'Could not search.';
+                t.loading = false; // last, so nothing-found is never shown before the answer is in
+            },
+            // Choosing a release ticks what it would change: a different date or label, and track titles that differ.
+            pickRelease(i) {
+                const t = this.titles, c = t.candidates[i];
+                if (! c) return;
+                t.pick = i;
+                t.parts = {
+                    date: !! c.date && c.date !== t.album.release_date,
+                    label: !! c.label && c.label !== t.album.label,
+                    titles: c.tracks.some((row) => row.matched && row.title !== row.current),
+                };
+            },
+            get anyPart() { return this.titles && Object.values(this.titles.parts).some(Boolean); },
+            async applyTitles() {
+                const t = this.titles;
+                t.saving = true; t.error = '';
+                const r = await fetch('/library/albums/' + t.id + '/titles', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ candidate: t.pick, parts: Object.keys(t.parts).filter((k) => t.parts[k]) }),
+                }).catch(() => null);
+                t.saving = false;
+                if (r && r.ok) { this.titles = null; Livewire.navigate(window.location.href); return; }
+                t.error = (r && (await r.json().catch(() => ({}))).message) || 'Could not save.';
+            },
+            // Corrections to titles, artists, year, track number and label: { kind: 'albums' | 'tracks', id, fields, error, saving }.
+            edit: null,
+            openEdit(kind, id, fields) {
+                this.edit = { kind, id, fields: { ...fields }, error: '', saving: false };
+                this.$nextTick(() => this.$refs.editFirst?.focus());
+            },
+            async saveEdit() {
+                const e = this.edit;
+                e.saving = true; e.error = '';
+                const r = await fetch('/library/' + e.kind + '/' + e.id, {
+                    method: 'PATCH',
+                    headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify(e.fields),
+                }).catch(() => null);
+                e.saving = false;
+                if (r && r.ok) { this.edit = null; Livewire.navigate(window.location.href); return; }
+                const body = r ? await r.json().catch(() => ({})) : {};
+                e.error = (body.errors && Object.values(body.errors)[0][0]) || body.message || 'Could not save.';
+            },
             identify: { state: 'idle', done: 0, total: 0, found: 0 },
             async findAlbums() {
                 const r = await fetch('/identify', { method: 'POST', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } });
@@ -140,7 +200,7 @@
                             <svg x-show="isShared('albums', {{ $album->id }})" x-cloak viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-muted" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Shared"><title>Shared with everyone who has an account</title><circle cx="4" cy="8" r="1.8"/><circle cx="12" cy="3.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M5.6 7.1l4.8-2.7M5.6 8.9l4.8 2.7"/></svg></h2>
                         <div class="mb-2 flex items-center gap-2 text-sm text-muted">
                             <span x-show="note" x-text="note" x-cloak class="shrink-0 text-xs text-accent2"></span>
-                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif</span>
+                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->released) · {{ $album->released }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
                             @if ($album->dr !== null)
                                 <span class="shrink-0 rounded-theme px-1.5 py-0.5 text-xs font-medium tabular-nums"
                                       :class="drClass('{{ App\Support\FileTruth::drClass($album->dr) }}')"
@@ -160,12 +220,16 @@
                                     <x-menu.item title="Measure dynamic range, clipping, loudness and the spectrum of this album's files. Files are only read."
                                                  @click="analyse({ album_id: {{ $album->id }} })">Analyse album</x-menu.item>
                                 @endif
+                                <x-menu.item title="Look this album up on MusicBrainz: release date, record label and track titles. Only the album title and artist are sent. Nothing changes until you confirm."
+                                             @click="findTitles({{ $album->id }}, {{ Illuminate\Support\Js::from($album->title) }})">Find details online…</x-menu.item>
+                                <x-menu.item title="Correct the title, artist, release date or record label. Only what this library shows changes; the files are not touched."
+                                             @click="openEdit('albums', {{ $album->id }}, {{ Illuminate\Support\Js::from(['title' => $album->title, 'artist' => $album->artist, 'release_date' => $album->released, 'label' => $album->label]) }})">Edit details…</x-menu.item>
                                 <x-menu.item @click="toggleShare('albums', {{ $album->id }})"
                                              title="Shared albums are visible to everyone who has an account"
                                              x-text="isShared('albums', {{ $album->id }}) ? 'Stop sharing' : 'Share this album'"></x-menu.item>
                                 <hr class="my-1 border-white/10">
                                 <x-menu.item danger title="{{ $trashOnly ? 'Move this album to the trash in Ferrite' : 'Delete this album from the music folder' }}"
-                                             @click="remove('albums', {{ $album->id }}, @js($album->title), {{ $album->tracks->count() }})">Delete album</x-menu.item>
+                                             @click="remove('albums', {{ $album->id }}, {{ Illuminate\Support\Js::from($album->title) }}, {{ $album->tracks->count() }})">Delete album</x-menu.item>
                             </x-menu>
                         </div>
 
@@ -222,6 +286,107 @@
                     @include('pages.partials.track-list')
                 </section>
             @endif
+        </div>
+
+        {{-- Details found online for an album: release date, record label and track titles, each applied only if ticked. --}}
+        <div x-show="titles" x-cloak x-transition.opacity @keydown.escape.window="titles && ! $store.dialog.open && (titles = null)"
+             class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="titles = null"
+             role="dialog" aria-modal="true" aria-label="Album details found online">
+            <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl">
+                <h2 class="mb-1 font-semibold">Details for “<span x-text="titles?.title"></span>”</h2>
+                <p class="mb-3 text-xs text-muted">Looked up on MusicBrainz by album title and artist, and checked against the number and length of your files. Tick what to use. Your files are not touched.</p>
+
+                <p x-show="titles?.loading" class="py-6 text-center text-muted">Searching…</p>
+                <p x-show="titles && ! titles.loading && ! titles.error && titles.candidates.length === 0" class="py-4 text-muted">
+                    No release on MusicBrainz fits this album (title, artist, number of tracks and their lengths). Check the album title and artist with Edit details, then try again.
+                </p>
+
+                <template x-if="titles && titles.candidates.length">
+                    <div class="flex min-h-0 flex-col gap-3">
+                        <div x-show="titles.candidates.length > 1" class="flex flex-wrap gap-2">
+                            <template x-for="(c, i) in titles.candidates" :key="i">
+                                <button type="button" class="rounded-theme border px-2 py-0.5 text-xs"
+                                        :class="titles.pick === i ? 'border-accent text-accent' : 'border-white/10 text-muted hover:text-accent'"
+                                        @click="pickRelease(i)" x-text="c.title + (c.date ? ' (' + c.date + ')' : '') + ' · ' + c.matched + '/' + c.release_tracks"></button>
+                            </template>
+                        </div>
+                        <p class="text-xs text-muted" x-text="titles.candidates[titles.pick].artist + ' · ' + titles.candidates[titles.pick].matched + ' of ' + titles.candidates[titles.pick].release_tracks + ' track(s) fit'"></p>
+
+                        <div class="space-y-1.5 rounded-theme border border-white/10 p-2 text-xs">
+                            <label class="flex cursor-pointer items-center gap-2" :class="! titles.candidates[titles.pick].date && 'opacity-50'">
+                                <input type="checkbox" x-model="titles.parts.date" :disabled="! titles.candidates[titles.pick].date" class="accent-[var(--c-accent)]">
+                                <span class="w-24 shrink-0 text-muted">Release date</span>
+                                <span class="min-w-0 truncate"><span class="text-muted" x-text="titles.album.release_date || '–'"></span> → <span x-text="titles.candidates[titles.pick].date || 'not on this release'"></span></span>
+                            </label>
+                            <label class="flex cursor-pointer items-center gap-2" :class="! titles.candidates[titles.pick].label && 'opacity-50'">
+                                <input type="checkbox" x-model="titles.parts.label" :disabled="! titles.candidates[titles.pick].label" class="accent-[var(--c-accent)]">
+                                <span class="w-24 shrink-0 text-muted">Record label</span>
+                                <span class="min-w-0 truncate"><span class="text-muted" x-text="titles.album.label || '–'"></span> → <span x-text="titles.candidates[titles.pick].label || 'not on this release'"></span></span>
+                            </label>
+                            <label class="flex cursor-pointer items-center gap-2">
+                                <input type="checkbox" x-model="titles.parts.titles" class="accent-[var(--c-accent)]">
+                                <span class="w-24 shrink-0 text-muted">Track titles</span>
+                                <span class="min-w-0 truncate" x-text="titles.candidates[titles.pick].tracks.filter((r) => r.matched && r.title !== r.current).length + ' to rename (only where the length fits)'"></span>
+                            </label>
+                        </div>
+
+                        <ol class="min-h-0 divide-y divide-white/5 overflow-y-auto rounded-theme border border-white/10 text-xs" :class="! titles.parts.titles && 'opacity-50'">
+                            <template x-for="(row, i) in titles.candidates[titles.pick].tracks" :key="row.id">
+                                <li class="flex items-center gap-2 px-2 py-1.5">
+                                    <span class="w-6 shrink-0 text-right tabular-nums text-muted" x-text="row.number ?? i + 1"></span>
+                                    <span class="min-w-0 flex-1 truncate text-muted" x-text="row.current"></span>
+                                    <span class="shrink-0 text-muted">→</span>
+                                    <span class="min-w-0 flex-1 truncate" :class="row.matched ? '' : 'text-muted line-through'" x-text="row.matched ? row.title : '(length differs)'"></span>
+                                </li>
+                            </template>
+                        </ol>
+                    </div>
+                </template>
+
+                <p x-show="titles?.error" x-text="titles?.error" class="mt-3 text-xs text-red-500"></p>
+                <div class="mt-4 flex justify-end gap-2">
+                    <button type="button" class="rounded-theme border border-white/10 px-3 py-1 hover:text-accent" @click="titles = null">Close</button>
+                    <button type="button" x-show="titles?.candidates.length" :disabled="titles?.saving || ! anyPart" @click="applyTitles()"
+                            class="rounded-theme bg-accent px-3 py-1 font-medium text-bg disabled:opacity-60">Use selected</button>
+                </div>
+            </div>
+        </div>
+
+        {{-- Edit details of an album or a track. Saved in the library only; the files and their tags are never changed. --}}
+        <div x-show="edit" x-cloak x-transition.opacity @keydown.escape.window="edit && ! $store.dialog.open && (edit = null)"
+             class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="edit = null"
+             role="dialog" aria-modal="true" :aria-label="edit?.kind === 'albums' ? 'Edit album' : 'Edit track'">
+            <form class="w-full max-w-sm rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl" @submit.prevent="saveEdit()">
+                <h2 class="mb-1 font-semibold" x-text="edit?.kind === 'albums' ? 'Edit album' : 'Edit track'"></h2>
+                <p class="mb-4 text-xs text-muted">Only what this library shows changes. Your files and their tags are not touched, and a rescan keeps these edits.</p>
+
+                <template x-if="edit">
+                    <div class="space-y-3">
+                        <label class="block"><span class="mb-1 block text-xs text-muted" x-text="edit.kind === 'albums' ? 'Album title' : 'Track title'"></span>
+                            <input type="text" x-ref="editFirst" x-model="edit.fields.title" required maxlength="255" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>
+                        <label class="block"><span class="mb-1 block text-xs text-muted" x-text="edit.kind === 'albums' ? 'Album artist' : 'Artist (empty: the album\'s)'"></span>
+                            <input type="text" x-model="edit.fields.artist" maxlength="255" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>
+                        <template x-if="edit.kind === 'albums'">
+                            <div class="space-y-3">
+                                <label class="block"><span class="mb-1 block text-xs text-muted">Release date (2001, 2001-03 or 2001-03-12)</span>
+                                    <input type="text" x-model="edit.fields.release_date" maxlength="10" placeholder="YYYY-MM-DD" pattern="\d{4}(-\d{2}(-\d{2})?)?" inputmode="numeric" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>
+                                <label class="block"><span class="mb-1 block text-xs text-muted">Record label</span>
+                                    <input type="text" x-model="edit.fields.label" maxlength="255" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>
+                            </div>
+                        </template>
+                        <template x-if="edit.kind === 'tracks'">
+                            <label class="block"><span class="mb-1 block text-xs text-muted">Track number</span>
+                                <input type="number" x-model="edit.fields.track_number" min="1" max="999" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>
+                        </template>
+                    </div>
+                </template>
+
+                <p x-show="edit?.error" x-text="edit?.error" class="mt-3 text-xs text-red-500"></p>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button type="button" class="rounded-theme border border-white/10 px-3 py-1 hover:text-accent" @click="edit = null">Cancel</button>
+                    <button type="submit" :disabled="edit?.saving" class="rounded-theme bg-accent px-3 py-1 font-medium text-bg disabled:opacity-60">Save</button>
+                </div>
+            </form>
         </div>
     </div>
 

@@ -175,6 +175,9 @@ it('renders the library page with its Alpine component intact', function () {
 
     $html = $this->actingAs($user)->get(route('library'))->assertOk()->getContent();
 
+    // Blade directives are not compiled inside the attributes of a component tag: an `@js(...)` there reaches the browser as text.
+    expect(html_entity_decode($html, ENT_QUOTES))->not->toContain('@js(')->toContain("remove('albums', {$album->id}, ");
+
     // The component is an attribute in double quotes: its script must not contain one, or the page prints code.
     preg_match('/<div x-data="(\{.*?)">\s*<div class="mb-6/s', $html, $m);
     expect($m[1] ?? '')->toContain('async remove(kind')->not->toContain('"');

@@ -169,7 +169,13 @@ export function playlistView(id, name, tracks, shared) {
 
         // Not called destroy(): Alpine runs a method of that name when the component is removed, i.e. on every navigation.
         async deletePlaylist() {
-            if (!confirm(`Delete the playlist "${this.name}"? The music stays in the library.`)) return;
+            const sure = await Alpine.store('dialog').confirm({
+                title: 'Delete this playlist?',
+                message: `“${this.name}” will be deleted. The music stays in the library.`,
+                confirmLabel: 'Delete',
+                danger: true,
+            });
+            if (!sure) return;
 
             const r = await send('DELETE', `/playlists/${this.id}`);
             if (r.ok) Livewire.navigate('/playlists');

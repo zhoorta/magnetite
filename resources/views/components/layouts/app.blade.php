@@ -59,6 +59,27 @@
                 </div>
             </div>
 
+            {{-- The app's own confirm and notice boxes ($store.dialog), instead of the browser's. --}}
+            <div x-show="$store.dialog.open" x-cloak x-transition.opacity
+                 class="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+                 @click.self="$store.dialog.answer(false)"
+                 @keydown.escape.window="$store.dialog.open && ($event.preventDefault(), $store.dialog.answer(false))"
+                 @keydown.tab="if ($store.dialog.open) { const b = [...$el.querySelectorAll('button')].filter((x) => x.offsetParent); const i = b.indexOf(document.activeElement); $event.preventDefault(); b[($event.shiftKey ? i - 1 + b.length : i + 1) % b.length].focus(); }"
+                 role="alertdialog" aria-modal="true" :aria-label="$store.dialog.title || 'Message'">
+                <div class="w-full max-w-sm rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl">
+                    <h2 x-show="$store.dialog.title" x-text="$store.dialog.title" class="mb-2 font-semibold"></h2>
+                    <p x-text="$store.dialog.message" class="text-muted"></p>
+                    <div class="mt-5 flex justify-end gap-2">
+                        <button type="button" data-dialog-cancel x-show="$store.dialog.asking"
+                                class="rounded-theme border border-white/10 px-3 py-1 hover:text-accent" @click="$store.dialog.answer(false)">Cancel</button>
+                        <button type="button" data-dialog-ok
+                                :class="$store.dialog.danger ? 'bg-red-600 text-white' : 'bg-accent text-bg'"
+                                class="rounded-theme px-3 py-1 font-medium" @click="$store.dialog.answer(true)"
+                                x-text="$store.dialog.confirmLabel"></button>
+                    </div>
+                </div>
+            </div>
+
             {{-- Keyboard shortcuts, opened with ? --}}
             <div x-show="$store.player.helpOpen" x-cloak x-transition.opacity
                  class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4"

@@ -26,6 +26,8 @@
                 <span class="w-10 shrink-0 text-right text-xs tabular-nums text-muted" x-text="$store.player.fmt(t.duration)"></span>
                 <x-playlist-menu item="{ id: t.id, title: t.title }" />
                 <x-menu label="Actions for this track">
+                    <x-menu.item title="Correct the title, artist or track number. Only what this library shows changes; the file is not touched."
+                                 @click="openEdit('tracks', t.id, t.edit)">Edit details…</x-menu.item>
                     <x-menu.item x-show="! t.truth.analyzed" title="Measure dynamic range, clipping, loudness and the spectrum of this file. The file is only read."
                                  @click="analyse({ track_id: t.id })">Analyse file</x-menu.item>
                     <x-menu.item @click="toggleShare('tracks', t.id)"

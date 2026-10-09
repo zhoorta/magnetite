@@ -21,6 +21,12 @@ class TrackPolicy
         return $track->user_id === $user->id;
     }
 
+    /** Only the owner corrects a track's details. */
+    public function update(User $user, Track $track): bool
+    {
+        return $track->user_id === $user->id;
+    }
+
     /** Only the owner changes what is shared. */
     public function share(User $user, Track $track): bool
     {

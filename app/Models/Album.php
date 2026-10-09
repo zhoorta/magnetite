@@ -20,6 +20,15 @@ class Album extends Model
         return ['cover_tried' => 'array'];
     }
 
+    /** A date as MusicBrainz and the edit form write it: `2001`, `2001-03` or `2001-03-12`. */
+    public const DATE_PATTERN = '/^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/';
+
+    /** What the pages show for when the album came out: the full date when known, else the year. */
+    public function getReleasedAttribute(): ?string
+    {
+        return $this->release_date ?? ($this->year !== null ? (string) $this->year : null);
+    }
+
     /** The cover's address. `v` changes with the picture, so the browser (which may keep a cover for a year) fetches a replaced one. */
     public function coverUrl(): ?string
     {

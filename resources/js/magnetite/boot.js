@@ -59,6 +59,45 @@ Alpine.data('playlistView', playlistView);
 Alpine.data('sharedPlaylistView', sharedPlaylistView);
 Alpine.data('playlistCreate', playlistCreate);
 
+/**
+ * The app's own confirm and notice boxes, in place of the browser's. `await $store.dialog.confirm({ title, message, confirmLabel, danger })`
+ * answers true or false; `await $store.dialog.notice(message)` waits for OK. The markup is in the layout, next to the player.
+ */
+Alpine.store('dialog', {
+    open: false,
+    title: '',
+    message: '',
+    confirmLabel: 'OK',
+    danger: false,
+    asking: false, // false: a notice with one button
+    resolver: null,
+
+    show(options) {
+        this.resolver?.(false); // a box still open is answered "no" by the next one
+        Object.assign(this, { title: '', message: '', confirmLabel: 'OK', danger: false, asking: false }, options, { open: true });
+
+        // Focus the safe button: Cancel for something destructive, else the main one.
+        setTimeout(() => document.querySelector(this.danger && this.asking ? '[data-dialog-cancel]' : '[data-dialog-ok]')?.focus(), 30);
+
+        return new Promise((resolve) => (this.resolver = resolve));
+    },
+
+    confirm(options) {
+        return this.show({ ...options, asking: true });
+    },
+
+    notice(message, title = '') {
+        return this.show({ title, message });
+    },
+
+    answer(value) {
+        this.open = false;
+        const resolve = this.resolver;
+        this.resolver = null;
+        resolve?.(value);
+    },
+});
+
 Alpine.store('player', {
     // state
     queue: [],
@@ -353,7 +392,8 @@ Alpine.store('player', {
      * (space on a focused button must press it, not toggle playback).
      */
     onKey(e) {
-        if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+        // An open dialog has the keyboard (it handles Esc and Tab itself).
+        if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || Alpine.store('dialog').open) return;
 
         const t = e.target;
         if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;

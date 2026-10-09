@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\AlbumTitlesController;
 use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\IdentifyController;
 use App\Http\Controllers\LibraryController;
+use App\Http\Controllers\LibraryEditController;
 use App\Http\Controllers\LibraryRemoveController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\MeterSettingController;
@@ -61,6 +63,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/covers/find', [CoverSearchController::class, 'store'])->name('covers.find');
     Route::post('/cover/{album}/find', [CoverSearchController::class, 'album'])->whereNumber('album')->name('cover.find');
 
+    Route::patch('/library/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('library.albums.update');
+    Route::patch('/library/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('library.tracks.update');
+    Route::post('/library/albums/{album}/titles/find', [AlbumTitlesController::class, 'find'])->whereNumber('album')->name('library.albums.titles.find');
+    Route::post('/library/albums/{album}/titles', [AlbumTitlesController::class, 'apply'])->whereNumber('album')->name('library.albums.titles.apply');
     Route::delete('/library/albums/{album}', [LibraryRemoveController::class, 'album'])->whereNumber('album')->name('library.albums.destroy');
     Route::delete('/library/tracks/{track}', [LibraryRemoveController::class, 'track'])->whereNumber('track')->name('library.tracks.destroy');
 

@@ -53,7 +53,7 @@
                     <div class="min-w-0 flex-1">
                         <h2 class="truncate font-semibold">{{ $album->title }}</h2>
                         <div class="mb-2 flex items-center gap-2 text-sm text-muted">
-                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif</span>
+                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->released) · {{ $album->released }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
                             <span class="ml-auto shrink-0 text-xs">shared by {{ $owner($album->user) }}</span>
                             <x-playlist-menu :item="'{ kind: \'album\', id: '.$album->id.', title: '.\Illuminate\Support\Js::from($album->title).' }'"
                                              label="Add every track of this album to a playlist" />

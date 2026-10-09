@@ -132,6 +132,7 @@ class LibraryScanner
         // Only an explicit album-artist tag names the album's artist. Without one, tracks are grouped by
         // album title within their folder, so compilations with a different artist per track stay together.
         $albumArtist = $first('album_artist') ?? $first('band');
+        $label = $first('publisher') ?? $first('label') ?? $first('organization');
 
         $album = null;
         if ($albumTitle !== null) {
@@ -142,8 +143,12 @@ class LibraryScanner
 
             $album = Album::firstOrCreate(
                 $identity,
-                ['year' => $this->year($first('year') ?? $first('recording_time') ?? $first('date') ?? $first('creation_date'))],
+                ['year' => $this->year($first('year') ?? $first('recording_time') ?? $first('date') ?? $first('creation_date')), 'label' => $label],
             );
+
+            if ($album->label === null && $label !== null) {
+                $album->update(['label' => $label]);
+            }
 
             // A cover from the user's own files replaces one that was downloaded.
             if ($album->cover === null || $album->cover_source !== null) {

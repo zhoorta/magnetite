@@ -108,7 +108,7 @@ class AlbumIdentifier
                 $identity['folder'] = $suggestion->folder; // as the scanner does for albums without an album artist
             }
 
-            $album = Album::firstOrCreate($identity, ['year' => $candidate['year']]);
+            $album = Album::firstOrCreate($identity, ['year' => $candidate['year'], 'release_date' => $candidate['date'] ?? null, 'label' => $candidate['label'] ?? null]);
 
             // Only tracks that are still the owner's and still without an album.
             $tracks = Track::where('user_id', $suggestion->user_id)->whereNull('album_id')
@@ -136,6 +136,103 @@ class AlbumIdentifier
 
             return $album;
         });
+    }
+
+    /**
+     * Releases whose track titles could replace the poor ones of an album that already has its real name (the tracks
+     * are "Track 1", "Track 2", ...): searched by the album's title and artist, and held against the files by count
+     * and length in playing order. Nothing is written. Each candidate lists, per track, the title it proposes.
+     *
+     * @return list<array>
+     */
+    public function titlesFor(Album $album): array
+    {
+        $tracks = $album->tracks()->get()
+            ->sort(fn (Track $a, Track $b) => [$a->disc_number ?? 0, $a->track_number ?? PHP_INT_MAX] <=> [$b->disc_number ?? 0, $b->track_number ?? PHP_INT_MAX] ?: strnatcasecmp($a->path, $b->path))
+            ->values();
+        if ($tracks->isEmpty()) {
+            return [];
+        }
+
+        $artist = $album->artist ?? $tracks->pluck('artist')->filter()->unique()->whenNotEmpty(fn ($a) => $a->count() === 1 ? $a : collect())->first();
+        $guess = [
+            'album' => $album->title, 'artist' => $artist, 'year' => $album->year, 'folder' => '',
+            'tracks' => $tracks->map(fn (Track $t) => ['id' => $t->id, 'path' => $t->path, 'title' => $t->title, 'number' => $t->track_number, 'disc' => $t->disc_number])->all(),
+        ];
+        $local = $tracks->pluck('duration')->all();
+
+        $out = [];
+        foreach (array_slice($this->releasesByAlbum($guess, count($local)), 0, self::MAX_CANDIDATES + 2) as $id) {
+            if (($candidate = $this->score($id, 'album', $guess, $local)) !== null) {
+                $out[] = $candidate;
+            }
+        }
+        usort($out, fn ($a, $b) => $b['score'] <=> $a['score']);
+
+        return array_map(function (array $c) use ($tracks) {
+            // What the track is called now, to show next to the proposal.
+            foreach ($c['tracks'] as $i => $row) {
+                $c['tracks'][$i]['current'] = $tracks[$i]->title;
+            }
+
+            return $c;
+        }, array_slice($out, 0, self::MAX_CANDIDATES));
+    }
+
+    /**
+     * Applies what the owner ticked from one candidate of `titlesFor()`: `titles` (title, number, disc and track artist of the
+     * tracks whose length matched), `date` (release date and year) and `label`. The album's title and artist stay as the
+     * owner set them; the files are not touched. Returns what was done.
+     *
+     * @param  list<string>  $parts
+     * @return array{titles: int, date: bool, label: bool}
+     */
+    public function applyDetails(Album $album, array $candidate, array $parts): array
+    {
+        return DB::transaction(function () use ($album, $candidate, $parts) {
+            $done = ['titles' => 0, 'date' => false, 'label' => false];
+
+            if (in_array('titles', $parts, true)) {
+                $tracks = $album->tracks()->get()->keyBy('id');
+                foreach ($candidate['tracks'] as $row) {
+                    if (! ($row['matched'] ?? false) || ($track = $tracks->get($row['id'])) === null) {
+                        continue;
+                    }
+
+                    $track->update(['identified' => true, 'title' => $row['title'], 'artist' => $row['artist'], 'track_number' => $row['number'], 'disc_number' => $row['disc']]);
+                    $done['titles']++;
+                }
+                $album->tracks()->update(['identified' => true]); // the whole album is the owner's choice now, as after an edit
+            }
+
+            if (in_array('date', $parts, true) && ! empty($candidate['date'])) {
+                $album->update(['release_date' => $candidate['date'], 'year' => (int) substr($candidate['date'], 0, 4)]);
+                $done['date'] = true;
+            }
+
+            if (in_array('label', $parts, true) && ! empty($candidate['label'])) {
+                $album->update(['label' => $candidate['label']]);
+                $done['label'] = true;
+            }
+
+            return $done;
+        });
+    }
+
+    /** The release date, as MusicBrainz gives it (`2001`, `2001-03`, `2001-03-12`), or null. */
+    private function date(array $release): ?string
+    {
+        $date = $release['date'] ?? null;
+
+        return is_string($date) && preg_match(Album::DATE_PATTERN, $date) ? $date : null;
+    }
+
+    /** The first record label of a release. */
+    private function label(array $release): ?string
+    {
+        $name = $release['label-info'][0]['label']['name'] ?? null;
+
+        return is_string($name) && trim($name) !== '' ? trim($name) : null;
     }
 
     /** The folder and file names as a candidate. */
@@ -272,7 +369,7 @@ class AlbumIdentifier
     /** One release looked up and held against the files; null when fewer than half the tracks fit. */
     private function score(string $id, string $via, array $guess, array $local): ?array
     {
-        $detail = $this->get("https://musicbrainz.org/ws/2/release/{$id}", ['inc' => 'recordings+artist-credits', 'fmt' => 'json']);
+        $detail = $this->get("https://musicbrainz.org/ws/2/release/{$id}", ['inc' => 'recordings+artist-credits+labels', 'fmt' => 'json']);
         $remote = $this->releaseTracks($detail);
         $match = ReleaseMatch::compare($local, array_column($remote, 'length'));
         if ($match['score'] < self::MIN_SCORE) {
@@ -288,6 +385,8 @@ class AlbumIdentifier
             'title' => $detail['title'] ?? $guess['album'],
             'artist' => $artist,
             'year' => preg_match('/^(\d{4})/', $detail['date'] ?? '', $y) ? (int) $y[1] : $guess['year'],
+            'date' => $this->date($detail),
+            'label' => $this->label($detail),
             'score' => $match['score'],
             'matched' => $match['count'],
             'release_tracks' => count($remote),
