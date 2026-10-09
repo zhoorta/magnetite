@@ -10,6 +10,7 @@ import { shouldPrefetch, prefetchUrl } from './prefetch';
 import { playlistCreate, playlistPicker, playlistStore, playlistView, sharedPlaylistView } from './playlists';
 
 const STORAGE_KEY = 'magnetite.theme';
+const DEFAULT_THEME = 'terminal'; // keep the :root fallbacks in app.css in step
 const VARS_KEY = 'magnetite.vars';
 const MAX_SAVED_QUEUE = 500; // tracks kept for the restore after a reload
 /** A 404 means the saved track is gone for good; other failures (offline, server busy) keep the saved state for next time. */
@@ -111,7 +112,7 @@ Alpine.store('player', {
     audioState: 'idle', // AudioContext state once the graph exists: running, suspended, interrupted
     failedIndex: null,
     themes,
-    themeId: themes[0].id,
+    themeId: DEFAULT_THEME, // what a first-time visitor sees; a saved choice wins
     panels: [], // the visible meters: [{ id, params }], at most MAX_PANELS; the person's own list, styled by the theme
     meterIds: DEFAULT_METERS, // the same list as ids only; this is what is saved for a signed-in user
     signingOut: false,
