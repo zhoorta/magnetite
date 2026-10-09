@@ -7,6 +7,7 @@ use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController;
+use App\Http\Controllers\PrefetchController;
 use App\Http\Controllers\ScanController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\StorageController;
@@ -47,6 +48,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/playlists/{playlist}/order', [PlaylistController::class, 'reorder'])->whereNumber('playlist')->name('playlists.order');
 
     Route::get('/stream/{track}', StreamController::class)->whereNumber('track')->name('stream');
+    Route::post('/prefetch/{track}', PrefetchController::class)->whereNumber('track')->middleware('throttle:60,1')->name('prefetch');
     Route::get('/cover/{album}', CoverController::class)->whereNumber('album')->name('cover');
 
     Route::get('/covers/find', [CoverSearchController::class, 'show'])->name('covers.find.show');

@@ -87,7 +87,7 @@ Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalS
 - Scan: a file is unchanged when its hash and Ferrite id match (folders still use size and mtime). A failed listing keeps the old tracks and says why (`LibraryStore::unavailableReason()`).
 - `/stream`: a track that is not cached goes through `FerriteStore::proxy()` (Range, If-Range, If-None-Match forwarded; type, `nosniff`, `inline` are Magnetite's own); a cached one is served from disk; ALAC goes through the cache and the converter. Ferrite down and not cached: 502 with the reason.
 - Measured with both apps on one machine (real Ferrite on MySQL, `php artisan serve`): first byte 85 ms cold, 21 ms for a Range request; fixture files only (4 KB), so this says nothing about a remote Ferrite yet. Still to do: measure against the real server with a full-size album.
-- Not built: prefetch, `magnetite:claim` for Ferrite users, editing the setup from the browser. Ferrite's reads are limited to 120/min per token: a first scan of a big library waits on the limit (the store sleeps for `Retry-After`), and playback Range requests count too, so Ferrite may need a higher limit for content.
+- Not built: `magnetite:claim` for Ferrite users, editing the setup from the browser. Ferrite's reads are limited to 120/min per token: a first scan of a big library waits on the limit (the store sleeps for `Retry-After`), and playback Range requests count too, so Ferrite may need a higher limit for content.
 
 ## Built 2026-10-09: writing (step 4)
 
@@ -100,6 +100,14 @@ Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalS
 ## Built 2026-10-09: the Storage page (step 3)
 
 `/storage` (signed in, in the nav) is read-only: source (local folder or Ferrite and its address), track count, last scan and a **Test connection** button that calls `GET /root` through `POST /storage/test` and shows the Ferrite folder, access (read, or read and add files), token expiry (flagged within 14 days) and Ferrite's space, or the reason in plain words (revoked, folder gone, unreachable). For Ferrite libraries it also shows the cache (files, size, limit) and **Clear cache** (`DELETE /storage/cache`; the cache is shared by all users, files are named by hash, downloads in progress are left alone). The token never reaches the browser. The setup itself is still changed with `magnetite:storage`.
+
+## Built 2026-10-09: prefetch
+
+- **Player:** `timeupdate` calls `shouldPrefetch()` (`resources/js/magnetite/prefetch.js`, tested with `npm run test:js`): while playing, once per track, when 70% has played or 45 s are left, whichever comes first, it `POST`s `/prefetch/{next track}` (address derived from the stream address, so restored queues work). Fire and forget; the audio element and the Web Audio graph are untouched.
+- **Server:** `PrefetchController` checks the same visibility rule as `/stream` (404 otherwise), answers 202 at once and queues `PrefetchTrack` once per track per two minutes. It queues nothing on the `sync` queue (the download would run inside the request and stall the server and the audio playing from it), for local libraries, or when no worker exists (the call just waits).
+- **Job:** `FerriteStore::prefetch()` skips a file that is cached already and one larger than the whole cache, otherwise downloads it through the same path as scans (`.part` file, checksum, rename), so `/stream` never sees half a file. All downloads of one file take a lock per hash, so a prefetch, a scan and an analysis never fetch it twice. A failure is logged and harmless: the track streams through the proxy.
+- **Pins:** the track being played from the cache and the one prefetched are not evicted for an hour after they were used; everything else is least-recently-used.
+- Checked in headless Chrome against a real Ferrite with a real queue worker: playing track 1 requested `/prefetch/2` once, the worker fetched it, and the file was in the cache.
 
 ## Build order
 

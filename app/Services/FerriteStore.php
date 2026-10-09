@@ -11,6 +11,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response as HttpResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -224,8 +225,13 @@ class FerriteStore implements LibraryStore
     public function cachedFor(Track $track): ?string
     {
         $file = $this->locate($track->path);
+        $path = $file === null ? null : $this->cached($file);
 
-        return $file === null ? null : $this->cached($file);
+        if ($path !== null) {
+            $this->pin($file); // being played: not the first thing to go when the cache is full
+        }
+
+        return $path;
     }
 
     /**
@@ -365,13 +371,21 @@ class FerriteStore implements LibraryStore
         return $path;
     }
 
-    /** Download a file into the cache under its hash; the name appears only when the bytes are complete and match. */
+    /**
+     * Download a file into the cache under its hash; the name appears only when the bytes are complete and match.
+     * One download per file at a time (a scan, an analysis and a prefetch may want the same one): the others wait for it.
+     */
     private function download(StoredFile $file): ?string
     {
         if ($file->key === null || $file->hash === null) {
             return null;
         }
 
+        return Cache::lock("ferrite-download:{$file->hash}", 900)->block(600, fn () => $this->cached($file) ?? $this->fetchIntoCache($file));
+    }
+
+    private function fetchIntoCache(StoredFile $file): string
+    {
         File::ensureDirectoryExists($this->cacheDir());
         $final = $this->cachePath($file);
         $part = $final.'.'.bin2hex(random_bytes(4)).'.part';
@@ -396,6 +410,37 @@ class FerriteStore implements LibraryStore
         return $final;
     }
 
+    /**
+     * Fetch a track into the cache ahead of its turn (see PrefetchTrack). Does nothing for a file that is cached
+     * already (it is only pinned again) or that could never fit in the cache.
+     */
+    public function prefetch(Track $track): bool
+    {
+        $file = $this->locate($track->path);
+
+        if ($file === null || $file->key === null || $file->hash === null) {
+            return false;
+        }
+
+        $this->pin($file); // the next track: kept until it has been played
+
+        if ($this->cached($file) !== null) {
+            return true;
+        }
+
+        if ($file->size > (int) (config('magnetite.ferrite.cache_max_gb') * 1024 ** 3)) {
+            return false;
+        }
+
+        return $this->download($file) !== null;
+    }
+
+    /** The track playing now and the one fetched ahead are not removed to make room, for an hour after they were used. */
+    private function pin(StoredFile $file): void
+    {
+        Cache::put("ferrite-pin:{$file->hash}", true, 3600);
+    }
+
     /** Keep the cache under its size limit by removing the least recently used files, never the one just fetched. */
     private function prune(string $keep): void
     {
@@ -408,7 +453,9 @@ class FerriteStore implements LibraryStore
                 break;
             }
 
-            if ($old->getRealPath() !== realpath($keep)) {
+            $hash = strstr($old->getFilename(), '.', true);
+
+            if ($old->getRealPath() !== realpath($keep) && ! Cache::has("ferrite-pin:{$hash}")) {
                 $total -= $old->getSize();
                 @unlink($old->getRealPath());
             }

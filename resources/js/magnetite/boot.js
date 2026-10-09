@@ -6,6 +6,7 @@ import themes from './themes.json';
 import uploader from './upload';
 import storage from './storage';
 import { send } from './http';
+import { shouldPrefetch, prefetchUrl } from './prefetch';
 import { playlistCreate, playlistPicker, playlistView, sharedPlaylistView } from './playlists';
 
 const STORAGE_KEY = 'magnetite.theme';
@@ -74,6 +75,7 @@ Alpine.store('player', {
     panels: [], // the visible meters: [{ id, params }], at most MAX_PANELS; the person's own list, styled by the theme
     meterIds: DEFAULT_METERS, // the same list as ids only; this is what is saved for a signed-in user
     signingOut: false,
+    prefetched: null, // id of the track the server was last asked to fetch ahead (Ferrite libraries), so it is asked once
     savedAt: 0, // performance.now() of the last save of the playback state
     lastMeters: null, // what was showing before the meters were switched off, for the M key and the Meters button
 
@@ -103,6 +105,7 @@ Alpine.store('player', {
 
         audio.addEventListener('timeupdate', () => {
             this.time = audio.currentTime;
+            this.prefetchNext(audio);
 
             // The position changes all the time; a few seconds off after a reload does not matter.
             if (performance.now() - this.savedAt > 5000) this.savePlayback();
@@ -228,6 +231,16 @@ Alpine.store('player', {
             // play() rejects when the source is unsupported; an interrupted load (user picked another track) is not an error.
             if (e.name === 'NotSupportedError') this.fail();
         }
+    },
+
+    /** Ask the server to fetch the next track into its cache while this one plays. Fire and forget: nothing depends on it. */
+    prefetchNext(audio) {
+        const next = this.queue[this.index + 1];
+
+        if (!shouldPrefetch({ playing: this.playing, time: audio.currentTime, duration: audio.duration, next, already: this.prefetched })) return;
+
+        this.prefetched = next.id;
+        send('POST', prefetchUrl(next)).catch(() => {});
     },
 
     fail() {
