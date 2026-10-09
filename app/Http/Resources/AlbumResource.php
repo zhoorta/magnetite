@@ -14,7 +14,7 @@ class AlbumResource extends JsonResource
             'title' => $this->title,
             'artist' => $this->artist,
             'year' => $this->year,
-            'cover_url' => $this->cover ? route('cover', $this->id) : null,
+            'cover_url' => $this->coverUrl(),
             'track_count' => $this->tracks_count ?? $this->whenLoaded('tracks', fn () => $this->tracks->count()),
             'tracks' => TrackResource::collection($this->whenLoaded('tracks')),
         ];

@@ -13,7 +13,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Looks up the cover of an album that has none: MusicBrainz and the Cover Art Archive first, iTunes second.
+ * Looks up the cover of an album that has none (or another one, when the downloaded cover was wrong): MusicBrainz and the Cover Art Archive first, iTunes second.
  * Only the hosts listed here are ever contacted, redirects included; what comes back is decoded and re-encoded by
  * CoverStore, so remote bytes are never stored or served as they are.
  */
@@ -26,39 +26,59 @@ class CoverFinder
 
     public function __construct(private CoverStore $covers) {}
 
-    /** Finds, stores and records a cover for the album. Returns the source name, or null when nothing matched. */
-    public function fill(Album $album): ?string
+    /**
+     * Finds, stores and records a cover for the album. Returns the source name, or null when nothing matched.
+     * With `$another` the album already has a downloaded cover that was wrong: matches tried before, and any that
+     * gives the same picture, are skipped, and the old cover stays when there is no other match (the next try then
+     * starts over).
+     */
+    public function fill(Album $album, bool $another = false): ?string
     {
         $album->loadMissing('tracks');
         $title = $album->title;
         $artist = $album->displayArtist;
         $artist = $artist === 'Various artists' ? null : $artist;
 
-        $found = null;
-        foreach (['musicbrainz' => $this->musicBrainz(...), 'itunes' => $this->itunes(...)] as $source => $lookup) {
-            try {
-                $bytes = $lookup($title, $artist);
-            } catch (Throwable) {
-                $bytes = null; // a source that is down or odd must not stop the next one
-            }
+        $tried = $another ? array_values(array_unique([...($album->cover_tried ?? []), ...array_filter([$album->cover_ref])])) : [];
 
-            if ($bytes !== null && ($name = $this->covers->store($bytes)) !== null) {
-                $found = [$name, $source];
-                break;
+        $found = null;
+        foreach (['musicbrainz' => $this->musicBrainz(...), 'itunes' => $this->itunes(...)] as $source => $candidates) {
+            try {
+                foreach ($candidates($title, $artist) as $ref => $url) {
+                    if (in_array($ref, $tried, true)) {
+                        continue;
+                    }
+
+                    $response = $this->http()->get($url);
+                    $bytes = $response->successful() ? $this->body($response->body()) : null;
+                    $name = $bytes !== null ? $this->covers->store($bytes) : null;
+
+                    if ($name !== null && ! ($another && $name === $album->cover)) {
+                        $found = [$name, $source, $ref];
+                        break 2;
+                    }
+                }
+            } catch (Throwable) {
+                // a source that is down or odd must not stop the next one
             }
         }
 
-        $album->update(
-            ['cover_checked_at' => now()] + ($found ? ['cover' => $found[0], 'cover_source' => $found[1]] : []),
-        );
+        if ($found) {
+            $album->update(['cover_checked_at' => now(), 'cover' => $found[0], 'cover_source' => $found[1], 'cover_ref' => $found[2], 'cover_tried' => [...$tried, $found[2]]]);
+        } elseif ($another) {
+            $album->update(['cover_tried' => []]); // all seen: start over next time
+        } else {
+            $album->update(['cover_checked_at' => now()]);
+        }
 
         return $found[1] ?? null;
     }
 
-    private function musicBrainz(string $title, ?string $artist): ?string
+    /** @return iterable<string, string> match reference => image address, best match first */
+    private function musicBrainz(string $title, ?string $artist): iterable
     {
         $query = 'releasegroup:"'.$this->quote($title).'"'.($artist ? ' AND artist:"'.$this->quote($artist).'"' : '');
-        $groups = $this->http()->get('https://musicbrainz.org/ws/2/release-group/', ['query' => $query, 'fmt' => 'json', 'limit' => 5])
+        $groups = $this->http()->get('https://musicbrainz.org/ws/2/release-group/', ['query' => $query, 'fmt' => 'json', 'limit' => 10])
             ->throw()->json('release-groups', []);
 
         foreach ($groups as $group) {
@@ -67,18 +87,14 @@ class CoverFinder
                 continue;
             }
 
-            $response = $this->http()->get("https://coverartarchive.org/release-group/{$group['id']}/front-500");
-            if ($response->successful()) {
-                return $this->body($response->body());
-            }
+            yield "mb:{$group['id']}" => "https://coverartarchive.org/release-group/{$group['id']}/front-500";
         }
-
-        return null;
     }
 
-    private function itunes(string $title, ?string $artist): ?string
+    /** @return iterable<string, string> */
+    private function itunes(string $title, ?string $artist): iterable
     {
-        $results = $this->http()->get('https://itunes.apple.com/search', ['term' => trim("{$artist} {$title}"), 'entity' => 'album', 'limit' => 5])
+        $results = $this->http()->get('https://itunes.apple.com/search', ['term' => trim("{$artist} {$title}"), 'entity' => 'album', 'limit' => 10])
             ->throw()->json('results', []);
 
         foreach ($results as $result) {
@@ -92,13 +108,8 @@ class CoverFinder
                 continue;
             }
 
-            $response = $this->http()->get($url);
-            if ($response->successful()) {
-                return $this->body($response->body());
-            }
+            yield 'itunes:'.($result['collectionId'] ?? md5($url)) => $url;
         }
-
-        return null;
     }
 
     private function http(): PendingRequest

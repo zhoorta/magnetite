@@ -46,7 +46,7 @@
                 <section x-data="{ tracks: @js($rows($album->tracks)) }" class="flex gap-4">
                     <div class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
                         @if ($album->cover)
-                            <img src="{{ route('cover', $album) }}" alt="" loading="lazy" class="h-full w-full object-cover">
+                            <img src="{{ $album->coverUrl() }}" alt="" loading="lazy" class="h-full w-full object-cover">
                         @endif
                     </div>
 

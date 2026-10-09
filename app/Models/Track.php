@@ -105,7 +105,7 @@ class Track extends Model
             'title' => $this->title,
             'artist' => $this->artist ?? $this->album?->artist,
             'album' => $this->album?->title,
-            'cover' => $this->album?->cover ? route('cover', $this->album) : null,
+            'cover' => $this->album?->cover ? $this->album->coverUrl() : null,
             'duration' => $this->duration,
             'codec' => $this->codec,
             'playable' => $this->playable,

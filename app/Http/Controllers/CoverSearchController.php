@@ -25,12 +25,17 @@ class CoverSearchController extends Controller
         return response()->json(CoverStatus::get($request->user()->id), 202);
     }
 
-    /** One album, now: two or three requests, so the answer can wait for them. */
+    /**
+     * One album, now: two or three requests, so the answer can wait for them. An album with a cover from the web gets
+     * another match; a cover from the user's own files is never replaced.
+     */
     public function album(Request $request, Album $album, CoverFinder $finder): JsonResponse
     {
         abort_unless($request->user()->can('update', $album), 404);
-        abort_if($album->cover !== null, 422, 'This album already has a cover.');
 
-        return response()->json(['source' => $finder->fill($album)]);
+        $another = $album->cover !== null;
+        abort_if($another && $album->cover_source === null, 422, 'This album already has a cover.');
+
+        return response()->json(['source' => $finder->fill($album, $another), 'another' => $another]);
     }
 }

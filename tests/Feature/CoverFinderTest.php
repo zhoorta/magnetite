@@ -92,6 +92,63 @@ it('only lets the owner search, and not for an album that has a cover', function
     Http::assertNothingSent();
 });
 
+describe('finding another cover', function () {
+    beforeEach(function () {
+        ob_start();
+        $img = imagecreatetruecolor(8, 8);
+        imagefill($img, 0, 0, 0xFF0000);
+        imagejpeg($img);
+        $this->otherJpeg = ob_get_clean();
+
+        $this->twoGroups = ['musicbrainz.org/*' => Http::response(['release-groups' => [
+            ['id' => '11111111-2222-3333-4444-555555555555', 'title' => 'Discovery', 'artist-credit' => [['name' => 'Daft Punk']]],
+            ['id' => '99999999-2222-3333-4444-555555555555', 'title' => 'Discovery', 'artist-credit' => [['name' => 'Daft Punk']]],
+        ]])];
+    });
+
+    it('moves on to a match that was not tried, and keeps count of what it tried', function () {
+        Http::fake($this->twoGroups + [
+            'coverartarchive.org/release-group/11111111*' => Http::response($this->jpeg),
+            'coverartarchive.org/release-group/99999999*' => Http::response($this->otherJpeg),
+        ]);
+
+        $this->actingAs($this->alice)->postJson(route('cover.find', $this->album))->assertOk()->assertJson(['source' => 'musicbrainz', 'another' => false]);
+        $first = $this->album->fresh()->cover;
+        expect($this->album->fresh()->cover_ref)->toBe('mb:11111111-2222-3333-4444-555555555555');
+
+        $this->postJson(route('cover.find', $this->album))->assertOk()->assertJson(['source' => 'musicbrainz', 'another' => true]);
+        $album = $this->album->fresh();
+        expect($album->cover)->not->toBe($first)
+            ->and($album->cover_ref)->toBe('mb:99999999-2222-3333-4444-555555555555')
+            ->and($album->cover_tried)->toHaveCount(2);
+    });
+
+    it('keeps the cover when there is no other match, and starts over the next time', function () {
+        Http::fake(fakeMusicBrainz() + ['coverartarchive.org/*' => Http::response($this->jpeg), 'itunes.apple.com/*' => Http::response(['results' => []])]);
+
+        $this->actingAs($this->alice)->postJson(route('cover.find', $this->album))->assertOk();
+        $cover = $this->album->fresh()->cover;
+
+        $this->postJson(route('cover.find', $this->album))->assertOk()->assertJson(['source' => null, 'another' => true]);
+        expect($this->album->fresh()->cover)->toBe($cover)->and($this->album->fresh()->cover_tried)->toBe([]);
+    });
+
+    it('skips a match that gives the same picture', function () {
+        Http::fake($this->twoGroups + ['coverartarchive.org/*' => Http::response($this->jpeg), 'itunes.apple.com/*' => Http::response(['results' => []])]);
+
+        $this->actingAs($this->alice)->postJson(route('cover.find', $this->album))->assertOk();
+        $this->postJson(route('cover.find', $this->album))->assertOk()->assertJson(['source' => null]);
+    });
+
+    it('never replaces a cover from the user\'s own files', function () {
+        Http::fake();
+        $this->album->update(['cover' => str_repeat('b', 40).'.jpg', 'cover_source' => null]);
+
+        $this->actingAs($this->alice)->postJson(route('cover.find', $this->album))->assertStatus(422);
+        Http::assertNothingSent();
+    });
+});
+
 it('needs a signed-in user', function () {
     $this->postJson(route('cover.find', $this->album))->assertUnauthorized();
     $this->postJson(route('covers.find'))->assertUnauthorized();

@@ -22,7 +22,7 @@ class TrackResource extends JsonResource
             'disc' => $this->disc_number,
             'duration' => $this->duration,
             'codec' => $this->codec,
-            'cover_url' => $this->album?->cover ? route('cover', $this->album_id) : null,
+            'cover_url' => $this->album?->coverUrl(),
             'open' => (bool) $open,
             'stream_url' => $open ? route('stream', $this->id) : null,
         ];

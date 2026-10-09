@@ -15,6 +15,17 @@ class Album extends Model
 
     protected $guarded = [];
 
+    protected function casts(): array
+    {
+        return ['cover_tried' => 'array'];
+    }
+
+    /** The cover's address. `v` changes with the picture, so the browser (which may keep a cover for a year) fetches a replaced one. */
+    public function coverUrl(): ?string
+    {
+        return $this->cover ? route('cover', ['album' => $this->id, 'v' => substr($this->cover, 0, 10)]) : null;
+    }
+
     /** Album artist if tagged, else the single track artist, else "Various artists". */
     public function getDisplayArtistAttribute(): ?string
     {
