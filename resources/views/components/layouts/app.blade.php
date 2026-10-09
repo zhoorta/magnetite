@@ -57,6 +57,32 @@
                 </div>
             </div>
 
+            {{-- Keyboard shortcuts, opened with ? --}}
+            <div x-show="$store.player.helpOpen" x-cloak x-transition.opacity
+                 class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4"
+                 @click.self="$store.player.helpOpen = false" role="dialog" aria-label="Keyboard shortcuts">
+                <div class="w-full max-w-sm rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl">
+                    <h2 class="mb-3 font-semibold">Keyboard shortcuts</h2>
+                    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+                        @foreach ([
+                            'Space' => 'Play or pause',
+                            '← →' => 'Back or forward 5 s',
+                            'Shift + ← →' => 'Back or forward 30 s',
+                            '0 – 9' => 'Jump to 0 – 90 % of the track',
+                            'N / P' => 'Next track / previous (or restart)',
+                            'M' => 'Hide or show the meters',
+                            'F' => 'Full screen',
+                            'Esc' => 'Close full screen or this list',
+                            '?' => 'This list',
+                        ] as $keys => $what)
+                            <dt><kbd class="rounded-theme border border-white/10 bg-bg px-1.5 py-0.5 text-xs">{{ $keys }}</kbd></dt>
+                            <dd class="text-muted">{{ $what }}</dd>
+                        @endforeach
+                    </dl>
+                    <button type="button" class="mt-4 text-xs text-muted hover:text-accent" @click="$store.player.helpOpen = false">Close</button>
+                </div>
+            </div>
+
             <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
                 <div class="flex items-center justify-between text-sm">
                     <div x-show="$store.player.panels.length" class="flex min-w-0 items-center gap-3">
@@ -88,6 +114,9 @@
                         <button type="button" class="rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
                                 @click="$store.player.expanded = ! $store.player.expanded"
                                 x-text="$store.player.expanded ? 'Close' : 'Full screen'"></button>
+                        <button type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
+                                class="hidden rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent sm:block"
+                                @click="$store.player.helpOpen = true">?</button>
                     </div>
                 </div>
 

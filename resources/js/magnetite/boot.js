@@ -51,6 +51,7 @@ Alpine.store('player', {
     time: 0,
     duration: 0,
     expanded: false,
+    helpOpen: false, // the keyboard shortcut list
     error: null,
     audioState: 'idle', // AudioContext state once the graph exists: running, suspended, interrupted
     failedIndex: null,
@@ -92,6 +93,8 @@ Alpine.store('player', {
 
         const saved = safeStorage((s) => s.getItem(STORAGE_KEY));
         this.setTheme(themes.find((t) => t.id === saved)?.id ?? this.themeId);
+
+        document.addEventListener('keydown', (e) => this.onKey(e));
 
         new ResizeObserver(() => this.resize()).observe(canvas);
         this.loop();
@@ -208,6 +211,49 @@ Alpine.store('player', {
         } else {
             this.playAt(this.index - 1);
         }
+    },
+
+    seekBy(seconds) {
+        const el = this.engine.el;
+        if (this.duration) el.currentTime = Math.max(0, Math.min(this.duration, el.currentTime + seconds));
+    },
+
+    /** All meters off, or the theme's meters back; the same switch as the button in the player. */
+    toggleMeters() {
+        if (this.panels.length === 0) return this.addPanel();
+
+        for (let i = this.panels.length - 1; i >= 0; i--) this.removePanel(i);
+    },
+
+    /**
+     * Keyboard shortcuts. They stay out of the way of typing, of the browser's own shortcuts, and of buttons and links
+     * (space on a focused button must press it, not toggle playback).
+     */
+    onKey(e) {
+        if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+
+        const t = e.target;
+        if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+
+        const onControl = t instanceof HTMLElement && ['BUTTON', 'A', 'SUMMARY'].includes(t.tagName);
+        const key = e.key;
+        const act = (fn) => {
+            e.preventDefault();
+            fn();
+        };
+
+        if (key === 'Escape') {
+            if (this.helpOpen) act(() => (this.helpOpen = false));
+            else if (this.expanded) act(() => (this.expanded = false));
+        } else if (key === ' ' && !onControl) act(() => this.toggle());
+        else if (key === 'ArrowRight') act(() => this.seekBy(e.shiftKey ? 30 : 5));
+        else if (key === 'ArrowLeft') act(() => this.seekBy(e.shiftKey ? -30 : -5));
+        else if (/^[0-9]$/.test(key) && this.duration) act(() => this.seek(Number(key) / 10));
+        else if (key === 'n' || key === 'N') act(() => this.next());
+        else if (key === 'p' || key === 'P') act(() => this.prev());
+        else if (key === 'f' || key === 'F') act(() => (this.expanded = !this.expanded));
+        else if (key === 'm' || key === 'M') act(() => this.toggleMeters());
+        else if (key === '?') act(() => (this.helpOpen = !this.helpOpen));
     },
 
     seek(fraction) {
