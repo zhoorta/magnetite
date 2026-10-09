@@ -47,6 +47,8 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
   - [ ] Hole detection for high-bitrate lossy files, full-track spectrogram picture, Chromaprint fingerprints
   - [ ] Offer the analysis from the library page or after a scan (queued job), and show progress
 - [ ] Source of metadata (optional enrichment, MusicBrainz first, others behind ToS limits): MusicBrainz, Cover Art Archive, AcoustID, LRCLIB, ListenBrainz; Discogs and Last.fm only as optional extras
+- [ ] Multi-user (designed 2026-10-09 in `docs/multi-user.md`, do before Ferrite storage): each user owns their tracks and folder (`users/{username}`), a shared area of references (`shared_items`, album or track, no copies), `TrackPolicy`/`visibleTo` on stream, cover and library, `magnetite:user --admin`, `magnetite:claim` to move the existing library; local disk first
+- [ ] Ferrite as library storage (designed 2026-10-09 in `docs/ferrite-storage.md`, needs the API in Ferrite's `docs/api.md` first): `LibraryStore` with local and Ferrite drivers, proxy stream, cache, zip upload through the store, Storage page
 - [ ] Idea parked: cloud use as self-hosted with bring-your-own storage (S3, B2, WebDAV, Storage Box); no hosted copies of audio, no public sharing (copyright), no paid tier
 - [ ] Idea parked: theme gallery with import by URL
 - [x] Landing page (2026-10-09): `/welcome` (the library stays at `/`), hero with the Terminal-theme logo (`public/logo.svg`), live theme picker, theme JSON sample, feature cards and the list of meters; the layout takes a `wide` prop. Looked at in headless Chrome only; no screenshots or install section yet
