@@ -38,6 +38,11 @@ class User extends Authenticatable
         return $this->hasMany(Track::class);
     }
 
+    public function playlists(): HasMany
+    {
+        return $this->hasMany(Playlist::class);
+    }
+
     public function albums(): HasMany
     {
         return $this->hasMany(Album::class);

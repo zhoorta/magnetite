@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Album;
+use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** Puts an album or a track of the signed-in user into the shared area, or takes it out. Only the owner can. */
+/** Puts an album, a track or a playlist of the signed-in user into the shared area, or takes it out. Only the owner can. */
 class ShareController extends Controller
 {
     public function store(Request $request, string $kind, int $id): JsonResponse
@@ -29,18 +30,19 @@ class ShareController extends Controller
         return response()->json(['shared' => false]);
     }
 
-    /** @return array{0: string, 1: Album|Track}; 404 for anything that is not the user's own. */
+    /** @return array{0: string, 1: Album|Track|Playlist}; 404 for anything that is not the user's own. */
     private function find(Request $request, string $kind, int $id): array
     {
         $model = match ($kind) {
             'albums' => Album::class,
             'tracks' => Track::class,
+            'playlists' => Playlist::class,
             default => abort(404),
         };
 
         $item = $model::findOrFail($id);
         abort_unless($request->user()->can('share', $item), 404);
 
-        return [$kind === 'albums' ? 'album_id' : 'track_id', $item];
+        return [rtrim($kind, 's').'_id', $item];
     }
 }

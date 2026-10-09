@@ -10,6 +10,7 @@
             <a href="{{ route('library') }}" wire:navigate class="hover:text-accent">Library</a>
             @auth
                 <a href="{{ route('shared') }}" wire:navigate class="hover:text-accent">Shared</a>
+                <a href="{{ route('playlists') }}" wire:navigate class="hover:text-accent">Playlists</a>
             @endauth
             <a href="{{ route('themes') }}" wire:navigate class="hover:text-accent">Themes</a>
             <a href="{{ route('about') }}" wire:navigate class="hover:text-accent">About</a>

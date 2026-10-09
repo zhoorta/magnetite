@@ -21,7 +21,9 @@
                       :class="drClass(t.truth.dr_class)" title="Dynamic range (DR): higher is more dynamic, 7 or less is heavily compressed"
                       x-text="'DR' + t.truth.dr"></span>
                 <span class="w-10 shrink-0 text-right text-xs tabular-nums text-muted" x-text="$store.player.fmt(t.duration)"></span>
-                    <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" :class="isShared('tracks', t.id) && 'text-accent'"
+                    <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" title="Add to a playlist"
+                        @click="$dispatch('pick-playlist', { id: t.id, title: t.title })">+ Playlist</button>
+                <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" :class="isShared('tracks', t.id) && 'text-accent'"
                             :title="isShared('tracks', t.id) ? 'Shared on its own. Click to stop sharing.' : 'Share just this track'"
                             @click="toggleShare('tracks', t.id)" x-text="isShared('tracks', t.id) ? 'Shared' : 'Share'"></button>
                 <button type="button" x-show="t.truth.analyzed" class="shrink-0 text-xs text-muted hover:text-accent"

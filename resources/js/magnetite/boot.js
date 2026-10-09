@@ -4,6 +4,7 @@ import { visualizers } from './visualizers';
 import { layout, MAX_PANELS } from './layout';
 import themes from './themes.json';
 import uploader from './upload';
+import { playlistCreate, playlistPicker, playlistView, sharedPlaylistView } from './playlists';
 
 const STORAGE_KEY = 'magnetite.theme';
 const VARS_KEY = 'magnetite.vars';
@@ -42,6 +43,10 @@ function readColors() {
 }
 
 Alpine.data('uploader', uploader);
+Alpine.data('playlistPicker', playlistPicker);
+Alpine.data('playlistView', playlistView);
+Alpine.data('sharedPlaylistView', sharedPlaylistView);
+Alpine.data('playlistCreate', playlistCreate);
 
 Alpine.store('player', {
     // state

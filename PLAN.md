@@ -64,7 +64,10 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
 - [ ] Tune visualizers further with varied music (radial and scope looked good; bars are better after the tilt)
 - [ ] Pest tests for theme JSON validation (stream, cover, scanner and library page are covered, 14 tests)
 - [ ] Theme editor with live preview, export and import
-- [ ] Fullscreen now-playing polish, playlists, keyboard shortcuts
+- [x] Playlists (2026-10-09): private to the owner (`playlists`, `playlist_track` with position, a track once per playlist), `/playlists` list and create, `/playlists/{id}` play, move up/down, remove, rename, delete; the "+ Playlist" dialog on every row in `/library` and `/shared` (also creates a playlist). You can only add tracks you can play (`visibleTo`); tracks that were shared and are not any more stay in the list but are hidden and skipped until shared again. 112 Pest tests plus a 20-step run in headless Chrome against a throwaway database (dialog, create, add, play, remove, delete, queue not tied to the page's array)
+- [x] Shared playlists (2026-10-09): a playlist is a `shared_items` reference like an album (live, owner only, gone with the playlist). Viewers see the whole list but only the tracks they could already play are playable; the rest are greyed out as "not shared" and the page carries no stream url for them. The owner gets a count of their private tracks and a "Share those tracks too" button; viewers can copy the playlist (only the tracks they can play). Shown in `/shared` under Playlists. 119 Pest tests and a 12-step two-user run in headless Chrome. Titles of private tracks are visible to viewers by design
+- [x] Keyboard shortcuts (2026-10-09): space, arrows (5 s, shift 30 s), 0-9 jump, N/P, M meters, F full screen, Esc, `?` list; ignored while typing and for space on a focused button or link. Checked with real key events in headless Chrome
+- [ ] Fullscreen now-playing polish, add to queue / play next, drag-and-drop ordering in playlists, Media Session (hardware keys, lock screen)
 - [ ] Flux UI for library, queue and settings screens
 - [ ] Licence (AGPL is consistent with the other projects), README, demo GIF
 

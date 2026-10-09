@@ -86,4 +86,6 @@
             @endif
         </div>
     </div>
+
+    @include('pages.partials.playlist-picker')
 </x-layouts.app>

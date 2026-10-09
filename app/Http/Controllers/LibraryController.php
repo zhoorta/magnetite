@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Album;
+use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
 use App\Support\FileTruth;
@@ -42,6 +43,8 @@ class LibraryController extends Controller
             ->whereDoesntHave('album', fn ($q) => $q->whereHas('share'))
             ->orderBy('artist')->orderBy('title')->get();
 
-        return view('pages.shared', ['albums' => $albums, 'singles' => $singles, 'me' => $request->user()]);
+        $playlists = Playlist::with('user')->withCount('tracks')->whereHas('share')->orderBy('name')->get();
+
+        return view('pages.shared', ['albums' => $albums, 'singles' => $singles, 'playlists' => $playlists, 'me' => $request->user()]);
     }
 }
