@@ -1,6 +1,10 @@
 <x-layouts.app :title="$playlist->name.' · Magnetite'">
     <div x-data="playlistView({{ $playlist->id }}, @js($playlist->name), @js($tracks->values()), @js($shared))">
-        <p class="mb-2 text-sm"><a href="{{ route('playlists') }}" wire:navigate class="text-muted hover:text-accent">← Playlists</a></p>
+        <p class="mb-2 text-sm">@if (request('from') === 'shared')
+                <a href="{{ route('shared') }}" wire:navigate class="text-muted hover:text-accent">← Shared</a>
+            @else
+                <a href="{{ route('playlists') }}" wire:navigate class="text-muted hover:text-accent">← Playlists</a>
+            @endif</p>
 
         <div class="mb-6 flex flex-wrap items-center gap-3">
             <h1 x-show="! editing" class="min-w-0 flex-1 truncate text-2xl font-semibold" x-text="name"></h1>

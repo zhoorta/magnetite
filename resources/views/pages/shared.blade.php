@@ -27,7 +27,7 @@
                     <ul class="divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
                         @foreach ($playlists as $playlist)
                             <li class="flex items-center gap-3 pr-3">
-                                <a href="{{ route('playlists.show', $playlist) }}" wire:navigate class="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-sm hover:text-accent">
+                                <a href="{{ route('playlists.show', ['playlist' => $playlist, 'from' => 'shared']) }}" wire:navigate class="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-sm hover:text-accent">
                                     <span class="truncate">{{ $playlist->name }}</span>
                                     <span class="shrink-0 text-xs text-muted">{{ $playlist->tracks_count }} {{ Str::plural('track', $playlist->tracks_count) }}</span>
                                     <span class="ml-auto shrink-0 text-xs text-muted">shared by {{ $owner($playlist->user) }}</span>
@@ -53,7 +53,7 @@
                     <div class="min-w-0 flex-1">
                         <h2 class="cursor-pointer truncate font-semibold" @click="expanded = ! expanded">{{ $album->title }}</h2>
                         <div class="mb-1 flex items-center gap-2 text-sm text-muted">
-                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->released) · {{ $album->released }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
+                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
                             <span class="ml-auto shrink-0 text-xs">shared by {{ $owner($album->user) }}</span>
                             <x-playlist-menu :item="'{ kind: \'album\', id: '.$album->id.', title: '.\Illuminate\Support\Js::from($album->title).' }'"
                                              label="Add every track of this album to a playlist" />
