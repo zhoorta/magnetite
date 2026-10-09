@@ -2,22 +2,20 @@
 
 namespace App\Services;
 
+use App\Contracts\LibraryStore;
 use App\Models\Album;
 use App\Models\Track;
 use App\Models\User;
+use App\Support\StoredFile;
 use App\Support\TrackLibrary;
 use getID3;
 use getid3_lib;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
-use Symfony\Component\Finder\SplFileInfo;
 use Throwable;
 
 class LibraryScanner
 {
-    private const FOLDER_COVERS = ['cover', 'folder', 'front', 'album', 'albumart'];
-
     public function __construct(private CoverStore $covers, private TranscodeCache $transcodes) {}
 
     /**
@@ -28,9 +26,9 @@ class LibraryScanner
      */
     public function scan(User $user, bool $force = false, ?callable $onFile = null): array
     {
-        $folder = $user->libraryPath();
+        $store = $user->store();
 
-        if (! is_dir($folder)) {
+        if (! $store->isAvailable()) {
             // A new user has no folder yet; but a folder that vanished from under a library (disk not mounted) must not wipe it.
             if ($user->tracks()->exists()) {
                 throw new RuntimeException("The library folder of '{$user->username}' is missing.");
@@ -46,16 +44,12 @@ class LibraryScanner
         $reader = new getID3;
         $reader->setOption(['encoding' => 'UTF-8']);
 
-        foreach (File::allFiles($folder) as $file) {
-            if (TrackLibrary::contentType($file->getFilename()) === null) {
-                continue;
-            }
-
-            $relative = $file->getRelativePathname();
+        foreach ($store->files() as $file) {
+            $relative = $file->path;
             $seen[$relative] = true;
             $existing = $known->get($relative);
 
-            if (! $force && $existing && $existing->size === $file->getSize() && $existing->mtime === $file->getMTime()) {
+            if (! $force && $existing && $existing->size === $file->size && $existing->mtime === $file->mtime) {
                 $counts['unchanged']++;
 
                 continue;
@@ -68,7 +62,7 @@ class LibraryScanner
             @set_time_limit(0);
 
             try {
-                $this->import($user, $reader, $file, $relative);
+                $this->import($user, $store, $reader, $file);
                 $counts[$existing ? 'updated' : 'added']++;
             } catch (Throwable $e) {
                 // One unreadable file must not abort the scan.
@@ -89,9 +83,11 @@ class LibraryScanner
         return $counts;
     }
 
-    private function import(User $user, getID3 $reader, SplFileInfo $file, string $relative): void
+    private function import(User $user, LibraryStore $store, getID3 $reader, StoredFile $file): void
     {
-        $info = $reader->analyze($file->getRealPath());
+        $relative = $file->path;
+        $local = $store->fetch($relative) ?? throw new RuntimeException('The file is gone.');
+        $info = $reader->analyze($local);
         getid3_lib::CopyTagsToComments($info);
         $tags = $info['comments'] ?? [];
 
@@ -119,7 +115,7 @@ class LibraryScanner
 
             // A cover from the user's own files replaces one that was downloaded.
             if ($album->cover === null || $album->cover_source !== null) {
-                $cover = $this->coverFor($tags, $file);
+                $cover = $this->coverFor($tags, $store, $relative);
                 if ($cover !== null) {
                     $album->update(['cover' => $cover, 'cover_source' => null]);
                 }
@@ -128,22 +124,22 @@ class LibraryScanner
 
         // Measurements belong to the exact bytes they were taken from: a changed file needs a new analysis.
         $before = $user->tracks()->where('path', $relative)->first(['id', 'size', 'mtime']);
-        $changed = $before && ($before->size !== $file->getSize() || $before->mtime !== $file->getMTime())
+        $changed = $before && ($before->size !== $file->size || $before->mtime !== $file->mtime)
             ? ['analysis' => null, 'analysis_version' => null, 'analyzed_at' => null, 'dr' => null, 'pcm_sha1' => null]
             : [];
 
         Track::updateOrCreate(['user_id' => $user->id, 'path' => $relative], $changed + [
             'album_id' => $album?->id,
-            'title' => $first('title') ?? $this->titleFromFilename($file->getFilenameWithoutExtension()),
+            'title' => $first('title') ?? $this->titleFromFilename(pathinfo($relative, PATHINFO_FILENAME)),
             'artist' => $artist,
             'track_number' => $this->number($first('track_number') ?? $first('track')),
             'disc_number' => $this->number($first('part_of_a_set') ?? $first('disc_number')),
             'duration' => isset($info['playtime_seconds']) ? round((float) $info['playtime_seconds'], 2) : null,
-            'codec' => $this->codec($info, $file->getRealPath()),
-            'mime' => TrackLibrary::contentType($file->getFilename()),
+            'codec' => $this->codec($info, $local),
+            'mime' => TrackLibrary::contentType($relative),
             'bitrate' => isset($info['audio']['bitrate']) ? (int) $info['audio']['bitrate'] : null,
-            'size' => $file->getSize(),
-            'mtime' => $file->getMTime(),
+            'size' => $file->size,
+            'mtime' => $file->mtime,
         ]);
     }
 
@@ -192,25 +188,16 @@ class LibraryScanner
     }
 
     /** Embedded picture first, then a conventional image file next to the track. */
-    private function coverFor(array $tags, SplFileInfo $file): ?string
+    private function coverFor(array $tags, LibraryStore $store, string $relative): ?string
     {
         $data = $tags['picture'][0]['data'] ?? null;
         if (is_string($data) && $data !== '' && ($name = $this->covers->store($data))) {
             return $name;
         }
 
-        $dir = dirname($file->getRealPath());
-        foreach (File::files($dir) as $candidate) {
-            $ext = strtolower($candidate->getExtension());
-            if (in_array($ext, ['jpg', 'jpeg', 'png'], true)
-                && in_array(strtolower($candidate->getFilenameWithoutExtension()), self::FOLDER_COVERS, true)
-                && $candidate->getSize() < 15_000_000
-                && ($name = $this->covers->store(File::get($candidate->getRealPath())))) {
-                return $name;
-            }
-        }
+        $image = $store->folderCover($relative);
 
-        return null;
+        return $image !== null ? $this->covers->store($image) : null;
     }
 
     private function number(?string $value): ?int

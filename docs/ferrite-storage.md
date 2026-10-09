@@ -82,6 +82,8 @@ Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalS
 
 ## Build order
 
+Step 1 is done (2026-10-09). `App\Contracts\LibraryStore` has `isAvailable()`, `files()` (yields `StoredFile`: path, size, mtime), `fetch($path)` (a local file path or null) and `folderCover($path)` (bytes of `cover.jpg` and friends). `App\Services\LocalStore` implements it over `TrackLibrary`; `User::store()` is the one place that will choose the driver. `LibraryScanner`, `StreamController` and `TrackAnalyzer` use it. `open($path, $range)` and `put()` are not in the interface yet; add them with the Ferrite driver and the uploader (steps 2 and 4). Still local-only: `LibraryUploader`, `magnetite:claim`, the music-folder check in `magnetite:scan`.
+
 1. `LibraryStore` with `LocalStore` extracted from today's code, no behaviour change, all existing tests green.
 2. `FerriteStore` read-only against a fake (`Http::fake`) and then against a real Ferrite: list, diff scan, proxy with Range, cache, ALAC and analysis through `fetch()`.
    - Measure first byte and seek time through the proxy against the real Ferrite and Storage Box, with and without a cache hit, before deciding how much more to optimise.

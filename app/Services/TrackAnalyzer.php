@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Track;
-use App\Support\TrackLibrary;
 use RuntimeException;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
@@ -11,7 +10,7 @@ use Symfony\Component\Process\Process;
 /**
  * Measures a track with bin/measure.mjs (ffmpeg decodes, Node does the maths) and stores the result.
  * The music folder is only read. The file is passed as one argument of an argument array, never through a
- * shell, and only after TrackLibrary::resolve has checked that it is a music file inside the library.
+ * shell, and only after the store has checked that it is a music file inside the library.
  */
 class TrackAnalyzer
 {
@@ -58,7 +57,7 @@ class TrackAnalyzer
     /** Measure and save. Throws when the file cannot be decoded. */
     public function analyze(Track $track): Track
     {
-        $path = TrackLibrary::resolve($track->path, $track->user);
+        $path = $track->user->store()->fetch($track->path);
         if ($path === null) {
             throw new RuntimeException('File not found in the library');
         }

@@ -16,7 +16,7 @@ class StreamController extends Controller
         // Someone else's unshared track is answered like one that does not exist, so ids reveal nothing.
         abort_unless($request->user()->can('view', $track), 404);
 
-        $path = TrackLibrary::resolve($track->path, $track->user);
+        $path = $track->user->store()->fetch($track->path);
         abort_if($path === null, 404);
 
         $type = TrackLibrary::contentType($path);

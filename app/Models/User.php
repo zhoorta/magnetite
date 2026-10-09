@@ -3,6 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Contracts\LibraryStore;
+use App\Services\LocalStore;
 use App\Support\TrackLibrary;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -47,6 +49,12 @@ class User extends Authenticatable
     public function albums(): HasMany
     {
         return $this->hasMany(Album::class);
+    }
+
+    /** Where this user's music files live. */
+    public function store(): LibraryStore
+    {
+        return new LocalStore($this);
     }
 
     /** Absolute path of this user's folder in the music folder (it may not exist yet). */
