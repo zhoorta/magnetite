@@ -150,6 +150,15 @@ export class AudioEngine {
         return this.el.play();
     }
 
+    /** Point the element at a track without playing it, at `time` seconds (restoring what was playing before a reload). */
+    load(url, time = 0) {
+        this.el.src = url;
+
+        if (time > 0) {
+            this.el.addEventListener('loadedmetadata', () => (this.el.currentTime = time), { once: true });
+        }
+    }
+
     /** Ask the browser to start the audio graph; resolves to whether sound can come out now. */
     async unlock() {
         if (!this.ctx) return false;

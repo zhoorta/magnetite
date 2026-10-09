@@ -9,6 +9,12 @@ import { playlistCreate, playlistPicker, playlistView, sharedPlaylistView } from
 
 const STORAGE_KEY = 'magnetite.theme';
 const VARS_KEY = 'magnetite.vars';
+const MAX_SAVED_QUEUE = 500; // tracks kept for the restore after a reload
+/** A 404 means the saved track is gone for good; other failures (offline, server busy) keep the saved state for next time. */
+function forgetIf(status, forget) {
+    if (status === 404) forget();
+}
+
 const DEFAULT_METERS = ['vu-wide']; // what a person sees until they choose their own
 
 function safeStorage(fn) {
@@ -65,6 +71,8 @@ Alpine.store('player', {
     themeId: themes[0].id,
     panels: [], // the visible meters: [{ id, params }], at most MAX_PANELS; the person's own list, styled by the theme
     meterIds: DEFAULT_METERS, // the same list as ids only; this is what is saved for a signed-in user
+    signingOut: false,
+    savedAt: 0, // performance.now() of the last save of the playback state
     lastMeters: null, // what was showing before the meters were switched off, for the M key and the Meters button
 
     // internals
@@ -91,10 +99,18 @@ Alpine.store('player', {
         }
         this.canvas = canvas;
 
-        audio.addEventListener('timeupdate', () => (this.time = audio.currentTime));
+        audio.addEventListener('timeupdate', () => {
+            this.time = audio.currentTime;
+
+            // The position changes all the time; a few seconds off after a reload does not matter.
+            if (performance.now() - this.savedAt > 5000) this.savePlayback();
+        });
         audio.addEventListener('durationchange', () => (this.duration = audio.duration || 0));
         audio.addEventListener('play', () => (this.playing = true));
-        audio.addEventListener('pause', () => (this.playing = false));
+        audio.addEventListener('pause', () => {
+            this.playing = false;
+            this.savePlayback();
+        });
         audio.addEventListener('ended', () => this.next());
         // Chrome/Firefox cannot decode everything (e.g. ALAC in .m4a). Say so and move on.
         audio.addEventListener('error', () => this.fail());
@@ -107,6 +123,12 @@ Alpine.store('player', {
         this.setTheme(themes.find((t) => t.id === saved)?.id ?? this.themeId);
 
         document.addEventListener('keydown', (e) => this.onKey(e));
+
+        // Leaving or reloading the page: remember where we were. Signing out forgets it.
+        window.addEventListener('pagehide', () => this.savePlayback());
+        document.addEventListener('visibilitychange', () => document.hidden && this.savePlayback());
+        document.addEventListener('submit', (e) => e.target.action?.endsWith('/logout') && this.forgetPlayback(true));
+        this.restorePlayback();
 
         new ResizeObserver(() => this.resize()).observe(canvas);
         this.loop();
@@ -195,6 +217,8 @@ Alpine.store('player', {
         this.index = i;
         this.error = null;
         this.failedIndex = null;
+        this.time = 0;
+        this.savePlayback(0); // the element still holds the old track's position
 
         try {
             await this.engine.play(this.queue[i].url);
@@ -232,6 +256,64 @@ Alpine.store('player', {
             this.engine.el.currentTime = 0;
         } else {
             this.playAt(this.index - 1);
+        }
+    },
+
+    /** Where the playback state is kept: in this browser, for this user only. Null for guests. */
+    get playbackKey() {
+        const id = window.magnetite?.userId;
+
+        return id ? `magnetite.playback.${id}` : null;
+    },
+
+    /** The queue, the current track and the position, so a reload (or closing the tab) can carry on from here. */
+    savePlayback(time = this.engine?.el.currentTime ?? this.time) {
+        const key = this.playbackKey;
+        this.savedAt = performance.now();
+        if (!key || !this.current || this.signingOut) return;
+
+        // A very long queue keeps the part around the current track.
+        const from = Math.max(0, Math.min(this.index - MAX_SAVED_QUEUE / 2, this.queue.length - MAX_SAVED_QUEUE));
+        const queue = this.queue.slice(from, from + MAX_SAVED_QUEUE);
+
+        safeStorage((s) => s.setItem(key, JSON.stringify({ queue, index: this.index - from, time })));
+    },
+
+    /** `signingOut`: the page is about to unload and would save again on the way out; do not. */
+    forgetPlayback(signingOut = false) {
+        this.signingOut = signingOut;
+
+        const key = this.playbackKey;
+        key && safeStorage((s) => s.removeItem(key));
+    },
+
+    /** Load the saved track, paused, at the saved position. Browsers do not allow sound to start by itself, so it waits for Play. */
+    async restorePlayback() {
+        const key = this.playbackKey;
+        const raw = key && safeStorage((s) => s.getItem(key));
+        if (!raw || this.current) return;
+
+        try {
+            const saved = JSON.parse(raw);
+            // Addresses are made relative to this site, in case it is now served from another host or port.
+            const local = (u) => (typeof u === 'string' ? ((x) => x.pathname + x.search)(new URL(u, location.href)) : null);
+            const queue = saved.queue
+                .filter((t) => t && typeof t.title === 'string' && typeof t.url === 'string')
+                .map((t) => ({ ...t, url: local(t.url), cover: t.cover ? local(t.cover) : null }));
+            const track = queue[saved.index];
+            if (!track) return;
+
+            // The track may have been removed or unshared since: then there is nothing to carry on with.
+            const check = await fetch(track.url, { method: 'HEAD', credentials: 'same-origin' });
+            if (!check.ok || this.current) return forgetIf(check.status, () => this.forgetPlayback());
+
+            this.queue = queue;
+            this.index = saved.index;
+            this.time = Number(saved.time) || 0;
+            this.duration = track.duration ?? 0;
+            this.engine.load(track.url, this.time);
+        } catch {
+            this.forgetPlayback();
         }
     },
 

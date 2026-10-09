@@ -41,12 +41,12 @@ it('refuses a list that is not a short list of plain ids', function () {
 });
 
 it('hands the saved meters to the page: null until chosen, the list afterwards, nothing for guests', function () {
-    $this->get(route('welcome'))->assertOk()->assertSee('"signedIn":false,"meters":null', false);
+    $this->get(route('welcome'))->assertOk()->assertSee('"signedIn":false,"userId":null,"meters":null', false);
 
-    $this->actingAs($this->alice)->get(route('themes'))->assertSee('"signedIn":true,"meters":null', false);
+    $this->actingAs($this->alice)->get(route('themes'))->assertSee("\"signedIn\":true,\"userId\":{$this->alice->id},\"meters\":null", false);
 
     $this->alice->forceFill(['meters' => ['vu-wide', 'scope']])->save();
-    $this->get(route('themes'))->assertSee('"signedIn":true,"meters":["vu-wide","scope"]', false);
+    $this->get(route('themes'))->assertSee("\"signedIn\":true,\"userId\":{$this->alice->id},\"meters\":[\"vu-wide\",\"scope\"]", false);
 
     $this->alice->forceFill(['meters' => []])->save();
     $this->get(route('themes'))->assertSee('"meters":[]', false);
