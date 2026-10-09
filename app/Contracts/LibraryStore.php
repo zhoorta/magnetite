@@ -33,6 +33,13 @@ interface LibraryStore
      */
     public function delete(string $path): void;
 
+    /**
+     * Move one music file to another folder of the library (`''` for the top), keeping its name, and return its new
+     * path. Nothing is replaced and nothing is deleted. Throws RuntimeException, with a message for the owner, when a
+     * file of that name is already there, the folder is not in the library, or the store does not allow it.
+     */
+    public function move(string $path, string $folder): string;
+
     /** Bytes of the conventional cover image (`cover.jpg`, `folder.png`...) in the same folder as a music file, if any. */
     public function folderCover(string $path): ?string;
 }

@@ -64,6 +64,35 @@ class LocalStore implements LibraryStore
         }
     }
 
+    public function move(string $path, string $folder): string
+    {
+        $from = $this->fetch($path) ?? throw new RuntimeException('The file is missing.');
+        $base = realpath(TrackLibrary::userPath($this->user));
+        $to = $base === false ? false : realpath($folder === '' ? $base : $base.'/'.$folder);
+
+        if ($to === false || ($to !== $base && ! str_starts_with($to, $base.DIRECTORY_SEPARATOR))) {
+            throw new RuntimeException('That folder is not in your library.');
+        }
+
+        $destination = $to.'/'.basename($from);
+        if (file_exists($destination) || is_link($destination)) {
+            throw new RuntimeException('A file with that name is already in the folder.');
+        }
+
+        if (! @rename($from, $destination)) {
+            throw new RuntimeException('The file could not be moved (is the music folder writable?).');
+        }
+
+        // The folder it left may be empty now; never remove the library folder itself.
+        for ($dir = dirname($from); $dir !== $base && str_starts_with($dir, $base.DIRECTORY_SEPARATOR); $dir = dirname($dir)) {
+            if (! @rmdir($dir)) {
+                break;
+            }
+        }
+
+        return ltrim(($folder === '' ? '' : $folder.'/').basename($from), '/');
+    }
+
     public function folderCover(string $path): ?string
     {
         $file = $this->fetch($path);

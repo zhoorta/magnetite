@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AlbumTitlesController;
+use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\Api\AlbumController;
 use App\Http\Controllers\Api\AlbumCoverController;
 use App\Http\Controllers\Api\AlbumTrackController;
@@ -35,11 +36,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/search', SearchController::class)->name('api.search');
         Route::get('/tracks/{track}', [TrackController::class, 'show'])->whereNumber('track')->name('api.tracks.show');
         Route::get('/folders', [FolderController::class, 'index'])->name('api.folders');
+        Route::get('/analysis', [AnalysisController::class, 'show'])->name('api.analysis.show');
         Route::get('/scan', [ScanController::class, 'show'])->name('api.scan.show');
         Route::get('/covers/find', [CoverSearchController::class, 'show'])->name('api.covers.find.show');
 
         // Changing the library needs a token that may write. The work and the rules are the web controllers', so both agree.
         Route::middleware('abilities:library:write')->group(function () {
+            Route::post('/analysis', [AnalysisController::class, 'store'])->name('api.analysis.store');
             Route::post('/scan', [ScanController::class, 'store'])->name('api.scan.store');
             Route::post('/folders', [FolderWrites::class, 'store'])->name('api.folders.store');
             Route::patch('/folders/{folder}', [FolderWrites::class, 'update'])->whereNumber('folder')->name('api.folders.update');

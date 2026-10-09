@@ -6,9 +6,12 @@ use App\Models\SharedItem;
 use App\Models\Track;
 use App\Models\User;
 use App\Services\LibraryScanner;
+use Illuminate\Http\Client\Factory;
+use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
@@ -139,6 +142,37 @@ describe('details', function () {
     });
 });
 
+describe('what the owner sees about a track and an album', function () {
+    it('carries duplicate findings, the album DR, and the spectrum only when asked', function () {
+        $tracks = $this->album->tracks()->get();
+        $analysis = ['loudness' => ['integrated' => -14.0], 'spectrum' => ['cutoff_hz' => 16000, 'content_hz' => 16000, 'step_hz' => 500, 'db' => [-20.0, -30.0]]];
+        foreach ($tracks as $t) {
+            $t->update(['analysis' => $analysis, 'dr' => 9, 'pcm_sha1' => 'same']);
+        }
+        $h = writer($this->alice);
+
+        $album = $this->getJson("/api/v1/albums/{$this->album->id}", $h)->assertOk()->assertJsonPath('data.dr', 9);
+        expect(collect($album->json('data.tracks.0.truth.flags'))->pluck('code')->all())->toContain('duplicate')
+            ->and($album->json('data.tracks.0.truth'))->not->toHaveKey('spectrum');
+
+        $one = $this->getJson("/api/v1/tracks/{$tracks[0]->id}?spectrum=1", $h)->assertOk();
+        expect($one->json('data.truth.spectrum'))->toEqual([-20, -30])->and($one->json('data.truth.step_hz'))->toBe(500);
+
+        // The list of albums carries no tracks and so no DR.
+        $this->getJson('/api/v1/albums', $h)->assertJsonMissingPath('data.0.dr');
+    });
+
+    it('follows and starts an analysis through the API, for one\'s own albums only', function () {
+        config(['queue.default' => 'database']);
+        $h = writer($this->alice);
+
+        $this->getJson('/api/v1/analysis', $h)->assertOk()->assertJsonStructure(['state']);
+        $this->postJson('/api/v1/analysis', ['album_id' => $this->bobAlbum->id], $h)->assertNotFound();
+        app('auth')->forgetGuards(); // the guard keeps the user of the previous request
+        $this->postJson('/api/v1/analysis', [], writer($this->alice, readOnly: true))->assertForbidden();
+    });
+});
+
 describe('covers', function () {
     it('sets an album cover from an image', function () {
         $image = UploadedFile::fake()->image('front.png', 600, 600);
@@ -263,5 +297,58 @@ describe('deleting', function () {
 
         $this->deleteJson("/api/v1/tracks/{$track->id}", [], $h)->assertOk()->assertJsonPath('removed', 1);
         $this->deleteJson("/api/v1/albums/{$this->album->id}", [], $h)->assertOk();
+    });
+});
+
+describe('in a Ferrite library', function () {
+    beforeEach(function () {
+        Http::swap(new Factory);
+        $this->remote = User::factory()->create(['username' => 'remote', 'store' => ['driver' => 'ferrite', 'url' => 'https://ferrite.test', 'token' => 'tok']]);
+        $this->remoteAlbum = Album::create(['user_id' => $this->remote->id, 'title' => 'Record', 'artist' => 'Band']);
+        $row = fn ($path, $key) => Track::create(['user_id' => $this->remote->id, 'album_id' => null, 'path' => $path, 'title' => basename($path), 'mime' => 'audio/flac', 'size' => 1, 'mtime' => 1, 'store_key' => $key, 'store_hash' => str_repeat('a', 64)]);
+        $this->inAlbum = $row('Band/Record/01.flac', '11');
+        $this->inAlbum->update(['album_id' => $this->remoteAlbum->id]);
+        $this->loose = $row('Loose.flac', '13');
+        $this->sent = new ArrayObject;
+    });
+
+    function fakeFerriteMove(ArrayObject $sent, array $answer, int $status = 200): void
+    {
+        Http::swap(new Factory); // a new fake would otherwise sit behind the stubs of an earlier one
+        Http::fake(['https://ferrite.test/api/v1/files/*' => function (HttpRequest $r) use ($sent, $answer, $status) {
+            $sent[] = $r->method().' '.basename($r->url()).' '.json_encode($r->data());
+
+            return Http::response($answer, $status);
+        }]);
+    }
+
+    it('asks Ferrite to move the file into the album\'s folder and keeps the new path', function () {
+        fakeFerriteMove($this->sent, ['id' => 13, 'path' => 'Band/Record/Loose.flac']);
+
+        $this->postJson("/api/v1/albums/{$this->remoteAlbum->id}/tracks", ['track_id' => $this->loose->id], writer($this->remote))
+            ->assertCreated()->assertJsonPath('data.album_id', $this->remoteAlbum->id);
+
+        expect($this->sent->getArrayCopy())->toBe(['PATCH 13 {"folder":"Band\/Record"}'])
+            ->and($this->loose->fresh()->path)->toBe('Band/Record/Loose.flac')->and($this->loose->fresh()->identified)->toBeTrue();
+    });
+
+    it('asks Ferrite to move the file out to the folder that holds its folder', function () {
+        fakeFerriteMove($this->sent, ['id' => 11, 'path' => 'Band/01.flac']);
+
+        $this->deleteJson("/api/v1/albums/{$this->remoteAlbum->id}/tracks/{$this->inAlbum->id}", [], writer($this->remote))->assertOk();
+
+        expect($this->sent->getArrayCopy())->toBe(['PATCH 11 {"folder":"Band"}'])
+            ->and($this->inAlbum->fresh()->path)->toBe('Band/01.flac')->and($this->inAlbum->fresh()->album_id)->toBeNull();
+    });
+
+    it('leaves the track alone when Ferrite refuses: a clash, or a token that cannot write', function () {
+        fakeFerriteMove($this->sent, ['error' => 'exists'], 409);
+        $this->postJson("/api/v1/albums/{$this->remoteAlbum->id}/tracks", ['track_id' => $this->loose->id], writer($this->remote))->assertUnprocessable();
+
+        fakeFerriteMove($this->sent, [], 403);
+        $this->postJson("/api/v1/albums/{$this->remoteAlbum->id}/tracks", ['track_id' => $this->loose->id], writer($this->remote))
+            ->assertUnprocessable()->assertJsonPath('message', fn ($m) => str_contains($m, 'write'));
+
+        expect($this->loose->fresh()->path)->toBe('Loose.flac')->and($this->loose->fresh()->album_id)->toBeNull();
     });
 });

@@ -100,6 +100,37 @@ class FerriteStore implements LibraryStore
         unset($this->index[$path]);
     }
 
+    public function move(string $path, string $folder): string
+    {
+        $file = $this->locate($path);
+        if ($file === null || $file->key === null) {
+            throw new RuntimeException('The file is not in Ferrite.');
+        }
+
+        try {
+            $response = $this->send(fn (PendingRequest $http) => $http->patch($this->api('files/'.rawurlencode($file->key)), ['folder' => $folder]), [200, 409, 422, 405]);
+        } catch (FerriteException $e) {
+            throw new RuntimeException($e->getMessage() === 'The Ferrite token is not allowed to do that.'
+                ? 'The Ferrite token cannot move files. Make a new token in Ferrite with write access and run magnetite:storage again.'
+                : $e->getMessage(), 0, $e);
+        }
+
+        match ($response->status()) {
+            409 => throw new RuntimeException('A file with that name is already in the folder.'),
+            422 => throw new RuntimeException(collect($response->json('errors') ?? [])->flatten()->first() ?? 'Ferrite refused the folder.'),
+            405 => throw new RuntimeException('This Ferrite is too old to move files; update it.'),
+            default => null,
+        };
+
+        $new = (string) $response->json('path');
+        if (isset($this->index[$path])) {
+            $this->index[$new] = new StoredFile($new, $file->size, $file->mtime, $file->key, $file->hash);
+            unset($this->index[$path]);
+        }
+
+        return $new;
+    }
+
     /**
      * Add a local file at $path, never replacing anything. Returns `added`, `existing` (the same bytes are already
      * there) or `conflict` (a different file is in the way, left alone). Sends the file in the chunks Ferrite asks
