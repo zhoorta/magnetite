@@ -13,6 +13,9 @@ interface LibraryStore
     /** Whether the library can be read now (a local folder that is missing, a remote store that is down: no). */
     public function isAvailable(): bool;
 
+    /** Why the library cannot be read, in words for whoever runs the scan. */
+    public function unavailableReason(): string;
+
     /**
      * Every music file in the library. Paths are relative to the library root and are the keys of `tracks.path`.
      *

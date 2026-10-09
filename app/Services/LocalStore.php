@@ -20,6 +20,11 @@ class LocalStore implements LibraryStore
         return is_dir(TrackLibrary::userPath($this->user));
     }
 
+    public function unavailableReason(): string
+    {
+        return "The library folder of '{$this->user->username}' is missing.";
+    }
+
     public function files(): iterable
     {
         if (! $this->isAvailable()) {

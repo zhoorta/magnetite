@@ -80,6 +80,15 @@ Cheaper alternative to remember: mount the Ferrite storage (rclone or sshfs of t
 
 Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalStore` refactor, useful anyway; (2) Ferrite read-only token, `/root`, `/files`, content with Range; (3) `FerriteStore` reading, then measure first-byte and seek time; (4) only then uploads and the Storage page.
 
+## Built 2026-10-09: read-only `FerriteStore` (step 2)
+
+- Per user: `users.store` (encrypted JSON `{driver, url, token}`, hidden from serialisation); `php artisan magnetite:storage {username} --ferrite=URL [--token=]` sets it (token asked for when left out), `--local` switches back, no option checks the connection (`GET /root`). `tracks` has `store_key` (Ferrite file id) and `store_hash`.
+- `App\Services\FerriteStore`: lists every page of `/files` (cached for the run), `fetch()` downloads into `storage/app/private/ferrite-cache/{sha256}.{ext}` via a `.part` file, checks the checksum, and prunes the least recently used files over `MAGNETITE_CACHE_MAX_GB`. A scan caches every file it reads, so a first scan fills the cache up to that cap. Redirects are never followed; 429 waits for `Retry-After`; errors say what happened (revoked, folder gone, unreachable).
+- Scan: a file is unchanged when its hash and Ferrite id match (folders still use size and mtime). A failed listing keeps the old tracks and says why (`LibraryStore::unavailableReason()`).
+- `/stream`: a track that is not cached goes through `FerriteStore::proxy()` (Range, If-Range, If-None-Match forwarded; type, `nosniff`, `inline` are Magnetite's own); a cached one is served from disk; ALAC goes through the cache and the converter. Ferrite down and not cached: 502 with the reason.
+- Measured with both apps on one machine (real Ferrite on MySQL, `php artisan serve`): first byte 85 ms cold, 21 ms for a Range request; fixture files only (4 KB), so this says nothing about a remote Ferrite yet. Still to do: measure against the real server with a full-size album.
+- Not built: uploads and `put()`, prefetch, the Storage page, `magnetite:claim` and the zip upload for Ferrite users. Ferrite's reads are limited to 120/min per token: a first scan of a big library waits on the limit (the store sleeps for `Retry-After`), and playback Range requests count too, so Ferrite may need a higher limit for content.
+
 ## Build order
 
 Step 1 is done (2026-10-09). `App\Contracts\LibraryStore` has `isAvailable()`, `files()` (yields `StoredFile`: path, size, mtime), `fetch($path)` (a local file path or null) and `folderCover($path)` (bytes of `cover.jpg` and friends). `App\Services\LocalStore` implements it over `TrackLibrary`; `User::store()` is the one place that will choose the driver. `LibraryScanner`, `StreamController` and `TrackAnalyzer` use it. `open($path, $range)` and `put()` are not in the interface yet; add them with the Ferrite driver and the uploader (steps 2 and 4). Still local-only: `LibraryUploader`, `magnetite:claim`, the music-folder check in `magnetite:scan`.

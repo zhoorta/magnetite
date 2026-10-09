@@ -24,6 +24,12 @@ return [
         'max_files' => (int) env('MAGNETITE_UPLOAD_MAX_FILES', 5000),
     ],
 
+    // Libraries kept in Ferrite (`php artisan magnetite:storage`): files fetched for analysis, conversion or cover
+    // extraction are kept here, least recently used removed first once the folder is over this size.
+    'ferrite' => [
+        'cache_max_gb' => (float) env('MAGNETITE_CACHE_MAX_GB', 10),
+    ],
+
     // Missing covers can be looked up online (MusicBrainz / Cover Art Archive, then iTunes): only the artist and the
     // album title leave the server. MusicBrainz asks for a contact in the User-Agent, e.g. "Magnetite/1.0 (you@example.com)".
     'covers' => [

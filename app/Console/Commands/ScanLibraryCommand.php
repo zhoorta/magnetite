@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Jobs\ScanLibrary;
 use App\Models\User;
+use App\Services\FerriteStore;
 use App\Services\LibraryScanner;
 use App\Support\TrackLibrary;
 use Illuminate\Console\Attributes\Description;
@@ -17,17 +18,18 @@ class ScanLibraryCommand extends Command
 {
     public function handle(LibraryScanner $scanner): int
     {
-        if (! is_dir(TrackLibrary::path())) {
-            $this->error('Music folder not found: '.TrackLibrary::path());
-
-            return self::FAILURE;
-        }
-
         $name = $this->argument('username');
         $users = User::query()->when($name, fn ($q) => $q->where('username', mb_strtolower(trim($name))))->orderBy('username')->get();
 
         if ($users->isEmpty()) {
             $this->error($name ? "No such user: {$name}." : 'There are no users yet. Create one with magnetite:user.');
+
+            return self::FAILURE;
+        }
+
+        // A music folder is only needed by users whose library is on the local disk.
+        if (! is_dir(TrackLibrary::path()) && $users->contains(fn (User $user) => ! $user->store() instanceof FerriteStore)) {
+            $this->error('Music folder not found: '.TrackLibrary::path());
 
             return self::FAILURE;
         }
@@ -42,7 +44,7 @@ class ScanLibraryCommand extends Command
                 continue;
             }
 
-            $this->info("Scanning {$user->username}: ".$user->libraryPath());
+            $this->info("Scanning {$user->username}: ".($user->store() instanceof FerriteStore ? 'Ferrite' : $user->libraryPath()));
 
             try {
                 $counts = $scanner->scan($user, (bool) $this->option('force'), fn (string $path) => $this->line("  {$path}", verbosity: 'v'));

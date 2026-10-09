@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Contracts\LibraryStore;
+use App\Services\FerriteStore;
 use App\Services\LocalStore;
 use App\Support\TrackLibrary;
 use Database\Factories\UserFactory;
@@ -15,7 +16,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['name', 'username', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'store'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -33,6 +34,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'meters' => 'array',
+            'store' => 'encrypted:array',
         ];
     }
 
@@ -54,6 +56,12 @@ class User extends Authenticatable
     /** Where this user's music files live. */
     public function store(): LibraryStore
     {
+        $config = $this->store;
+
+        if (($config['driver'] ?? null) === 'ferrite') {
+            return new FerriteStore($this, $config['url'], $config['token']);
+        }
+
         return new LocalStore($this);
     }
 

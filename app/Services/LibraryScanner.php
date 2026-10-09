@@ -31,14 +31,14 @@ class LibraryScanner
         if (! $store->isAvailable()) {
             // A new user has no folder yet; but a folder that vanished from under a library (disk not mounted) must not wipe it.
             if ($user->tracks()->exists()) {
-                throw new RuntimeException("The library folder of '{$user->username}' is missing.");
+                throw new RuntimeException($store->unavailableReason());
             }
 
             return ['added' => 0, 'updated' => 0, 'unchanged' => 0, 'removed' => 0, 'failed' => 0];
         }
 
         $counts = ['added' => 0, 'updated' => 0, 'unchanged' => 0, 'removed' => 0, 'failed' => 0];
-        $known = $user->tracks()->get(['id', 'path', 'size', 'mtime'])->keyBy('path');
+        $known = $user->tracks()->get(['id', 'path', 'size', 'mtime', 'store_key', 'store_hash'])->keyBy('path');
         $seen = [];
 
         $reader = new getID3;
@@ -49,7 +49,7 @@ class LibraryScanner
             $seen[$relative] = true;
             $existing = $known->get($relative);
 
-            if (! $force && $existing && $existing->size === $file->size && $existing->mtime === $file->mtime) {
+            if (! $force && $existing && $this->unchanged($existing, $file)) {
                 $counts['unchanged']++;
 
                 continue;
@@ -81,6 +81,16 @@ class LibraryScanner
         $this->transcodes->prune();
 
         return $counts;
+    }
+
+    /** A remote store vouches with a hash (and the id it serves the file under); a folder only has size and mtime. */
+    private function unchanged(Track $existing, StoredFile $file): bool
+    {
+        if ($file->hash !== null) {
+            return $existing->store_hash === $file->hash && $existing->store_key === $file->key;
+        }
+
+        return $existing->size === $file->size && $existing->mtime === $file->mtime;
     }
 
     private function import(User $user, LibraryStore $store, getID3 $reader, StoredFile $file): void
@@ -140,6 +150,8 @@ class LibraryScanner
             'bitrate' => isset($info['audio']['bitrate']) ? (int) $info['audio']['bitrate'] : null,
             'size' => $file->size,
             'mtime' => $file->mtime,
+            'store_key' => $file->key,
+            'store_hash' => $file->hash,
         ]);
     }
 
