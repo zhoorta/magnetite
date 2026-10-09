@@ -33,7 +33,7 @@
             </p>
         @endif
 
-        <p x-show="tracks.length === 0" class="text-muted">Empty. Add tracks with the + Playlist button in <a href="{{ route('library') }}" wire:navigate class="text-accent">your library</a> or in the <a href="{{ route('shared') }}" wire:navigate class="text-accent">shared music</a>.</p>
+        <p x-show="tracks.length === 0" class="text-muted">Empty. Add tracks with the + button in <a href="{{ route('library') }}" wire:navigate class="text-accent">your library</a> or in the <a href="{{ route('shared') }}" wire:navigate class="text-accent">shared music</a>.</p>
 
         <div x-show="tracks.length" x-ref="list" class="divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
             <template x-for="(t, i) in tracks" :key="t.id">

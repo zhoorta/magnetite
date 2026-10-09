@@ -126,8 +126,8 @@ it('offers the add-to-playlist button in the library and the shared music, and t
     $this->alice->playlists()->create(['name' => 'Mix']);
 
     $this->actingAs($this->alice);
-    $this->get(route('library'))->assertOk()->assertSee('+ Playlist')->assertSee('Mix')->assertSee('Keyboard shortcuts');
-    $this->get(route('shared'))->assertOk()->assertSee('+ Playlist');
+    $this->get(route('library'))->assertOk()->assertSee('Add to a playlist')->assertSee('Mix')->assertSee('Keyboard shortcuts');
+    $this->get(route('shared'))->assertOk()->assertSee('Add to a playlist');
 });
 
 it('deletes playlists and their rows with the user or the track', function () {

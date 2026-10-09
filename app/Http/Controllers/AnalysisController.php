@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\AnalyzeTracks;
+use App\Models\Album;
+use App\Models\Track;
 use App\Services\TrackAnalyzer;
 use App\Support\AnalysisStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** Starts and follows the analysis of the signed-in user's own tracks. */
+/** Starts and follows the analysis of the signed-in user's own tracks: all of them, or one album's or one track's (`album_id` / `track_id`). */
 class AnalysisController extends Controller
 {
     public function show(Request $request): JsonResponse
@@ -27,7 +29,21 @@ class AnalysisController extends Controller
             return response()->json(['message' => 'The analysis needs a queue worker. Set QUEUE_CONNECTION=database and run `composer dev` (or `php artisan queue:work`).'], 422);
         }
 
-        AnalyzeTracks::request($request->user());
+        $data = $request->validate(['album_id' => ['nullable', 'integer'], 'track_id' => ['nullable', 'integer']]);
+        $albumId = $data['album_id'] ?? null;
+        $trackId = $data['track_id'] ?? null;
+
+        // Somebody else's album or track is answered like one that does not exist.
+        $albumId === null || Album::where('user_id', $request->user()->id)->findOrFail($albumId);
+        $trackId === null || Track::where('user_id', $request->user()->id)->findOrFail($trackId);
+
+        // One run at a time per user; the page follows the one that is going.
+        $status = AnalysisStatus::get($request->user()->id);
+        if (($albumId !== null || $trackId !== null) && in_array($status['state'], ['queued', 'running'], true)) {
+            return response()->json(['message' => 'An analysis is already running. Try again when it is done.'] + $status, 409);
+        }
+
+        AnalyzeTracks::request($request->user(), $albumId, $trackId);
 
         return response()->json(AnalysisStatus::get($request->user()->id), 202);
     }

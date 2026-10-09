@@ -24,8 +24,7 @@
                               x-text="$store.player.playing ? 'playing' : 'paused'"></span>
                     </button>
                     <span class="w-10 shrink-0 text-right text-xs tabular-nums text-muted" x-text="$store.player.fmt(t.duration)"></span>
-                    <button type="button" x-show="t.url" class="shrink-0 text-xs text-muted hover:text-accent" title="Add to a playlist"
-                            @click="$dispatch('pick-playlist', { id: t.id, title: t.title })">+ Playlist</button>
+                    <div x-show="t.url" class="shrink-0"><x-playlist-menu item="{ id: t.id, title: t.title }" /></div>
                 </div>
             </template>
         </div>

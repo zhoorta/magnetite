@@ -107,18 +107,18 @@ describe('with ffmpeg and node', function () {
     });
 });
 
-it('shows the scores on the library page, or offers the button to get them', function () {
+it('shows the scores on the library page, or offers the menu entries to get them', function () {
     app(LibraryScanner::class)->scan($this->user);
 
-    $this->get(route('library'))->assertOk()->assertSee('Analyse files');
+    $this->get(route('library'))->assertOk()->assertSee('Analyse album')->assertSee('Analyse file');
 
     $track = Track::where('title', 'First Song')->sole();
     $track->forceFill(['dr' => 9, 'analysis' => ['sample_rate' => 44100, 'source' => ['codec' => 'mp3'], 'loudness' => ['integrated' => -12.3], 'spectrum' => ['db' => []]]])->save();
 
-    $this->get(route('library'))->assertOk()->assertSee('DR9')->assertDontSee('Use <strong>Analyse files</strong>', false);
+    $this->get(route('library'))->assertOk()->assertSee('DR9')->assertDontSee('Use <strong>Analyse</strong> in the', false);
 });
 
-describe('the Analyse button', function () {
+describe('the Analyse entries', function () {
     it('queues one job for the signed-in user, and reports progress', function () {
         Queue::fake();
         config(['queue.default' => 'database']); // the sync driver never treats a waiting job as one to coalesce with
@@ -131,15 +131,52 @@ describe('the Analyse button', function () {
         $this->getJson(route('analysis.show'))->assertOk()->assertJson(['state' => 'queued']);
     });
 
-    it('is offered only while some file has no current analysis', function () {
+    it('is offered only while some file of the album has no current analysis', function () {
         app(LibraryScanner::class)->scan($this->user);
-        $this->get(route('library'))->assertSee('Analyse files');
+        $this->get(route('library'))->assertSee('Analyse album');
 
         Track::query()->update(['analysis_version' => TrackAnalyzer::VERSION]);
-        $this->get(route('library'))->assertDontSee('Measure dynamic range, clipping')->assertDontSee('new file(s)');
+        $this->get(route('library'))->assertDontSee('Analyse album');
 
-        Track::query()->first()->update(['analysis_version' => TrackAnalyzer::VERSION - 1]);
-        $this->get(route('library'))->assertSee('spectrum of 1 file(s)');
+        Track::query()->whereNotNull('album_id')->first()->update(['analysis_version' => TrackAnalyzer::VERSION - 1]);
+        $this->get(route('library'))->assertSee('Analyse album');
+    });
+
+    it('queues a run limited to one album or one track of the signed-in user', function () {
+        Queue::fake();
+        config(['queue.default' => 'database']);
+        app(LibraryScanner::class)->scan($this->user);
+        $track = Track::whereNotNull('album_id')->first();
+
+        $this->postJson(route('analysis.store'), ['album_id' => $track->album_id])->assertStatus(202);
+        Queue::assertPushed(AnalyzeTracks::class, fn ($job) => $job->albumId === $track->album_id && $job->trackId === null);
+    });
+
+    it('answers 404 for the album or track of somebody else, and 409 while a run is going', function () {
+        Queue::fake();
+        config(['queue.default' => 'database']);
+        app(LibraryScanner::class)->scan($this->user);
+        $other = User::factory()->create(['username' => 'bob']);
+        $theirs = Track::query()->first()->replicate();
+        $theirs->forceFill(['user_id' => $other->id, 'path' => 'x.mp3'])->save();
+
+        $this->postJson(route('analysis.store'), ['track_id' => $theirs->id])->assertNotFound();
+        Queue::assertNothingPushed();
+
+        $mine = Track::where('user_id', $this->user->id)->first();
+        $this->postJson(route('analysis.store'), ['track_id' => $mine->id])->assertStatus(202);
+        $this->postJson(route('analysis.store'), ['track_id' => $mine->id])->assertStatus(409);
+        Queue::assertPushed(AnalyzeTracks::class, 1);
+    });
+
+    it('measures only the track it was asked for', function () {
+        app(TrackAnalyzer::class)->missing() === [] || $this->markTestSkipped('ffmpeg, ffprobe or node not installed');
+        app(LibraryScanner::class)->scan($this->user);
+        $track = Track::where('title', 'First Song')->sole();
+
+        AnalyzeTracks::dispatchSync($this->user->id, null, $track->id);
+
+        expect(Track::whereNotNull('analysis')->pluck('id')->all())->toBe([$track->id]);
     });
 
     it('refuses to run inside the request with the sync queue', function () {

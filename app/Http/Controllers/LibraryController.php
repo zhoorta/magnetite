@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\AnalyzeTracks;
 use App\Models\Album;
 use App\Models\AlbumSuggestion;
 use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
 use App\Services\AlbumIdentifier;
+use App\Services\FerriteStore;
 use App\Support\FileTruth;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -39,7 +39,7 @@ class LibraryController extends Controller
             'tracks' => SharedItem::where('user_id', $me->id)->whereNotNull('track_id')->pluck('track_id')->all(),
         ];
 
-        return view('pages.library', ['albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'toAnalyse' => AnalyzeTracks::missing($me)->count(), 'suggestions' => $suggestions, 'toIdentify' => $toIdentify]);
+        return view('pages.library', ['albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'suggestions' => $suggestions, 'toIdentify' => $toIdentify, 'trashOnly' => $me->store() instanceof FerriteStore]);
     }
 
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */

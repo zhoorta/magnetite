@@ -16,7 +16,10 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-/** Measures the tracks of one user that have no (current) analysis yet, one after the other; the same work as `magnetite:analyze`. */
+/**
+ * Measures the tracks of one user that have no (current) analysis yet, one after the other; the same work as `magnetite:analyze`.
+ * With an album or a track the run is limited to that (the "Analyse" entries of the library menus).
+ */
 class AnalyzeTracks implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -25,23 +28,26 @@ class AnalyzeTracks implements ShouldQueue
 
     public int $maxExceptions = 1;
 
-    public function __construct(public int $userId) {}
+    public function __construct(public int $userId, public ?int $albumId = null, public ?int $trackId = null) {}
 
     /** Ask for an analysis. One already waiting in the queue will see every track, so nothing is added. */
-    public static function request(User $user): void
+    public static function request(User $user, ?int $albumId = null, ?int $trackId = null): void
     {
-        if (AnalysisStatus::pending($user->id) && config('queue.default') !== 'sync') {
+        // A waiting run over everything covers a limited one too; a limited run waiting would not cover anything else.
+        if (AnalysisStatus::pending($user->id) && config('queue.default') !== 'sync' && $albumId === null && $trackId === null) {
             return;
         }
 
         AnalysisStatus::queued($user->id);
-        static::dispatch($user->id);
+        static::dispatch($user->id, $albumId, $trackId);
     }
 
     /** Tracks never measured, or measured by an older version of the measurements. */
-    public static function missing(User $user)
+    public static function missing(User $user, ?int $albumId = null, ?int $trackId = null)
     {
         return Track::query()->where('user_id', $user->id)
+            ->when($albumId !== null, fn ($q) => $q->where('album_id', $albumId))
+            ->when($trackId !== null, fn ($q) => $q->whereKey($trackId))
             ->where(fn ($q) => $q->whereNull('analysis_version')->orWhere('analysis_version', '<', TrackAnalyzer::VERSION));
     }
 
@@ -63,7 +69,7 @@ class AnalyzeTracks implements ShouldQueue
             return;
         }
 
-        $tracks = static::missing($user)->with('user')->orderBy('id')->get();
+        $tracks = static::missing($user, $this->albumId, $this->trackId)->with('user')->orderBy('id')->get();
         AnalysisStatus::started($user->id, $tracks->count());
 
         $done = $failed = 0;

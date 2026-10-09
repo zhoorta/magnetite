@@ -52,17 +52,16 @@
 
                     <div class="min-w-0 flex-1">
                         <h2 class="truncate font-semibold">{{ $album->title }}</h2>
-                        <p class="mb-2 flex items-center gap-2 truncate text-sm text-muted">
-                            <span class="truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif</span>
+                        <div class="mb-2 flex items-center gap-2 text-sm text-muted">
+                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif</span>
                             <span class="ml-auto shrink-0 text-xs">shared by {{ $owner($album->user) }}</span>
-                            <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
-                                    title="Add every track of this album to a playlist"
-                                    @click="$dispatch('pick-playlist', { kind: 'album', id: {{ $album->id }}, title: @js($album->title) })">+ Playlist</button>
+                            <x-playlist-menu :item="'{ kind: \'album\', id: '.$album->id.', title: '.\Illuminate\Support\Js::from($album->title).' }'"
+                                             label="Add every track of this album to a playlist" />
                             @if ($album->user_id === $me->id)
                                 <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
                                         @click="unshare('albums', {{ $album->id }}, $el.closest('section'))">Unshare</button>
                             @endif
-                        </p>
+                        </div>
 
                         @include('pages.partials.shared-track-list')
                     </div>
@@ -81,8 +80,7 @@
                                     <span class="shrink-0 text-xs text-accent2" x-show="$store.player.current?.id === tracks[0].id"
                                           x-text="$store.player.playing ? 'playing' : 'paused'"></span>
                                 </button>
-                                <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" title="Add to a playlist"
-                                        @click="$dispatch('pick-playlist', { id: {{ $track->id }}, title: @js($track->title) })">+ Playlist</button>
+                                <x-playlist-menu :item="'{ id: '.$track->id.', title: '.\Illuminate\Support\Js::from($track->title).' }'" />
                                 <span class="shrink-0 text-xs text-muted">shared by {{ $owner($track->user) }}</span>
                                 @if ($track->user_id === $me->id)
                                     <button type="button" class="shrink-0 text-xs text-muted hover:text-accent"

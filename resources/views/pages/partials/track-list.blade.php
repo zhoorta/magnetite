@@ -1,13 +1,16 @@
 {{-- The tracks of one section. Expects `tracks` in the surrounding x-data and the helpers of the library page (including sharing). --}}
 <div class="divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
     <template x-for="(t, i) in tracks" :key="t.id">
-        <div x-show="shown(t)">
+        <div>
             <div class="flex items-center gap-2 pr-3 text-sm">
                 <button type="button"
                         class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3 text-left hover:text-accent"
                         @click="$store.player.setQueue(tracks, i)">
                     <span class="w-5 shrink-0 text-xs text-muted" x-text="i + 1"></span>
-                    <span class="flex-1 truncate" :class="$store.player.current?.id === t.id && 'font-bold'" x-text="t.title"></span>
+                    <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span class="truncate" :class="$store.player.current?.id === t.id && 'font-bold'" x-text="t.title"></span>
+                        <svg x-show="isShared('tracks', t.id)" x-cloak viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-muted" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Shared"><title>Shared on its own</title><circle cx="4" cy="8" r="1.8"/><circle cx="12" cy="3.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M5.6 7.1l4.8-2.7M5.6 8.9l4.8 2.7"/></svg>
+                    </span>
                     <span class="shrink-0 text-xs text-accent2" x-show="$store.player.current?.id === t.id"
                           x-text="$store.player.playing ? 'playing' : 'paused'"></span>
                     <span class="shrink-0 text-xs text-muted" x-show="! t.playable" title="This browser cannot decode ALAC and ffmpeg is not available to convert it">ALAC</span>
@@ -21,11 +24,15 @@
                       :class="drClass(t.truth.dr_class)" title="Dynamic range (DR): higher is more dynamic, 7 or less is heavily compressed"
                       x-text="'DR' + t.truth.dr"></span>
                 <span class="w-10 shrink-0 text-right text-xs tabular-nums text-muted" x-text="$store.player.fmt(t.duration)"></span>
-                    <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" title="Add to a playlist"
-                        @click="$dispatch('pick-playlist', { id: t.id, title: t.title })">+ Playlist</button>
-                <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" :class="isShared('tracks', t.id) && 'text-accent'"
-                            :title="isShared('tracks', t.id) ? 'Shared on its own. Click to stop sharing.' : 'Share just this track'"
-                            @click="toggleShare('tracks', t.id)" x-text="isShared('tracks', t.id) ? 'Shared' : 'Share'"></button>
+                <x-playlist-menu item="{ id: t.id, title: t.title }" />
+                <x-menu label="Actions for this track">
+                    <x-menu.item x-show="! t.truth.analyzed" title="Measure dynamic range, clipping, loudness and the spectrum of this file. The file is only read."
+                                 @click="analyse({ track_id: t.id })">Analyse file</x-menu.item>
+                    <x-menu.item @click="toggleShare('tracks', t.id)"
+                                 x-text="isShared('tracks', t.id) ? 'Stop sharing' : 'Share this track'"></x-menu.item>
+                    <hr class="my-1 border-white/10">
+                    <x-menu.item danger title="Remove this file from the library" @click="remove('tracks', t.id, t.title, 1)">Delete</x-menu.item>
+                </x-menu>
                 <button type="button" x-show="t.truth.analyzed" class="shrink-0 text-xs text-muted hover:text-accent"
                         :aria-expanded="open === t.id" title="What the measurements say about this file"
                         @click="open = open === t.id ? null : t.id">

@@ -7,7 +7,7 @@ import uploader from './upload';
 import storage from './storage';
 import { send } from './http';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
-import { playlistCreate, playlistPicker, playlistView, sharedPlaylistView } from './playlists';
+import { playlistCreate, playlistPicker, playlistStore, playlistView, sharedPlaylistView } from './playlists';
 
 const STORAGE_KEY = 'magnetite.theme';
 const VARS_KEY = 'magnetite.vars';
@@ -53,6 +53,7 @@ function readColors() {
 
 Alpine.data('uploader', uploader);
 Alpine.data('storage', storage);
+Alpine.store('playlists', playlistStore);
 Alpine.data('playlistPicker', playlistPicker);
 Alpine.data('playlistView', playlistView);
 Alpine.data('sharedPlaylistView', sharedPlaylistView);
@@ -179,11 +180,6 @@ Alpine.store('player', {
         this.saving = setTimeout(() => send('PUT', '/settings/meters', { ids: this.meterIds }), 400);
     },
 
-    /** Swap the meter in one panel; the new one starts with its own default parameters. */
-    setPanel(i, id) {
-        this.setMeters(this.meterIds.map((m, j) => (j === i ? id : m)));
-    },
-
     addPanel() {
         // With no meters, bring back the last ones, or the default.
         if (this.panels.length === 0) {
@@ -196,19 +192,26 @@ Alpine.store('player', {
         if (free && this.panels.length < MAX_PANELS) this.setMeters([...this.meterIds, free.id]);
     },
 
-    removePanel(i) {
-        if (this.meterIds.length === 1) this.lastMeters = this.meterIds;
-
-        this.setMeters(this.meterIds.filter((_, j) => j !== i));
+    hasMeter(id) {
+        return this.meterIds.includes(id);
     },
 
-    /** Visualizers a panel can switch to: its own plus any not already shown in another panel. */
-    optionsFor(i) {
-        return this.visualizerList.filter((v) => v.id === this.panels[i].id || !this.panels.some((p) => p.id === v.id));
+    /** The Meters menu: switch one meter on or off. A new one is added last; at MAX_PANELS only the shown ones can be switched off. */
+    toggleMeter(id) {
+        if (this.hasMeter(id)) {
+            if (this.meterIds.length === 1) this.lastMeters = this.meterIds;
+            this.setMeters(this.meterIds.filter((m) => m !== id));
+        } else if (this.meterIds.length < MAX_PANELS) {
+            this.setMeters([...this.meterIds, id]);
+        }
     },
 
-    get canAddPanel() {
-        return this.panels.length === 0 || (this.panels.length < MAX_PANELS && this.panels.length < this.visualizerList.length);
+    get meterLimitReached() {
+        return this.meterIds.length >= MAX_PANELS;
+    },
+
+    get maxPanels() {
+        return MAX_PANELS;
     },
 
     setQueue(tracks, index = 0) {

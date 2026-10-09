@@ -3,15 +3,44 @@ import Sortable from 'sortablejs';
 import { send } from './http';
 
 /**
- * The "add to playlist" dialog. A track row asks for it with `$dispatch('pick-playlist', { id, title })`, an album header with
- * `{ kind: 'album', id, title }`.
+ * The signed-in user's playlists, shared by the "+" dropdown of every row and by the dialog that creates a new one. An item is
+ * `{ id, title }` for a track or `{ kind: 'album', id, title }` for an album.
  */
+export const playlistStore = {
+    items: [],
+
+    /** What goes to the server: an album adds all its tracks you can play. */
+    target(item) {
+        return item.kind === 'album' ? { album_id: item.id } : { track_id: item.id };
+    },
+
+    /** What the note says after adding: `added` is true or false for a track, a count for an album. */
+    said(item, added, name) {
+        if (item.kind !== 'album') return added ? `Added to ${name}.` : `Already in ${name}.`;
+
+        return added ? `Added ${added} ${added === 1 ? 'track' : 'tracks'} to ${name}.` : `Already in ${name}.`;
+    },
+
+    /** Add the item to a playlist; the answer is the sentence to show. */
+    async add(playlist, item) {
+        const r = await send('POST', `/playlists/${playlist.id}/tracks`, this.target(item));
+
+        return r.ok ? this.said(item, r.data.added, playlist.name) : 'Could not add it.';
+    },
+};
+
+/** The "new playlist" dialog, opened by `$dispatch('pick-playlist', item)` (the "New playlist…" entry of the dropdown). */
 export function playlistPicker(playlists) {
+    Alpine.store('playlists').items = playlists;
+
     return {
-        playlists,
         item: null,
         name: '',
         note: '',
+
+        get playlists() {
+            return Alpine.store('playlists').items;
+        },
 
         open(item) {
             this.item = item;
@@ -23,36 +52,23 @@ export function playlistPicker(playlists) {
             this.item = null;
         },
 
-        /** What goes to the server: an album adds all its tracks you can play. */
-        get target() {
-            return this.item.kind === 'album' ? { album_id: this.item.id } : { track_id: this.item.id };
-        },
-
-        /** What the note says after adding: `added` is true or false for a track, a count for an album. */
-        said(added, name) {
-            if (this.item.kind !== 'album') return added ? `Added to ${name}.` : `Already in ${name}.`;
-
-            return added ? `Added ${added} ${added === 1 ? 'track' : 'tracks'} to ${name}.` : `Already in ${name}.`;
-        },
-
         async add(playlist) {
-            const r = await send('POST', `/playlists/${playlist.id}/tracks`, this.target);
-            this.note = r.ok ? this.said(r.data.added, playlist.name) : 'Could not add it.';
-            if (r.ok) setTimeout(() => this.close(), 900);
+            this.note = await Alpine.store('playlists').add(playlist, this.item);
+            setTimeout(() => this.close(), 900);
         },
 
         async create() {
             const name = this.name.trim();
             if (!name) return;
 
-            const r = await send('POST', '/playlists', { name, ...this.target });
+            const r = await send('POST', '/playlists', { name, ...Alpine.store('playlists').target(this.item) });
             if (!r.ok) {
                 this.note = 'Could not create it.';
 
                 return;
             }
 
-            this.playlists = [...this.playlists, { id: r.data.id, name: r.data.name }].sort((a, b) => a.name.localeCompare(b.name));
+            Alpine.store('playlists').items = [...this.playlists, { id: r.data.id, name: r.data.name }].sort((a, b) => a.name.localeCompare(b.name));
             this.note = `Created ${r.data.name}.`;
             setTimeout(() => this.close(), 900);
         },

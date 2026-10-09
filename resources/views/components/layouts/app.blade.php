@@ -96,26 +96,38 @@
                         </div>
                     </div>
                     <div class="ml-auto flex items-center gap-2">
-                        <template x-for="(panel, i) in $store.player.panels" :key="i">
-                            <span class="flex items-center">
-                                <select class="rounded-theme border border-white/10 bg-bg px-2 py-1 text-xs"
-                                        :value="panel.id"
-                                        @change="$store.player.setPanel(i, $event.target.value)">
-                                    <template x-for="v in $store.player.optionsFor(i)" :key="v.id">
-                                        <option :value="v.id" x-text="v.label" :selected="v.id === panel.id"></option>
-                                    </template>
-                                </select>
-                                <button type="button" title="Remove this meter"
-                                        class="px-1 text-xs text-muted hover:text-accent"
-                                        @click="$store.player.removePanel(i)">&times;</button>
-                            </span>
-                        </template>
-                        <button type="button" x-show="$store.player.canAddPanel" :title="$store.player.panels.length ? 'Show another meter' : 'Show the meters again'"
-                                class="rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
-                                @click="$store.player.addPanel()" x-text="$store.player.panels.length ? '+' : 'Meters'"></button>
-                        <button type="button" class="rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
-                                @click="$store.player.expanded = ! $store.player.expanded"
-                                x-text="$store.player.expanded ? 'Close' : 'Full screen'"></button>
+                        <x-menu up label="Meters" width="w-56">
+                            <x-slot:trigger>
+                                <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu"
+                                        title="Choose the meters (M hides or shows them)" aria-label="Meters"
+                                        class="flex items-center gap-1.5 rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
+                                        :class="$store.player.panels.length && 'text-accent'">
+                                    <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
+                                        <rect x="1" y="8" width="3" height="7" rx=".5"/><rect x="6.5" y="2" width="3" height="13" rx=".5"/><rect x="12" y="5" width="3" height="10" rx=".5"/>
+                                    </svg>
+                                    <span class="tabular-nums" x-text="$store.player.panels.length"></span>
+                                </button>
+                            </x-slot:trigger>
+                            <p class="px-3 pb-1 pt-0.5 text-xs text-muted" x-text="'Up to ' + $store.player.maxPanels + ' at once'"></p>
+                            <template x-for="v in $store.player.visualizerList" :key="v.id">
+                                <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)"
+                                        :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
+                                        class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40"
+                                        @click.stop="$store.player.toggleMeter(v.id)">
+                                    <span class="w-4 text-accent" x-text="$store.player.hasMeter(v.id) ? '✓' : ''"></span>
+                                    <span x-text="v.label"></span>
+                                </button>
+                            </template>
+                        </x-menu>
+                        <button type="button" class="rounded-theme border border-white/10 p-1.5 hover:text-accent"
+                                :title="$store.player.expanded ? 'Close full screen (F)' : 'Full screen (F)'"
+                                :aria-label="$store.player.expanded ? 'Close full screen' : 'Full screen'"
+                                @click="$store.player.expanded = ! $store.player.expanded">
+                            <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path x-show="! $store.player.expanded" d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/>
+                                <path x-show="$store.player.expanded" x-cloak d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"/>
+                            </svg>
+                        </button>
                         <button type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
                                 class="hidden rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent sm:block"
                                 @click="$store.player.helpOpen = true">?</button>

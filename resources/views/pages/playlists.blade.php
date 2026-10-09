@@ -1,6 +1,6 @@
 <x-layouts.app title="Playlists · Magnetite">
     <h1 class="mb-1 text-2xl font-semibold">Playlists</h1>
-    <p class="mb-6 text-sm text-muted">Only you see your playlists. Add tracks with the + Playlist button in your library or in the shared music.</p>
+    <p class="mb-6 text-sm text-muted">Only you see your playlists. Add tracks with the + button in your library or in the shared music.</p>
 
     <form x-data="playlistCreate()" @submit.prevent="create()" class="mb-6 flex gap-2">
         <input type="text" x-model="name" maxlength="120" placeholder="New playlist" aria-label="Name of the new playlist"

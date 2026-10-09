@@ -11,8 +11,7 @@
             <span class="shrink-0 text-xs text-muted" x-show="! t.playable" title="This browser cannot decode ALAC and ffmpeg is not available to convert it">ALAC</span>
             <span class="w-10 shrink-0 text-right text-xs tabular-nums text-muted" x-text="$store.player.fmt(t.duration)"></span>
         </button>
-        <button type="button" class="ml-2 shrink-0 text-xs text-muted hover:text-accent" title="Add to a playlist"
-                @click="$dispatch('pick-playlist', { id: t.id, title: t.title })">+ Playlist</button>
+        <x-playlist-menu item="{ id: t.id, title: t.title }" />
         </div>
     </template>
 </div>
