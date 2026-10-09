@@ -6,9 +6,11 @@ use App\Models\Album;
 use App\Models\User;
 use App\Services\CoverFinder;
 use App\Support\CoverStatus;
+use DateTimeInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Sleep;
@@ -17,7 +19,7 @@ use Throwable;
 /** Looks up the missing covers of one user's albums online, one album per second (MusicBrainz asks for no more). */
 class FindCovers implements ShouldQueue
 {
-    use Dispatchable, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 0;
 
@@ -46,6 +48,12 @@ class FindCovers implements ShouldQueue
     public function middleware(): array
     {
         return [(new WithoutOverlapping("magnetite-find-covers-{$this->userId}"))->releaseAfter(15)->expireAfter(6 * 3600)];
+    }
+
+    /** A job that finds the lock taken is released and tried again; without this it would fail on the first release (one attempt by default). */
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addHours(12);
     }
 
     public function handle(CoverFinder $finder): void
