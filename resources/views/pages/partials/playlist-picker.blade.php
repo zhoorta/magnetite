@@ -1,12 +1,12 @@
-{{-- "Add to playlist" dialog, opened by `$dispatch('pick-playlist', { id, title })` from a track row. --}}
+{{-- "Add to playlist" dialog, opened by `$dispatch('pick-playlist', { id, title })` from a track row, or `{ kind: 'album', id, title }` from an album. --}}
 <div x-data="playlistPicker(@js(auth()->user()->playlists()->orderBy('name')->get(['id', 'name'])))"
      @pick-playlist.window="open($event.detail)" @keydown.escape.window="close()"
-     x-show="track" x-cloak
+     x-show="item" x-cloak
      class="fixed inset-0 z-20 flex items-center justify-center bg-black/60 p-4" @click.self="close()"
      role="dialog" aria-label="Add to a playlist">
     <div class="w-full max-w-sm rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl">
-        <h2 class="mb-1 font-semibold">Add to a playlist</h2>
-        <p class="mb-3 truncate text-xs text-muted" x-text="track?.title"></p>
+        <h2 class="mb-1 font-semibold" x-text="item?.kind === 'album' ? 'Add the album to a playlist' : 'Add to a playlist'"></h2>
+        <p class="mb-3 truncate text-xs text-muted" x-text="item?.title"></p>
 
         <ul class="mb-3 max-h-56 divide-y divide-white/10 overflow-y-auto rounded-theme border border-white/10">
             <template x-for="p in playlists" :key="p.id">

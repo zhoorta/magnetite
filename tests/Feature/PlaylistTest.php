@@ -234,3 +234,73 @@ describe('sharing a playlist', function () {
         expect(SharedItem::whereNotNull('playlist_id')->count())->toBe(0);
     });
 });
+
+describe('adding a whole album', function () {
+    beforeEach(function () {
+        $this->album = $this->one->album;
+        $this->mine = $this->alice->playlists()->create(['name' => 'Mine']);
+    });
+
+    it('adds every track in album order, and again adds nothing', function () {
+        $this->actingAs($this->alice);
+
+        $this->postJson(route('playlists.tracks.store', $this->mine), ['album_id' => $this->album->id])->assertOk()->assertJson(['added' => 2]);
+        expect($this->mine->tracks->pluck('title')->all())->toBe(['First Song', 'Second Song']);
+
+        $this->postJson(route('playlists.tracks.store', $this->mine), ['album_id' => $this->album->id])->assertOk()->assertJson(['added' => 0]);
+        expect($this->mine->tracks()->count())->toBe(2);
+    });
+
+    it('only adds the tracks that are not in the playlist yet, after the existing ones', function () {
+        $this->actingAs($this->alice);
+        $this->mine->tracks()->attach($this->two->id, ['position' => 1]);
+
+        $this->postJson(route('playlists.tracks.store', $this->mine), ['album_id' => $this->album->id])->assertOk()->assertJson(['added' => 1]);
+
+        expect($this->mine->fresh()->tracks->pluck('title')->all())->toBe(['Second Song', 'First Song']);
+    });
+
+    it('creates a playlist from an album', function () {
+        $id = $this->actingAs($this->alice)->postJson(route('playlists.store'), ['name' => 'From album', 'album_id' => $this->album->id])->assertCreated()->json('id');
+
+        expect(Playlist::find($id)->tracks)->toHaveCount(2);
+    });
+
+    it('refuses an album you cannot see, and leaves no empty playlist behind', function () {
+        $this->actingAs($this->bob);
+        $bobs = $this->bob->playlists()->create(['name' => 'Bob']);
+
+        $this->postJson(route('playlists.tracks.store', $bobs), ['album_id' => $this->album->id])->assertNotFound();
+        $this->postJson(route('playlists.store'), ['name' => 'Sneaky', 'album_id' => $this->album->id])->assertNotFound();
+        $this->postJson(route('playlists.store'), ['name' => 'Sneaky 2', 'track_id' => $this->one->id])->assertNotFound();
+
+        expect($bobs->tracks()->count())->toBe(0)->and(Playlist::where('name', 'like', 'Sneaky%')->count())->toBe(0);
+    });
+
+    it('adds only the tracks you can play from a partly shared album', function () {
+        SharedItem::create(['user_id' => $this->alice->id, 'track_id' => $this->one->id]);
+        $bobs = $this->bob->playlists()->create(['name' => 'Bob']);
+
+        $this->actingAs($this->bob)->postJson(route('playlists.tracks.store', $bobs), ['album_id' => $this->album->id])->assertOk()->assertJson(['added' => 1]);
+
+        expect($bobs->tracks->pluck('id')->all())->toBe([$this->one->id]);
+
+        // And a whole shared album adds everything.
+        SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->album->id]);
+        $this->postJson(route('playlists.tracks.store', $bobs), ['album_id' => $this->album->id])->assertOk()->assertJson(['added' => 1]);
+        expect($bobs->tracks()->count())->toBe(2);
+    });
+
+    it('needs a track or an album', function () {
+        $this->actingAs($this->alice)->postJson(route('playlists.tracks.store', $this->mine), [])->assertUnprocessable();
+    });
+
+    it('offers + Playlist on albums in the library and in the shared music', function () {
+        SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->album->id]);
+
+        $this->actingAs($this->alice);
+        foreach ([route('library'), route('shared')] as $url) {
+            $this->get($url)->assertOk()->assertSee('Add every track of this album to a playlist');
+        }
+    });
+});

@@ -67,6 +67,9 @@
                                       title="Album dynamic range: the average of the track scores. Higher is more dynamic.">DR{{ $album->dr }}</span>
                             @endif
                             <button type="button" class="ml-auto shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
+                                    title="Add every track of this album to a playlist"
+                                    @click="$dispatch('pick-playlist', { kind: 'album', id: {{ $album->id }}, title: @js($album->title) })">+ Playlist</button>
+                            <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
                                     :class="isShared('albums', {{ $album->id }}) && 'text-accent'"
                                     :title="isShared('albums', {{ $album->id }}) ? 'Shared with everyone who has an account. Click to stop sharing.' : 'Share this album with everyone who has an account'"
                                     @click="toggleShare('albums', {{ $album->id }})"

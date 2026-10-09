@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Album;
 use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
@@ -45,13 +46,16 @@ class PlaylistController extends Controller
     /** Create a playlist, optionally with a first track (the "new playlist" entry of the add menu). */
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:120'], 'track_id' => ['nullable', 'integer']]);
+        $data = $request->validate(['name' => ['required', 'string', 'max:120'], 'track_id' => ['nullable', 'integer'], 'album_id' => ['nullable', 'integer']]);
+
+        // Look the first item up before creating anything, so a bad id leaves no empty playlist behind.
+        $track = isset($data['track_id']) ? Track::visibleTo($request->user())->findOrFail($data['track_id']) : null;
+        $album = isset($data['album_id']) ? Album::visibleTo($request->user())->findOrFail($data['album_id']) : null;
 
         $playlist = $request->user()->playlists()->create(['name' => trim($data['name'])]);
 
-        if (isset($data['track_id'])) {
-            $this->attach($request, $playlist, (int) $data['track_id']);
-        }
+        $track && $this->attach($playlist, $track);
+        $album && $this->attachAlbum($request, $playlist, $album);
 
         return response()->json(['id' => $playlist->id, 'name' => $playlist->name, 'url' => route('playlists.show', $playlist)], 201);
     }
@@ -103,9 +107,17 @@ class PlaylistController extends Controller
     public function addTrack(Request $request, Playlist $playlist): JsonResponse
     {
         $this->own($request, $playlist);
-        $data = $request->validate(['track_id' => ['required', 'integer']]);
+        $data = $request->validate(['track_id' => ['required_without:album_id', 'integer'], 'album_id' => ['required_without:track_id', 'integer']]);
 
-        return response()->json(['added' => $this->attach($request, $playlist, (int) $data['track_id'])]);
+        if (isset($data['album_id'])) {
+            $album = Album::visibleTo($request->user())->findOrFail($data['album_id']);
+
+            return response()->json(['added' => $this->attachAlbum($request, $playlist, $album)]);
+        }
+
+        $track = Track::visibleTo($request->user())->findOrFail($data['track_id']);
+
+        return response()->json(['added' => $this->attach($playlist, $track)]);
     }
 
     public function removeTrack(Request $request, Playlist $playlist, int $track): JsonResponse
@@ -138,11 +150,9 @@ class PlaylistController extends Controller
         abort_unless($request->user()->can('manage', $playlist), 404);
     }
 
-    /** Adds a track the user may play; false when it was already in the playlist. */
-    private function attach(Request $request, Playlist $playlist, int $trackId): bool
+    /** Adds a track (already checked as playable by the user); false when it was already in the playlist. */
+    private function attach(Playlist $playlist, Track $track): bool
     {
-        $track = Track::visibleTo($request->user())->findOrFail($trackId);
-
         if ($playlist->tracks()->whereKey($track->id)->exists()) {
             return false;
         }
@@ -150,5 +160,17 @@ class PlaylistController extends Controller
         $playlist->tracks()->attach($track->id, ['position' => $playlist->nextPosition()]);
 
         return true;
+    }
+
+    /** Adds the tracks of an album that the user may play, in album order, skipping those already in the playlist. Returns how many. */
+    private function attachAlbum(Request $request, Playlist $playlist, Album $album): int
+    {
+        $added = 0;
+
+        foreach ($album->tracks()->visibleTo($request->user())->get() as $track) {
+            $added += (int) $this->attach($playlist, $track);
+        }
+
+        return $added;
     }
 }

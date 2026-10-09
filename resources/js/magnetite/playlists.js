@@ -1,27 +1,42 @@
 import { Alpine, Livewire } from '../../../vendor/livewire/livewire/dist/livewire.esm';
 import { send } from './http';
 
-/** The "add to playlist" dialog. A track row asks for it with `$dispatch('pick-playlist', track)`. */
+/**
+ * The "add to playlist" dialog. A track row asks for it with `$dispatch('pick-playlist', { id, title })`, an album header with
+ * `{ kind: 'album', id, title }`.
+ */
 export function playlistPicker(playlists) {
     return {
         playlists,
-        track: null,
+        item: null,
         name: '',
         note: '',
 
-        open(track) {
-            this.track = track;
+        open(item) {
+            this.item = item;
             this.name = '';
             this.note = '';
         },
 
         close() {
-            this.track = null;
+            this.item = null;
+        },
+
+        /** What goes to the server: an album adds all its tracks you can play. */
+        get target() {
+            return this.item.kind === 'album' ? { album_id: this.item.id } : { track_id: this.item.id };
+        },
+
+        /** What the note says after adding: `added` is true or false for a track, a count for an album. */
+        said(added, name) {
+            if (this.item.kind !== 'album') return added ? `Added to ${name}.` : `Already in ${name}.`;
+
+            return added ? `Added ${added} ${added === 1 ? 'track' : 'tracks'} to ${name}.` : `Already in ${name}.`;
         },
 
         async add(playlist) {
-            const r = await send('POST', `/playlists/${playlist.id}/tracks`, { track_id: this.track.id });
-            this.note = !r.ok ? 'Could not add it.' : r.data.added ? `Added to ${playlist.name}.` : `Already in ${playlist.name}.`;
+            const r = await send('POST', `/playlists/${playlist.id}/tracks`, this.target);
+            this.note = r.ok ? this.said(r.data.added, playlist.name) : 'Could not add it.';
             if (r.ok) setTimeout(() => this.close(), 900);
         },
 
@@ -29,7 +44,7 @@ export function playlistPicker(playlists) {
             const name = this.name.trim();
             if (!name) return;
 
-            const r = await send('POST', '/playlists', { name, track_id: this.track.id });
+            const r = await send('POST', '/playlists', { name, ...this.target });
             if (!r.ok) {
                 this.note = 'Could not create it.';
 
@@ -37,7 +52,7 @@ export function playlistPicker(playlists) {
             }
 
             this.playlists = [...this.playlists, { id: r.data.id, name: r.data.name }].sort((a, b) => a.name.localeCompare(b.name));
-            this.note = `Added to ${r.data.name}.`;
+            this.note = `Created ${r.data.name}.`;
             setTimeout(() => this.close(), 900);
         },
     };

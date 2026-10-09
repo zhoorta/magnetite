@@ -55,6 +55,9 @@
                         <p class="mb-2 flex items-center gap-2 truncate text-sm text-muted">
                             <span class="truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif</span>
                             <span class="ml-auto shrink-0 text-xs">shared by {{ $owner($album->user) }}</span>
+                            <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
+                                    title="Add every track of this album to a playlist"
+                                    @click="$dispatch('pick-playlist', { kind: 'album', id: {{ $album->id }}, title: @js($album->title) })">+ Playlist</button>
                             @if ($album->user_id === $me->id)
                                 <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
                                         @click="unshare('albums', {{ $album->id }}, $el.closest('section'))">Unshare</button>
