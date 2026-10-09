@@ -4,11 +4,12 @@ import { visualizers } from './visualizers';
 import { layout, MAX_PANELS } from './layout';
 import themes from './themes.json';
 import uploader from './upload';
+import { send } from './http';
 import { playlistCreate, playlistPicker, playlistView, sharedPlaylistView } from './playlists';
 
 const STORAGE_KEY = 'magnetite.theme';
 const VARS_KEY = 'magnetite.vars';
-const METERS_KEY = 'magnetite.meters'; // 'off' when the person removed every meter; a theme change must not bring them back
+const DEFAULT_METERS = ['vu-wide']; // what a person sees until they choose their own
 
 function safeStorage(fn) {
     try {
@@ -62,7 +63,9 @@ Alpine.store('player', {
     failedIndex: null,
     themes,
     themeId: themes[0].id,
-    panels: [], // the visible meters: [{ id, params }], at most MAX_PANELS; set by the theme, editable in the player
+    panels: [], // the visible meters: [{ id, params }], at most MAX_PANELS; the person's own list, styled by the theme
+    meterIds: DEFAULT_METERS, // the same list as ids only; this is what is saved for a signed-in user
+    lastMeters: null, // what was showing before the meters were switched off, for the M key and the Meters button
 
     // internals
     engine: null,
@@ -96,6 +99,10 @@ Alpine.store('player', {
         // Chrome/Firefox cannot decode everything (e.g. ALAC in .m4a). Say so and move on.
         audio.addEventListener('error', () => this.fail());
 
+        // A signed-in user's saved list comes with the page (see the head partial); null means they never chose.
+        const mine = window.magnetite?.meters;
+        this.meterIds = Array.isArray(mine) ? mine : DEFAULT_METERS;
+
         const saved = safeStorage((s) => s.getItem(STORAGE_KEY));
         this.setTheme(themes.find((t) => t.id === saved)?.id ?? this.themeId);
 
@@ -110,7 +117,7 @@ Alpine.store('player', {
         if (!theme) return;
 
         this.themeId = id;
-        this.setPanels(this.metersOff() ? [] : this.themePanels(theme));
+        this.setMeters(this.meterIds, false); // same meters, styled by the new theme
         applyTheme(theme);
         this.colors = readColors();
         safeStorage((s) => {
@@ -120,42 +127,52 @@ Alpine.store('player', {
         });
     },
 
-    themePanels(theme) {
-        return (theme.visualizers ?? [theme.visualizer]).map(({ id, params }) => ({ id, params }));
+    /** The meters this theme gives a look to (palette tweaks for one meter); it does not choose which meters show. */
+    styles(theme) {
+        return theme.visualizers ?? (theme.visualizer ? [theme.visualizer] : []);
     },
 
-    metersOff() {
-        return safeStorage((s) => s.getItem(METERS_KEY)) === 'off';
+    /** Show these meters (known ones only, no repeats, at most MAX_PANELS), and remember them for a signed-in user. */
+    setMeters(ids, save = true) {
+        const theme = themes.find((t) => t.id === this.themeId);
+        const wanted = [...new Set(ids)].filter((id) => visualizers[id]).slice(0, MAX_PANELS);
+
+        this.meterIds = wanted;
+        this.panels = wanted.map((id) => ({ id, params: this.styles(theme).find((v) => v.id === id)?.params ?? {} }));
+        this.needs = [...new Set(this.panels.flatMap((p) => visualizers[p.id].needs))];
+
+        if (save) this.saveMeters();
     },
 
-    setPanels(panels) {
-        this.panels = panels;
-        this.needs = [...new Set(panels.flatMap((p) => visualizers[p.id].needs))];
+    /** Saved on the server for the signed-in user, so the same meters come back after a reload or a new login. */
+    saveMeters() {
+        if (!window.magnetite?.signedIn) return;
+
+        clearTimeout(this.saving);
+        this.saving = setTimeout(() => send('PUT', '/settings/meters', { ids: this.meterIds }), 400);
     },
 
     /** Swap the meter in one panel; the new one starts with its own default parameters. */
     setPanel(i, id) {
-        this.setPanels(this.panels.map((p, j) => (j === i ? { id, params: {} } : p)));
+        this.setMeters(this.meterIds.map((m, j) => (j === i ? id : m)));
     },
 
     addPanel() {
-        // With no meters, bring back the theme's own.
+        // With no meters, bring back the last ones, or the default.
         if (this.panels.length === 0) {
-            safeStorage((s) => s.removeItem(METERS_KEY));
-            this.setPanels(this.themePanels(themes.find((t) => t.id === this.themeId)));
+            this.setMeters(this.lastMeters ?? DEFAULT_METERS);
 
             return;
         }
 
-        const free = this.visualizerList.find((v) => !this.panels.some((p) => p.id === v.id));
-        if (free && this.panels.length < MAX_PANELS) this.setPanels([...this.panels, { id: free.id, params: {} }]);
+        const free = this.visualizerList.find((v) => !this.meterIds.includes(v.id));
+        if (free && this.panels.length < MAX_PANELS) this.setMeters([...this.meterIds, free.id]);
     },
 
     removePanel(i) {
-        this.setPanels(this.panels.filter((_, j) => j !== i));
+        if (this.meterIds.length === 1) this.lastMeters = this.meterIds;
 
-        // Removing the last meter is a choice worth remembering; the player then shows the cover and title instead.
-        if (this.panels.length === 0) safeStorage((s) => s.setItem(METERS_KEY, 'off'));
+        this.setMeters(this.meterIds.filter((_, j) => j !== i));
     },
 
     /** Visualizers a panel can switch to: its own plus any not already shown in another panel. */
@@ -223,11 +240,12 @@ Alpine.store('player', {
         if (this.duration) el.currentTime = Math.max(0, Math.min(this.duration, el.currentTime + seconds));
     },
 
-    /** All meters off, or the theme's meters back; the same switch as the button in the player. */
+    /** All meters off, or the last ones back; the same switch as the buttons in the player. */
     toggleMeters() {
         if (this.panels.length === 0) return this.addPanel();
 
-        for (let i = this.panels.length - 1; i >= 0; i--) this.removePanel(i);
+        this.lastMeters = this.meterIds;
+        this.setMeters([]);
     },
 
     /**

@@ -5,7 +5,7 @@
             <h1 class="text-4xl font-semibold leading-tight md:text-5xl">The look is <span class="text-accent">the product.</span></h1>
             <p class="mt-5 max-w-prose text-lg text-muted">
                 A player that keeps playing while you move around, with live meters that measure properly, and themes
-                that are one small file: palette, font, corners and which meters to show.
+                that are one small file: palette, font and corners, and a look for each meter.
             </p>
             <div class="mt-8 flex flex-wrap gap-3 text-sm">
                 <a href="{{ route('library') }}" class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Open the library</a>
@@ -37,7 +37,7 @@
                         </template>
                     </div>
                     <div class="mt-3 text-xs" :style="{ color: t.colors.muted }"
-                         x-text="(t.visualizers ?? [t.visualizer]).map((v) => v.id).join(' + ')"></div>
+                         x-text="$store.player.styles(t).map((v) => v.id).join(' + ')"></div>
                 </button>
             </template>
         </div>
@@ -80,7 +80,7 @@
                 ['Never stops', 'The player lives in a persistent block. Moving between pages does not recreate the audio element or the audio graph, so the music and the meters carry on.'],
                 ['Meters that measure', 'Momentary, short-term and integrated LUFS, true peak, phase correlation and a goniometer, computed sample by sample in an AudioWorklet and checked against known test tones.'],
                 ['Up to four at once', 'Show a pair of wide VU meters next to a scope, or a third-octave analyser above a spectrogram. Each one draws in its own cell, in the dock or in full screen.'],
-                ['Vintage and instrument', 'Needle dials, LED bars, an amber receiver, a magic eye tube, wide cassette-deck meters. Each is a small module that draws on one canvas.'],
+                ['Vintage and instrument', 'Needle dials, LED meters, a magic eye tube, wide cassette-deck meters. Each is a small module that draws on one canvas.'],
                 ['File truth', 'Decodes every file once and says what it really is: likely lossy source, upsampled, clipped, very compressed, over 0 dBTP, duplicates. Dynamic range per track and album.'],
                 ['Your files, untouched', 'The library is read from a folder and never written to. Files stream with range support and strict headers, and ALAC is converted to FLAC on first play and cached.'],
             ] as [$title, $text])
@@ -95,7 +95,7 @@
     <section class="py-10">
         <h2 class="text-2xl font-semibold">The meters</h2>
         <div class="mt-4 flex flex-wrap gap-2 text-xs">
-            @foreach (['Bars', 'Radial', 'Scope', 'Spectrogram', 'Third-octave', 'VU needle', 'VU LEDs', 'Wide meters', 'Amber receiver', 'Magic eye', 'Goniometer', 'Loudness'] as $meter)
+            @foreach (['Scope', 'Spectrogram', 'Third-octave', 'VU needle', 'VU LEDs', 'Wide meters', 'Magic eye', 'Goniometer', 'Loudness'] as $meter)
                 <span class="rounded-full border border-white/10 px-3 py-1 text-muted">{{ $meter }}</span>
             @endforeach
         </div>

@@ -3,6 +3,7 @@
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\ScanController;
 use App\Http\Controllers\ShareController;
@@ -28,6 +29,8 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/share/{kind}/{id}', [ShareController::class, 'store'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('share.store');
     Route::delete('/share/{kind}/{id}', [ShareController::class, 'destroy'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('share.destroy');
+
+    Route::put('/settings/meters', [MeterSettingController::class, 'update'])->name('settings.meters');
 
     Route::get('/playlists', [PlaylistController::class, 'index'])->name('playlists');
     Route::post('/playlists', [PlaylistController::class, 'store'])->name('playlists.store');

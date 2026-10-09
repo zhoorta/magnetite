@@ -106,7 +106,7 @@
     },
     {
         "id": "amber-receiver",
-        "name": "Amber receiver",
+        "name": "Amber",
         "colors": {
             "bg": "#0d0905",
             "surface": "#1a1208",
@@ -116,10 +116,6 @@
             "accent2": "#ffb347"
         },
         "radius": "0.35rem",
-        "font": "'Helvetica Neue', Helvetica, Arial, sans-serif",
-        "visualizer": {
-            "id": "vu-receiver",
-            "params": {}
-        }
+        "font": "'Helvetica Neue', Helvetica, Arial, sans-serif"
     }
 ]

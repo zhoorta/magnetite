@@ -16,5 +16,9 @@
         }
     } catch {}
 </script>
+{{-- What the player needs to know about the person: the meters they chose (null: they never did). Read once, when the player starts. --}}
+<script data-navigate-once>
+    window.magnetite = @json(['signedIn' => auth()->check(), 'meters' => auth()->user()?->meters]);
+</script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 @livewireScriptConfig

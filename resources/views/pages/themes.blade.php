@@ -14,12 +14,12 @@
                         <span class="h-5 w-5 rounded-full border border-black/20" :style="{ background: t.colors[c] }"></span>
                     </template>
                 </div>
-                <div class="mt-3 text-xs" :style="{ color: t.colors.muted }" x-text="'visualizer: ' + (t.visualizers ?? [t.visualizer]).map((v) => v.id).join(' + ')"></div>
+                <div class="mt-3 text-xs" :style="{ color: t.colors.muted }" x-show="$store.player.styles(t).length" x-text="'styles: ' + $store.player.styles(t).map((v) => v.id).join(' + ')"></div>
             </button>
         </template>
     </div>
 
     <p class="mt-6 text-sm text-muted">
-        A theme is one JSON object: palette, radius, font and a default visualizer with its parameters.
+        A theme is one JSON object: palette, radius, font, and optionally a look (parameters) for some of the meters. Which meters show is your own choice, saved with your account.
     </p>
 </x-layouts.app>
