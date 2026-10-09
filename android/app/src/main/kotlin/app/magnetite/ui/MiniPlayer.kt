@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,7 +36,7 @@ private fun clock(ms: Long): String {
 
 /** Bar at the bottom of every screen once something has been played: title, controls and a seek bar. */
 @Composable
-fun MiniPlayer(player: PlayerController, onOpen: () -> Unit) {
+fun MiniPlayer(player: PlayerController, meters: List<String>, showMeters: Boolean, onPickMeters: () -> Unit, onOpen: () -> Unit) {
     val title = player.title ?: return
     var dragging by remember { mutableStateOf<Float?>(null) }
 
@@ -49,7 +50,23 @@ fun MiniPlayer(player: PlayerController, onOpen: () -> Unit) {
 
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant) {
         Column {
-            MeterPanel(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { LevelBars(player.isPlaying) }
+            if (showMeters && meters.isNotEmpty()) {
+                // All chosen meters stack here; a tap chooses meters (the screen stays), a swipe up opens Now Playing.
+                var swiped by remember { mutableStateOf(0f) }
+                MeterPanel(
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onPickMeters).pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragStart = { swiped = 0f },
+                            onVerticalDrag = { change, dy -> change.consume(); swiped += dy },
+                            onDragEnd = { if (swiped < -40f) onOpen() },
+                        )
+                    },
+                ) {
+                    Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
+                        meters.forEach { MeterView(it, player.isPlaying, compact = true) }
+                    }
+                }
+            }
             Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).clickable(onClick = onOpen)) {
                     Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
@@ -109,7 +126,7 @@ private fun level(v: Float): Float = if (v <= 0f) 0f else ((20f * kotlin.math.lo
  * Redrawn every frame only while playing; paused or stopped, the bars fall to nothing and drawing stops.
  */
 @Composable
-private fun LevelBars(playing: Boolean, modifier: Modifier = Modifier) {
+fun LevelBars(playing: Boolean, modifier: Modifier = Modifier, barHeight: androidx.compose.ui.unit.Dp = 18.dp) {
     var rms by remember { mutableStateOf(floatArrayOf(0f, 0f)) }
     var peak by remember { mutableStateOf(floatArrayOf(0f, 0f)) }
     LaunchedEffect(playing) {
@@ -138,7 +155,7 @@ private fun LevelBars(playing: Boolean, modifier: Modifier = Modifier) {
             Text("R", style = label, color = ink)
         }
         // Segmented like an LED meter: green up to -18 dB, amber to -6 dB, red above. Lit segments follow the RMS level; the peak segment holds.
-        androidx.compose.foundation.Canvas(Modifier.weight(1f).height(18.dp)) {
+        androidx.compose.foundation.Canvas(Modifier.weight(1f).height(barHeight)) {
             val n = 40
             val gap = 2f
             val segW = (size.width - gap * (n - 1)) / n

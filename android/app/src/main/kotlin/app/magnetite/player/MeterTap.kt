@@ -21,7 +21,7 @@ object MeterTap : BaseAudioProcessor() {
 
     fun snapshot(): Levels = latest
 
-    private const val RING = 4096
+    private const val RING = 8192
     private val ring = FloatArray(RING)
     @Volatile private var written = 0L
 
@@ -41,6 +41,7 @@ object MeterTap : BaseAudioProcessor() {
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         encoding = inputAudioFormat.encoding
         channels = inputAudioFormat.channelCount
+        if (sampleRate != inputAudioFormat.sampleRate || Loudness.rate == 0) Loudness.configure(inputAudioFormat.sampleRate)
         sampleRate = inputAudioFormat.sampleRate
         return inputAudioFormat
     }
@@ -73,6 +74,8 @@ object MeterTap : BaseAudioProcessor() {
         var w = written
         for (f in 0 until frames) {
             var mono = 0f
+            var fl = 0f
+            var fr = 0f
             for (c in 0 until channels) {
                 val at = start + (f * channels + c) * step
                 val v = when (encoding) {
@@ -83,6 +86,7 @@ object MeterTap : BaseAudioProcessor() {
                 }
                 // Mono is shown on both sides; with more than two channels the first two are measured.
                 if (c < 2) mono += v
+                if (c == 0) { fl = v; if (channels == 1) fr = v } else if (c == 1) fr = v
                 val side = if (channels == 1) -1 else c
                 if (side > 1) continue
                 for (s in (if (side < 0) 0..1 else side..side)) {
@@ -91,6 +95,7 @@ object MeterTap : BaseAudioProcessor() {
                     sq[s] += (v * v).toDouble()
                 }
             }
+            Loudness.process(fl, fr)
             ring[(w and (RING - 1).toLong()).toInt()] = mono / minOf(channels, 2)
             w++
         }

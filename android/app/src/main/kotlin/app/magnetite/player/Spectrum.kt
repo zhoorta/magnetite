@@ -7,7 +7,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Log-spaced spectrum bands (in dBFS) of the latest audio from [MeterTap]. One instance per screen; not thread-safe. */
-class Spectrum(private val bands: Int = 48, private val n: Int = 2048) {
+class Spectrum(private val bands: Int = 48, private val n: Int = 2048, private val lo: Double = 40.0, private val topHz: Double = 16000.0) {
     private val window = FloatArray(n) { (0.5 - 0.5 * cos(2 * PI * it / (n - 1))).toFloat() }
     private val re = FloatArray(n)
     private val im = FloatArray(n)
@@ -19,8 +19,7 @@ class Spectrum(private val bands: Int = 48, private val n: Int = 2048) {
         for (i in 0 until n) { re[i] = samples[i] * window[i]; im[i] = 0f }
         fft()
         val rate = MeterTap.sampleRate
-        val lo = 40.0
-        val hi = minOf(16000.0, rate / 2.0)
+        val hi = minOf(topHz, rate / 2.0)
         val binHz = rate.toDouble() / n
         for (b in 0 until bands) {
             val f0 = lo * Math.pow(hi / lo, b.toDouble() / bands)

@@ -35,7 +35,7 @@ fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Un
     BackHandler(onBack = onBack)
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text(playlist?.name ?: "") }, navigationIcon = { TextButton(onBack) { Text("Back") } })
+        TopAppBar(title = { Text(playlist?.name ?: "") }, navigationIcon = { TransportButton(Icon.Back, "Back", onBack) })
     }) { padding ->
         val p = playlist
         if (p == null) {

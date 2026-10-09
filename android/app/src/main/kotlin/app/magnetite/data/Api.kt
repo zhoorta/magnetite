@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -76,6 +77,14 @@ class Api(private val session: Session) {
     suspend fun signOut() {
         runCatching { call(Request.Builder().url(url("/token")).header("Accept", "application/json").delete().build()) }
         session.clear()
+    }
+
+    /** The user's meter list (`users.meters`), in panel order; the server default is one wide meter. */
+    suspend fun meters(): List<String> =
+        json.parseToJsonElement(call(get("/me"))).jsonObject["meters"]?.let { json.decodeFromJsonElement<List<String>>(it) } ?: listOf("vu-wide")
+
+    suspend fun saveMeters(ids: List<String>) {
+        call(send("/settings/meters", "PUT", buildJsonObject { put("ids", kotlinx.serialization.json.JsonArray(ids.map { kotlinx.serialization.json.JsonPrimitive(it) })) }))
     }
 
     suspend fun albums(page: Int): Page<Album> =

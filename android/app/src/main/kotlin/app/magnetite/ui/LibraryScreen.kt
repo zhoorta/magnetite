@@ -44,7 +44,7 @@ import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onSignOut: () -> Unit) {
+fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onSignOut: () -> Unit) {
     val albums = remember { mutableStateListOf<Album>() }
     var page by remember { mutableStateOf(0) }
     var lastPage by remember { mutableStateOf(1) }
@@ -146,8 +146,15 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onSignOut: () -> Unit) {
         TopAppBar(
             title = { Text("Library") },
             actions = {
-                TextButton({ dialog = FolderDialog.Create(null) }) { Text("New folder") }
-                TextButton(onSignOut) { Text("Sign out") }
+                TransportButton(Icon.NewFolder, "New folder", { dialog = FolderDialog.Create(null) })
+                var menu by remember { mutableStateOf(false) }
+                androidx.compose.foundation.layout.Box {
+                    TransportButton(Icon.Menu, "Menu", { menu = true })
+                    DropdownMenu(menu, { menu = false }) {
+                        DropdownMenuItem(text = { Text("Meters") }, onClick = { menu = false; onPickMeters() })
+                        DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
+                    }
+                }
             },
         )
     }) { padding ->

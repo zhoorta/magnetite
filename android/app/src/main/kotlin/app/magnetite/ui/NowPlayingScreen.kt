@@ -39,7 +39,7 @@ private fun clock(ms: Long): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NowPlayingScreen(player: PlayerController, onClose: () -> Unit) {
+fun NowPlayingScreen(player: PlayerController, meters: List<String>, onPickMeters: () -> Unit, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
 
     // While the finger is on the slider, show its value instead of the playing position.
@@ -54,8 +54,24 @@ fun NowPlayingScreen(player: PlayerController, onClose: () -> Unit) {
     }
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Now playing") }, navigationIcon = { TextButton(onClose) { Text("Back") } })
+        TopAppBar(title = { Text("Now playing") }, navigationIcon = { TransportButton(Icon.Back, "Back", onClose) }, actions = { TransportButton(Icon.Meters, "Meters", onPickMeters) })
     }) { padding ->
+        if (meters.isNotEmpty()) {
+            // With meters chosen this page is the meters, big; the mini player below keeps the title and controls.
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                val gap = 8.dp
+                val room = this.maxHeight
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap, Alignment.CenterVertically)) {
+                    meters.forEach { id ->
+                        // Fill the room, but not past what the meter can use: a pair of wide meters in a full screen cell would float in empty space.
+                        val wanted = (MeterCatalog.firstOrNull { it.id == id }?.heightDp ?: 150) * 2.2f
+                        val h = minOf((room - gap * (meters.size - 1)) / meters.size, wanted.dp)
+                        MeterPanel(Modifier.fillMaxWidth().height(h)) { MeterView(id, player.isPlaying, fill = true) }
+                    }
+                }
+            }
+            return@Scaffold
+        }
         Column(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -66,10 +82,6 @@ fun NowPlayingScreen(player: PlayerController, onClose: () -> Unit) {
             Text(player.title ?: "", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
             Text(player.artist ?: "", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
             Spacer(Modifier.height(16.dp))
-            SpectrumPanel(player.isPlaying)
-            Spacer(Modifier.height(8.dp))
-            ScopePanel(player.isPlaying)
-            Spacer(Modifier.height(8.dp))
 
             val duration = player.durationMs.coerceAtLeast(1L)
             val shown = dragging ?: (player.positionMs.toFloat() / duration)

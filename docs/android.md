@@ -97,3 +97,11 @@ Sign-in stays (2026-10-09): the token is stored encrypted and never expires on t
 ## Meters in the app (started 2026-10-09)
 
 Steps 1 and 2 of 4 (step 2: `player/Spectrum.kt` FFT over a mono ring buffer in `MeterTap`; `ui/Panels.kt` has `MeterPanel`, `SpectrumPanel`, `ScopePanel`, shown on Now Playing; the level bars sit in their own dark panel). Step 1: `player/MeterTap.kt` is an ExoPlayer `AudioProcessor` added to the audio sink in `PlaybackService`. It passes audio through unchanged and keeps per-channel peak and RMS of the latest block (16/24/32-bit and float PCM; other formats are passed through unmeasured). The mini player draws two stereo level bars from it (`LevelBars` in `ui/MiniPlayer.kt`, redrawn per frame only while playing). Next: a Kotlin port of `worklet/meter-processor.js` (LUFS, true peak, correlation), then the synced meter list (`users.meters` in `GET /me`). Audio offload must stay off or the processor is bypassed.
+
+## Meters (2026-10-09)
+
+The app has the web's nine meters under the same ids (`vu-wide`, `vu-needle`, `vu-leds`, `magic-eye`, `scope`, `goniometer`, `loudness`, `third-octave`, `spectrogram`), drawn in `ui/Meters.kt` on Compose canvases in the Terminal colours. The list is the user's `users.meters`: read from `GET /me` after sign-in, changed in the Meters picker (Now Playing top bar, or tap the meter panel in the mini player) and saved at once with `PUT /api/v1/settings/meters` (the web controller; up to 4, ids checked for shape only, unknown ids are ignored by both clients). The mini player shows the first meter, Now Playing shows all of them under the controls.
+
+- `player/Loudness.kt` is a port of `worklet/meter-processor.js`, fed per frame from `MeterTap`: K-weighted momentary, short-term and integrated LUFS (gated), true peak (4x, 12 taps per phase instead of 48), correlation, and the last 1024 samples for the goniometer. It resets at every track change (`PlaybackService`).
+- Third-octave is 31 bands from 25 Hz (FFT 8192, so the lowest bands are one bin wide); the spectrogram is a 160x64 bitmap that scrolls about 13 s. The goniometer has no afterglow.
+- Not done: LRA, K-meter and the digital readout (not on the web either), per-theme looks, a hidden-meter pause.

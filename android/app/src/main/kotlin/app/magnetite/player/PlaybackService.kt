@@ -44,6 +44,10 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
 
+        player.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) = Loudness.reset()
+        })
+
         session = MediaSession.Builder(this, player)
             .setBitmapLoader(DataSourceBitmapLoader.Builder(this).setDataSourceFactory(http).build())
             .setSessionActivity(

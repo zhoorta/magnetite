@@ -26,6 +26,7 @@ import app.magnetite.ui.AlbumScreen
 import app.magnetite.ui.LibraryScreen
 import app.magnetite.ui.LoginScreen
 import app.magnetite.ui.MagnetiteTheme
+import app.magnetite.ui.MeterPicker
 import app.magnetite.ui.MiniPlayer
 import app.magnetite.ui.NowPlayingScreen
 import app.magnetite.ui.PlaylistScreen
@@ -55,7 +56,10 @@ class MainActivity : ComponentActivity() {
                 var tab by remember { mutableStateOf(Tab.Library) }
                 var detail by remember { mutableStateOf<Detail?>(null) }
                 var showNowPlaying by remember { mutableStateOf(false) }
+                var pickMeters by remember { mutableStateOf(false) }
+                if (pickMeters) MeterPicker(app.meters.toList(), { app.setMeters(it) }, { pickMeters = false })
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
+                androidx.compose.runtime.LaunchedEffect(signedIn) { if (signedIn) app.loadMeters() }
                 androidx.compose.runtime.LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
 
                 Column(Modifier.fillMaxSize()) {
@@ -63,12 +67,13 @@ class MainActivity : ComponentActivity() {
                         val d = detail
                         when {
                             !signedIn -> LoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
-                            showNowPlaying -> NowPlayingScreen(app.player, onClose = { showNowPlaying = false })
+                            showNowPlaying -> NowPlayingScreen(app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false })
                             d is Detail.Album -> AlbumScreen(app.api, app.player, d.id, onBack = { detail = null })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
                             tab == Tab.Library -> LibraryScreen(
                                 app.api,
                                 onOpen = { detail = Detail.Album(it) },
+                                onPickMeters = { pickMeters = true },
                                 onSignOut = {
                                     // The player forgets the saved queue while the user name is still known.
                                     app.player.signOut()
@@ -84,9 +89,9 @@ class MainActivity : ComponentActivity() {
                             else -> PlaylistsScreen(app.api) { detail = Detail.Playlist(it) }
                         }
                     }
-                    if (signedIn && !showNowPlaying) {
+                    if (signedIn && (!showNowPlaying || app.meters.isNotEmpty())) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        MiniPlayer(app.player) { showNowPlaying = true }
+                        MiniPlayer(app.player, app.meters, !showNowPlaying, { pickMeters = true }) { showNowPlaying = true }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         Row(Modifier.fillMaxWidth().height(40.dp)) {
                             Tab.entries.forEach { t ->
@@ -97,7 +102,7 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(
                                         t.label, style = MaterialTheme.typography.labelLarge,
-                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                             }

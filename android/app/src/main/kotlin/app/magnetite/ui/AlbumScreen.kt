@@ -40,7 +40,7 @@ fun AlbumScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Unit)
     androidx.activity.compose.BackHandler(onBack = onBack)
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text(album?.title ?: "") }, navigationIcon = { TextButton(onBack) { Text("Back") } })
+        TopAppBar(title = { Text(album?.title ?: "") }, navigationIcon = { TransportButton(Icon.Back, "Back", onBack) })
     }) { padding ->
         val a = album
         if (a == null) {
