@@ -87,7 +87,7 @@ Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalS
 - Scan: a file is unchanged when its hash and Ferrite id match (folders still use size and mtime). A failed listing keeps the old tracks and says why (`LibraryStore::unavailableReason()`).
 - `/stream`: a track that is not cached goes through `FerriteStore::proxy()` (Range, If-Range, If-None-Match forwarded; type, `nosniff`, `inline` are Magnetite's own); a cached one is served from disk; ALAC goes through the cache and the converter. Ferrite down and not cached: 502 with the reason.
 - Measured with both apps on one machine (real Ferrite on MySQL, `php artisan serve`): first byte 85 ms cold, 21 ms for a Range request; fixture files only (4 KB), so this says nothing about a remote Ferrite yet. Still to do: measure against the real server with a full-size album.
-- Not built: prefetch, the Storage page, `magnetite:claim` for Ferrite users. Ferrite's reads are limited to 120/min per token: a first scan of a big library waits on the limit (the store sleeps for `Retry-After`), and playback Range requests count too, so Ferrite may need a higher limit for content.
+- Not built: prefetch, `magnetite:claim` for Ferrite users, editing the setup from the browser. Ferrite's reads are limited to 120/min per token: a first scan of a big library waits on the limit (the store sleeps for `Retry-After`), and playback Range requests count too, so Ferrite may need a higher limit for content.
 
 ## Built 2026-10-09: writing (step 4)
 
@@ -96,6 +96,10 @@ Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalS
 - No rollback: the token cannot delete, so a failure halfway leaves what arrived. The error says "N of M files had arrived; send the same zip again to finish", and sending it again counts the arrived ones as already there.
 - The result has a new `conflicts` count, shown on the upload page. The scan is queued after any upload that added files, as before.
 - Checked against a real Ferrite (MySQL, token limited to a folder): five files in 0.35 s, the same zip again 0.09 s with everything already there, then the scan read them back.
+
+## Built 2026-10-09: the Storage page (step 3)
+
+`/storage` (signed in, in the nav) is read-only: source (local folder or Ferrite and its address), track count, last scan and a **Test connection** button that calls `GET /root` through `POST /storage/test` and shows the Ferrite folder, access (read, or read and add files), token expiry (flagged within 14 days) and Ferrite's space, or the reason in plain words (revoked, folder gone, unreachable). For Ferrite libraries it also shows the cache (files, size, limit) and **Clear cache** (`DELETE /storage/cache`; the cache is shared by all users, files are named by hash, downloads in progress are left alone). The token never reaches the browser. The setup itself is still changed with `magnetite:storage`.
 
 ## Build order
 

@@ -4,6 +4,7 @@ import { visualizers } from './visualizers';
 import { layout, MAX_PANELS } from './layout';
 import themes from './themes.json';
 import uploader from './upload';
+import storage from './storage';
 import { send } from './http';
 import { playlistCreate, playlistPicker, playlistView, sharedPlaylistView } from './playlists';
 
@@ -50,6 +51,7 @@ function readColors() {
 }
 
 Alpine.data('uploader', uploader);
+Alpine.data('storage', storage);
 Alpine.data('playlistPicker', playlistPicker);
 Alpine.data('playlistView', playlistView);
 Alpine.data('sharedPlaylistView', sharedPlaylistView);

@@ -9,6 +9,7 @@ use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\ScanController;
 use App\Http\Controllers\ShareController;
+use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\UploadController;
 use Illuminate\Support\Facades\Route;
@@ -51,6 +52,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/covers/find', [CoverSearchController::class, 'show'])->name('covers.find.show');
     Route::post('/covers/find', [CoverSearchController::class, 'store'])->name('covers.find');
     Route::post('/cover/{album}/find', [CoverSearchController::class, 'album'])->whereNumber('album')->name('cover.find');
+
+    Route::get('/storage', [StorageController::class, 'show'])->name('storage');
+    Route::post('/storage/test', [StorageController::class, 'test'])->name('storage.test');
+    Route::delete('/storage/cache', [StorageController::class, 'clearCache'])->name('storage.cache.clear');
 
     Route::get('/upload', [UploadController::class, 'create'])->name('upload');
     Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');

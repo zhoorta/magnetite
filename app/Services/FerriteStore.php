@@ -315,9 +315,38 @@ class FerriteStore implements LibraryStore
         return $track?->store_key === null ? null : new StoredFile($track->path, $track->size, $track->mtime, $track->store_key, $track->store_hash);
     }
 
-    private function cacheDir(): string
+    private static function cacheFolder(): string
     {
         return Storage::disk('local')->path('ferrite-cache');
+    }
+
+    /** What the cache holds (it is shared by every user: files are named by their hash). @return array{files: int, bytes: int} */
+    public static function cacheStats(): array
+    {
+        $files = is_dir(self::cacheFolder()) ? collect(File::files(self::cacheFolder()))->reject(fn ($f) => str_ends_with($f->getFilename(), '.part')) : collect();
+
+        return ['files' => $files->count(), 'bytes' => (int) $files->sum(fn ($f) => $f->getSize())];
+    }
+
+    /** Remove every cached file (not the ones still being downloaded). Returns what was removed. @return array{files: int, bytes: int} */
+    public static function clearCache(): array
+    {
+        $before = self::cacheStats();
+
+        if (is_dir(self::cacheFolder())) {
+            foreach (File::files(self::cacheFolder()) as $file) {
+                if (! str_ends_with($file->getFilename(), '.part')) {
+                    @unlink($file->getRealPath());
+                }
+            }
+        }
+
+        return $before;
+    }
+
+    private function cacheDir(): string
+    {
+        return self::cacheFolder();
     }
 
     private function cachePath(StoredFile $file): string

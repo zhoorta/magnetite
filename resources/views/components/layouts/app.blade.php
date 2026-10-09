@@ -16,6 +16,7 @@
             <a href="{{ route('about') }}" wire:navigate class="hover:text-accent">About</a>
             @auth
                 <a href="{{ route('upload') }}" wire:navigate class="hover:text-accent">Upload</a>
+                <a href="{{ route('storage') }}" wire:navigate class="hover:text-accent">Storage</a>
                 <form method="POST" action="{{ route('logout') }}" class="ml-auto">
                     @csrf
                     <button type="submit" class="text-muted hover:text-accent">Sign out</button>
