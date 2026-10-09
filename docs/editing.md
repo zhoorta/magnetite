@@ -19,3 +19,13 @@ The owner can correct what the library shows: **Edit details…** in the ⋯ men
 - Applying `titles` sets title, track and disc number and a track artist (only where it differs from the album's) on the tracks whose length matched, and marks all the album's tracks `identified`. `date` sets `release_date` and the year; `label` sets the label. A ticked value replaces the old one. The album's own title and artist and the files are never changed.
 - `albums.release_date` holds the date as far as it is known (`2001`, `2001-03`, `2001-03-12`, validated by `Album::DATE_PATTERN`); `year` follows it. Pages show `Album::released` (the date, else the year). The edit form has one "Release date" field; the API sends both `year` and `release_date`.
 - Accepting an album suggestion for untagged folders (`identify-albums.md`) also takes the release's date and label.
+
+## Folders
+
+The owner can sort albums into folders and subfolders ("Jazz" › "Bebop"), by hand; nothing is automatic.
+
+- Tables: `folders` (`user_id`, `parent_id`, `name`) and `albums.folder_id` (null: at the top). A folder is only a view of the library: no file moves, and a rescan keeps the arrangement (it matches albums, not folders).
+- An album is in one folder at most. Folders go up to `Folder::MAX_DEPTH` (6) levels deep; a folder cannot be moved into itself or its own subfolders.
+- `/library`: "New folder" in the header; each folder has a ⋯ menu (New subfolder, Rename, Move to, Delete folder) and each album has "Move to folder…". Open folders are remembered in this browser (`localStorage`, `magnetite.folder.{id}`).
+- Deleting a folder deletes no music: its albums and subfolders move up one level. Folders are private (`FolderPolicy`, 404 for others) and are not shown on `/shared`, which stays a flat list.
+- Routes: `POST /library/folders`, `PATCH|DELETE /library/folders/{folder}`, `PUT /library/albums/{album}/folder`.

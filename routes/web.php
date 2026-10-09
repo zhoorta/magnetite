@@ -4,6 +4,7 @@ use App\Http\Controllers\AlbumTitlesController;
 use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
+use App\Http\Controllers\FolderController;
 use App\Http\Controllers\IdentifyController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LibraryEditController;
@@ -65,6 +66,10 @@ Route::middleware('auth')->group(function () {
 
     Route::patch('/library/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('library.albums.update');
     Route::patch('/library/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('library.tracks.update');
+    Route::post('/library/folders', [FolderController::class, 'store'])->name('library.folders.store');
+    Route::patch('/library/folders/{folder}', [FolderController::class, 'update'])->whereNumber('folder')->name('library.folders.update');
+    Route::delete('/library/folders/{folder}', [FolderController::class, 'destroy'])->whereNumber('folder')->name('library.folders.destroy');
+    Route::put('/library/albums/{album}/folder', [FolderController::class, 'moveAlbum'])->whereNumber('album')->name('library.albums.folder');
     Route::post('/library/albums/{album}/titles/find', [AlbumTitlesController::class, 'find'])->whereNumber('album')->name('library.albums.titles.find');
     Route::post('/library/albums/{album}/titles', [AlbumTitlesController::class, 'apply'])->whereNumber('album')->name('library.albums.titles.apply');
     Route::delete('/library/albums/{album}', [LibraryRemoveController::class, 'album'])->whereNumber('album')->name('library.albums.destroy');

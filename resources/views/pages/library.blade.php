@@ -70,6 +70,54 @@
                 if (r && r.ok) { this.titles = null; Livewire.navigate(window.location.href); return; }
                 t.error = (r && (await r.json().catch(() => ({}))).message) || 'Could not save.';
             },
+            // The owner's folders (flat, with depth, for the pickers) and which are open, remembered in this browser.
+            folderList: @js($folderList),
+            folderIsOpen(id) { try { return localStorage.getItem('magnetite.folder.' + id) === '1'; } catch (e) { return false; } },
+            rememberFolder(id, open) { try { open ? localStorage.setItem('magnetite.folder.' + id, '1') : localStorage.removeItem('magnetite.folder.' + id); } catch (e) {} },
+            // Open a folder and the ones around it, so a moved album is where the eye lands.
+            reveal(id) {
+                for (let f = this.folderList.find((x) => x.id === id); f; f = this.folderList.find((x) => x.id === f.parent_id)) this.rememberFolder(f.id, true);
+            },
+            // mode: 'create' | 'rename' | 'move' (a folder) | 'album'. parent_id is the folder chosen in the list (null: the top).
+            fd: null,
+            openFolder(mode, fields = {}) {
+                const below = (id) => this.folderList.filter((f) => f.parent_id === id).flatMap((f) => [f.id, ...below(f.id)]);
+                this.fd = { mode, id: null, name: '', ...fields, parent_id: fields.parent_id ?? '', exclude: mode === 'move' ? [fields.id, ...below(fields.id)] : [], error: '', saving: false };
+                this.$nextTick(() => (this.$refs.folderName ?? this.$refs.folderParent)?.focus());
+            },
+            async saveFolder() {
+                const d = this.fd;
+                d.saving = true; d.error = '';
+                const parent = d.parent_id === '' ? null : Number(d.parent_id);
+                const req = {
+                    create: ['/library/folders', 'POST', { name: d.name, parent_id: parent }],
+                    rename: ['/library/folders/' + d.id, 'PATCH', { name: d.name }],
+                    move: ['/library/folders/' + d.id, 'PATCH', { parent_id: parent }],
+                    album: ['/library/albums/' + d.id + '/folder', 'PUT', { folder_id: parent }],
+                }[d.mode];
+                const r = await fetch(req[0], {
+                    method: req[1],
+                    headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify(req[2]),
+                }).catch(() => null);
+                d.saving = false;
+                if (r && r.ok) {
+                    if (parent !== null && d.mode !== 'rename') this.reveal(parent);
+                    this.fd = null; Livewire.navigate(window.location.href); return;
+                }
+                const body = r ? await r.json().catch(() => ({})) : {};
+                d.error = (body.errors && Object.values(body.errors)[0][0]) || body.message || 'Could not save.';
+            },
+            async removeFolder(id, name) {
+                const sure = await this.$store.dialog.confirm({
+                    title: 'Delete this folder?',
+                    message: '“' + name + '” goes away. Its albums and subfolders move up one level; no music is deleted.',
+                    confirmLabel: 'Delete folder', danger: true,
+                });
+                if (! sure) return;
+                const r = await fetch('/library/folders/' + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } }).catch(() => null);
+                if (r && r.ok) Livewire.navigate(window.location.href);
+            },
             // Corrections to titles, artists, year, track number and label: { kind: 'albums' | 'tracks', id, fields, error, saving }.
             edit: null,
             openEdit(kind, id, fields) {
@@ -147,6 +195,7 @@
         }">
         <div class="mb-6 flex items-center justify-between gap-4">
             <h1 class="text-2xl font-semibold">Library</h1>
+            <button type="button" class="shrink-0 rounded-theme border border-white/10 px-3 py-1 text-sm hover:text-accent" @click="openFolder('create')">New folder</button>
             {{-- Progress of what the ⋯ menus started: measuring files, looking for albums. --}}
             <p x-show="['queued', 'running'].includes(analysis.state)" x-cloak class="min-w-0 truncate text-xs text-muted">
                 <span x-show="analysis.state === 'queued'">Analysis: waiting for the queue worker…</span>
@@ -164,85 +213,12 @@
         <p x-show="analysisError" x-cloak x-text="analysisError" class="mb-4 text-xs text-red-500"></p>
 
         <div class="space-y-8">
-            @foreach ($albums as $album)
-                <section x-data="{
-                            tracks: @js($rows($album->tracks)), expanded: false,
-                            cover: @js((bool) $album->cover), web: @js($album->cover_source !== null), v: @js(substr((string) $album->cover, 0, 10)),
-                            searching: false, noMatch: false, note: '',
-                            // No cover yet: look one up. A cover from the web: look for a different match (the old one stays when there is none).
-                            async findCover() {
-                                const another = this.cover;
-                                this.searching = true; this.noMatch = false; this.note = '';
-                                const r = await fetch('{{ route('cover.find', $album) }}', { method: 'POST', headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' } }).catch(() => null);
-                                this.searching = false;
-                                const body = r && r.ok ? await r.json() : null;
-                                if (body && body.source) {
-                                    this.cover = true; this.web = true; this.v = String(Date.now());
-                                    this.note = another ? 'Cover replaced' : '';
-                                } else if (another) this.note = r && r.ok ? 'No other match found' : 'Could not search';
-                                else this.noMatch = true;
-                                if (this.note) setTimeout(() => this.note = '', 4000);
-                            },
-                         }"
-                         class="flex gap-4">
-                    <div class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
-                        <template x-if="cover"><img :src="'{{ route('cover', $album) }}?v=' + v" alt="" loading="lazy" class="h-full w-full object-cover"></template>
-                        @unless ($album->cover)
-                            <button type="button" x-show="! cover" class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-muted hover:text-accent"
-                                    title="Look this cover up online (MusicBrainz, iTunes). Only artist and album title are sent."
-                                    :disabled="searching" @click="findCover()"
-                                    x-text="searching ? 'Searching…' : noMatch ? 'No match' : 'Find cover'"></button>
-                        @endunless
-                    </div>
+            @foreach ($childrenOf[0] ?? [] as $folder)
+                @include('pages.partials.folder', ['folder' => $folder])
+            @endforeach
 
-                    <div class="min-w-0 flex-1">
-                        <h2 class="flex cursor-pointer items-center gap-1.5 font-semibold" @click="expanded = ! expanded"><span class="truncate">{{ $album->title }}</span>
-                            <svg x-show="isShared('albums', {{ $album->id }})" x-cloak viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-muted" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Shared"><title>Shared with everyone who has an account</title><circle cx="4" cy="8" r="1.8"/><circle cx="12" cy="3.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M5.6 7.1l4.8-2.7M5.6 8.9l4.8 2.7"/></svg></h2>
-                        <div class="mb-1 flex items-center gap-2 text-sm text-muted">
-                            <span x-show="note" x-text="note" x-cloak class="shrink-0 text-xs text-accent2"></span>
-                            <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->released) · {{ $album->released }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
-                            @if ($album->dr !== null)
-                                <span class="shrink-0 rounded-theme px-1.5 py-0.5 text-xs font-medium tabular-nums"
-                                      :class="drClass('{{ App\Support\FileTruth::drClass($album->dr) }}')"
-                                      title="Album dynamic range: the average of the track scores. Higher is more dynamic.">DR{{ $album->dr }}</span>
-                            @endif
-                            <div class="ml-auto shrink-0">
-                                <x-playlist-menu :item="'{ kind: \'album\', id: '.$album->id.', title: '.\Illuminate\Support\Js::from($album->title).' }'"
-                                                 label="Add every track of this album to a playlist" />
-                            </div>
-                            <x-menu label="Actions for this album" width="w-56">
-                                @if (! $album->cover || $album->cover_source)
-                                    <x-menu.item x-bind:disabled="searching" @click="findCover()"
-                                                 title="Look this cover up online (MusicBrainz, iTunes). Only artist and album title are sent. If the cover is not the right one, search again for another match."
-                                                 x-text="searching ? 'Searching…' : cover ? 'Find another cover' : 'Find cover'"></x-menu.item>
-                                @endif
-                                @if ($needsAnalysis($album))
-                                    <x-menu.item title="Measure dynamic range, clipping, loudness and the spectrum of this album's files. Files are only read."
-                                                 @click="analyse({ album_id: {{ $album->id }} })">Analyse album</x-menu.item>
-                                @endif
-                                <x-menu.item title="Look this album up on MusicBrainz: release date, record label and track titles. Only the album title and artist are sent. Nothing changes until you confirm."
-                                             @click="findTitles({{ $album->id }}, {{ Illuminate\Support\Js::from($album->title) }})">Find details online…</x-menu.item>
-                                <x-menu.item title="Correct the title, artist, release date or record label. Only what this library shows changes; the files are not touched."
-                                             @click="openEdit('albums', {{ $album->id }}, {{ Illuminate\Support\Js::from(['title' => $album->title, 'artist' => $album->artist, 'release_date' => $album->released, 'label' => $album->label]) }})">Edit details…</x-menu.item>
-                                <x-menu.item @click="toggleShare('albums', {{ $album->id }})"
-                                             title="Shared albums are visible to everyone who has an account"
-                                             x-text="isShared('albums', {{ $album->id }}) ? 'Stop sharing' : 'Share this album'"></x-menu.item>
-                                <hr class="my-1 border-white/10">
-                                <x-menu.item danger title="{{ $trashOnly ? 'Move this album to the trash in Ferrite' : 'Delete this album from the music folder' }}"
-                                             @click="remove('albums', {{ $album->id }}, {{ Illuminate\Support\Js::from($album->title) }}, {{ $album->tracks->count() }})">Delete album</x-menu.item>
-                            </x-menu>
-                        </div>
-
-                        <button type="button" class="mb-2 flex items-center gap-1 text-xs text-muted hover:text-accent" :aria-expanded="expanded"
-                                @click="expanded = ! expanded">
-                            <span x-text="expanded ? '▾' : '▸'"></span><span x-text="$store.player.summary(tracks)"></span>
-                        </button>
-
-                        <div x-show="expanded" x-cloak>
-                            @include('pages.partials.track-list')
-                        </div>
-                    </div>
-                </section>
+            @foreach ($albumsIn[0] ?? [] as $album)
+                @include('pages.partials.album-section', ['album' => $album])
             @endforeach
 
             @if ($loose->isNotEmpty())
@@ -357,6 +333,33 @@
                             class="rounded-theme bg-accent px-3 py-1 font-medium text-bg disabled:opacity-60">Use selected</button>
                 </div>
             </div>
+        </div>
+
+        {{-- Create, rename or move a folder, or move an album into one. Nothing on disk changes. --}}
+        <div x-show="fd" x-cloak x-transition.opacity @keydown.escape.window="fd && ! $store.dialog.open && (fd = null)"
+             class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="fd = null"
+             role="dialog" aria-modal="true" aria-label="Folders">
+            <form class="w-full max-w-sm rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl" @submit.prevent="saveFolder()">
+                <h2 class="mb-4 font-semibold" x-text="{ create: 'New folder', rename: 'Rename folder', move: 'Move folder', album: 'Move album to a folder' }[fd?.mode]"></h2>
+                <template x-if="fd">
+                    <div class="space-y-3">
+                        <label class="block" x-show="['create', 'rename'].includes(fd.mode)"><span class="mb-1 block text-xs text-muted">Name</span>
+                            <input type="text" x-ref="folderName" x-model="fd.name" :required="['create', 'rename'].includes(fd.mode)" maxlength="100" placeholder="Jazz" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>
+                        <label class="block" x-show="fd.mode !== 'rename'"><span class="mb-1 block text-xs text-muted" x-text="fd.mode === 'album' ? 'Folder' : 'Inside'"></span>
+                            <select x-ref="folderParent" x-model="fd.parent_id" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5">
+                                <option value="" x-text="fd.mode === 'album' ? '(no folder)' : '(top level)'"></option>
+                                <template x-for="f in folderList.filter((f) => ! fd.exclude.includes(f.id))" :key="f.id">
+                                    <option :value="f.id" x-text="'\u00a0\u00a0'.repeat(f.depth - 1) + f.name"></option>
+                                </template>
+                            </select></label>
+                    </div>
+                </template>
+                <p x-show="fd?.error" x-text="fd?.error" class="mt-3 text-xs text-red-500"></p>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button type="button" class="rounded-theme border border-white/10 px-3 py-1 hover:text-accent" @click="fd = null">Cancel</button>
+                    <button type="submit" :disabled="fd?.saving" class="rounded-theme bg-accent px-3 py-1 font-medium text-bg disabled:opacity-60">Save</button>
+                </div>
+            </form>
         </div>
 
         {{-- Edit details of an album or a track. Saved in the library only; the files and their tags are never changed. --}}
