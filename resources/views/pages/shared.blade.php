@@ -77,7 +77,7 @@
                             <div x-data="{ tracks: @js([$track->toPlayer()]) }" class="flex items-center gap-2 pr-3 text-sm">
                                 <button type="button" class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3 text-left hover:text-accent"
                                         @click="$store.player.setQueue(tracks, 0)">
-                                    <span class="flex-1 truncate">{{ $track->title }}<span class="text-muted">@if ($track->artist ?? $track->album?->artist) · {{ $track->artist ?? $track->album?->artist }}@endif</span></span>
+                                    <span class="flex-1 truncate" :class="$store.player.current?.id === tracks[0].id && 'font-bold'">{{ $track->title }}<span class="text-muted">@if ($track->artist ?? $track->album?->artist) · {{ $track->artist ?? $track->album?->artist }}@endif</span></span>
                                     <span class="shrink-0 text-xs text-accent2" x-show="$store.player.current?.id === tracks[0].id"
                                           x-text="$store.player.playing ? 'playing' : 'paused'"></span>
                                 </button>
