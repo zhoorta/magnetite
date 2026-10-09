@@ -4,11 +4,13 @@ namespace App\Services;
 
 use App\Models\Album;
 use App\Models\Track;
+use App\Models\User;
 use App\Support\TrackLibrary;
 use getID3;
 use getid3_lib;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 use Symfony\Component\Finder\SplFileInfo;
 use Throwable;
 
@@ -19,21 +21,32 @@ class LibraryScanner
     public function __construct(private CoverStore $covers, private TranscodeCache $transcodes) {}
 
     /**
-     * Sync the tracks table with the music folder. Files whose size and mtime are unchanged are skipped.
+     * Sync one user's tracks with their folder. Files whose size and mtime are unchanged are skipped.
      *
      * @param  callable(string $path): void|null  $onFile
      * @return array{added: int, updated: int, unchanged: int, removed: int, failed: int}
      */
-    public function scan(bool $force = false, ?callable $onFile = null): array
+    public function scan(User $user, bool $force = false, ?callable $onFile = null): array
     {
+        $folder = $user->libraryPath();
+
+        if (! is_dir($folder)) {
+            // A new user has no folder yet; but a folder that vanished from under a library (disk not mounted) must not wipe it.
+            if ($user->tracks()->exists()) {
+                throw new RuntimeException("The library folder of '{$user->username}' is missing.");
+            }
+
+            return ['added' => 0, 'updated' => 0, 'unchanged' => 0, 'removed' => 0, 'failed' => 0];
+        }
+
         $counts = ['added' => 0, 'updated' => 0, 'unchanged' => 0, 'removed' => 0, 'failed' => 0];
-        $known = Track::query()->get(['id', 'path', 'size', 'mtime'])->keyBy('path');
+        $known = $user->tracks()->get(['id', 'path', 'size', 'mtime'])->keyBy('path');
         $seen = [];
 
         $reader = new getID3;
         $reader->setOption(['encoding' => 'UTF-8']);
 
-        foreach (File::allFiles(TrackLibrary::path()) as $file) {
+        foreach (File::allFiles($folder) as $file) {
             if (TrackLibrary::contentType($file->getFilename()) === null) {
                 continue;
             }
@@ -51,7 +64,7 @@ class LibraryScanner
             $onFile && $onFile($relative);
 
             try {
-                $this->import($reader, $file, $relative);
+                $this->import($user, $reader, $file, $relative);
                 $counts[$existing ? 'updated' : 'added']++;
             } catch (Throwable $e) {
                 // One unreadable file must not abort the scan.
@@ -62,17 +75,17 @@ class LibraryScanner
 
         $gone = $known->keys()->diff(array_keys($seen));
         if ($gone->isNotEmpty()) {
-            Track::whereIn('path', $gone)->delete();
+            $user->tracks()->whereIn('path', $gone)->delete();
             $counts['removed'] = $gone->count();
         }
 
-        Album::doesntHave('tracks')->delete();
+        $user->albums()->doesntHave('tracks')->delete();
         $this->transcodes->prune();
 
         return $counts;
     }
 
-    private function import(getID3 $reader, SplFileInfo $file, string $relative): void
+    private function import(User $user, getID3 $reader, SplFileInfo $file, string $relative): void
     {
         $info = $reader->analyze($file->getRealPath());
         getid3_lib::CopyTagsToComments($info);
@@ -90,7 +103,7 @@ class LibraryScanner
 
         $album = null;
         if ($albumTitle !== null) {
-            $identity = ['artist' => $albumArtist, 'title' => $albumTitle];
+            $identity = ['user_id' => $user->id, 'artist' => $albumArtist, 'title' => $albumTitle];
             if ($albumArtist === null) {
                 $identity['folder'] = dirname($relative);
             }
@@ -109,12 +122,12 @@ class LibraryScanner
         }
 
         // Measurements belong to the exact bytes they were taken from: a changed file needs a new analysis.
-        $before = Track::where('path', $relative)->first(['id', 'size', 'mtime']);
+        $before = $user->tracks()->where('path', $relative)->first(['id', 'size', 'mtime']);
         $changed = $before && ($before->size !== $file->getSize() || $before->mtime !== $file->getMTime())
             ? ['analysis' => null, 'analysis_version' => null, 'analyzed_at' => null, 'dr' => null, 'pcm_sha1' => null]
             : [];
 
-        Track::updateOrCreate(['path' => $relative], $changed + [
+        Track::updateOrCreate(['user_id' => $user->id, 'path' => $relative], $changed + [
             'album_id' => $album?->id,
             'title' => $first('title') ?? $this->titleFromFilename($file->getFilenameWithoutExtension()),
             'artist' => $artist,

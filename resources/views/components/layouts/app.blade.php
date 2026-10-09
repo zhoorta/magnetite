@@ -8,6 +8,9 @@
         <nav class="mx-auto flex {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} items-center gap-6 px-4 py-4 text-sm">
             <a href="{{ route('welcome') }}" wire:navigate class="font-semibold tracking-wide text-accent">Magnetite</a>
             <a href="{{ route('library') }}" wire:navigate class="hover:text-accent">Library</a>
+            @auth
+                <a href="{{ route('shared') }}" wire:navigate class="hover:text-accent">Shared</a>
+            @endauth
             <a href="{{ route('themes') }}" wire:navigate class="hover:text-accent">Themes</a>
             <a href="{{ route('about') }}" wire:navigate class="hover:text-accent">About</a>
             @auth

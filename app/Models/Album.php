@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Album extends Model
 {
@@ -39,5 +42,24 @@ class Album extends Model
     public function tracks(): HasMany
     {
         return $this->hasMany(Track::class)->orderByRaw('coalesce(disc_number, 1)')->orderBy('track_number')->orderBy('title');
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function share(): HasOne
+    {
+        return $this->hasOne(SharedItem::class);
+    }
+
+    /** Albums the user may use: their own, and the ones in the shared area. */
+    public function scopeVisibleTo(Builder $query, User $user): void
+    {
+        $query->where(fn (Builder $q) => $q
+            ->where('albums.user_id', $user->id)
+            ->orWhereHas('share')
+            ->orWhereHas('tracks', fn (Builder $t) => $t->whereHas('share')));
     }
 }

@@ -2,13 +2,14 @@
 
 namespace App\Services;
 
+use App\Models\User;
 use App\Support\TrackLibrary;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
 
 /**
- * Unpacks an uploaded zip into the music folder. This is the one place Magnetite writes to the library, so it is strict:
+ * Unpacks an uploaded zip into the user's own folder. This is the one place Magnetite writes to the library, so it is strict:
  * only audio and cover images are extracted, paths that try to leave the folder abort the whole archive, symlinks and
  * hidden files are dropped, nothing that already exists is overwritten, the unpacked size is counted while copying
  * (the sizes a zip declares can lie) and a failed archive leaves nothing behind.
@@ -20,9 +21,9 @@ class LibraryUploader
     private const CHUNK = 1024 * 1024;
 
     /** @return array{folder: string, added: int, existing: int, skipped: int, bytes: int} */
-    public function extract(string $zipPath, string $originalName): array
+    public function extract(User $user, string $zipPath, string $originalName): array
     {
-        $base = $this->libraryRoot();
+        $base = $this->libraryRoot($user);
         $maxFiles = (int) config('magnetite.upload.max_files');
         $maxBytes = (int) (config('magnetite.upload.max_unpacked_mb') * 1024 * 1024);
 
@@ -46,9 +47,13 @@ class LibraryUploader
                 throw new RuntimeException('There is no audio in this zip (mp3, m4a, flac, ogg, opus or wav).');
             }
 
-            if (array_sum(array_column($entries, 'size')) > $maxBytes) {
+            $unpacked = array_sum(array_column($entries, 'size'));
+
+            if ($unpacked > $maxBytes) {
                 throw new RuntimeException('The zip is too large once unpacked.');
             }
+
+            $this->checkQuota($user, $base, $unpacked);
 
             $prefix = $this->needsFolder($entries) ? $this->folderName($originalName).'/' : '';
 
@@ -58,15 +63,48 @@ class LibraryUploader
         }
     }
 
-    private function libraryRoot(): string
+    /** The user's folder, created on the first upload. It always sits inside the music folder's `users/`. */
+    private function libraryRoot(User $user): string
     {
-        $base = realpath(TrackLibrary::path());
+        $root = realpath(TrackLibrary::path());
 
-        if ($base === false || ! is_dir($base) || ! is_writable($base)) {
+        if ($root === false || ! is_dir($root) || ! is_writable($root)) {
             throw new RuntimeException('The music folder does not exist or is not writable.');
         }
 
+        $users = $root.'/users';
+        if (! is_dir($users) && ! @mkdir($users, 0755) && ! is_dir($users)) {
+            throw new RuntimeException('Could not create the folder for the libraries.');
+        }
+
+        $folder = TrackLibrary::userPath($user);
+        if (! is_dir($folder) && ! @mkdir($folder, 0755) && ! is_dir($folder)) {
+            throw new RuntimeException('Could not create your library folder.');
+        }
+
+        $base = realpath($folder);
+        if ($base === false || ! str_starts_with($base, $root.'/users/') || ! is_writable($base)) {
+            throw new RuntimeException('Your library folder is not usable.');
+        }
+
         return $base;
+    }
+
+    /** Refuse an upload that would take the user's folder over their quota (users.quota_mb, none by default). */
+    private function checkQuota(User $user, string $base, int $incoming): void
+    {
+        if ($user->quota_mb === null) {
+            return;
+        }
+
+        $used = 0;
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS)) as $file) {
+            $used += $file->isFile() && ! $file->isLink() ? $file->getSize() : 0;
+        }
+
+        if ($used + $incoming > $user->quota_mb * 1024 * 1024) {
+            throw new RuntimeException("This would take your library over its limit of {$user->quota_mb} MB.");
+        }
     }
 
     /**

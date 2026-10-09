@@ -1,4 +1,4 @@
-# Multi-user: own libraries and a shared area (design, not built yet)
+# Multi-user: own libraries and a shared area (built 2026-10-09, steps 1 to 4)
 
 For you and a few friends. Everyone has their own library; the shared area holds **references** to things in someone's library, never copies. Local disk is the default and the only thing this needs; Ferrite storage (`docs/ferrite-storage.md`) is an option on top. Users are created with `php artisan magnetite:user`; no screens for user management yet.
 
@@ -57,3 +57,13 @@ Public links, registration, comments, a shared folder others can write to (refer
 3. Per-user folders in scanner, uploader, `ScanStatus` and `magnetite:scan`, quota.
 4. Share and unshare buttons, the `/shared` page (separate from `/library`, which lists only your own).
 5. Then `LibraryStore` per user and Ferrite, as in `docs/ferrite-storage.md`.
+
+## As built (2026-10-09)
+
+- `tracks.path` is relative to the owner's folder, unique per `(user_id, path)`. `TrackLibrary::resolve($path, $owner)` and `TrackLibrary::userPath()` are the only ways to reach a file; usernames must start with a letter or digit (`.` and `..` are refused, `magnetite:user` and `TrackLibrary::validUsername`).
+- Rows with no owner (from before) are visible to nobody until `magnetite:claim`; the migration gives them to the only user when there is exactly one.
+- `Track::visibleTo()` / `Album::visibleTo()` and `TrackPolicy` / `AlbumPolicy` say the same thing (tests check both). `/stream` and `/cover` answer 404 when it fails. Covers are `private` cached.
+- A single shared track also opens its album's cover, because the player shows it.
+- `ShareController`: `POST` and `DELETE /share/{albums|tracks}/{id}`, owner only (404 otherwise). `/shared` shows no findings and no Unshare on others' items.
+- Scan status, the scan job and its overlap lock are per user. The uploader creates `users/{username}` on the first upload and checks `users.quota_mb` (null = no limit; no command sets it yet, use tinker).
+- Not done: the Share buttons and the unshare animation were not tried in a browser (Pest renders the pages), no admin tools, quota has no UI.

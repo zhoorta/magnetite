@@ -2,7 +2,6 @@
 
 use App\Jobs\ScanLibrary;
 use App\Models\Track;
-use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
@@ -11,12 +10,10 @@ use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     Storage::fake('local');
-    $this->music = sys_get_temp_dir().'/magnetite-upload-'.uniqid();
-    mkdir($this->music);
-    config(['magnetite.music_path' => $this->music]);
+    makeLibrary(fixtures: false);
     $this->work = sys_get_temp_dir().'/magnetite-zips-'.uniqid();
     mkdir($this->work);
-    $this->actingAs(User::factory()->create());
+    $this->actingAs($this->user);
     Cache::flush();
 });
 
@@ -78,16 +75,16 @@ it('unpacks a zip into the library and scans it', function () {
         ->assertJsonPath('scan.state', 'done')
         ->assertJsonPath('scan.counts.added', 2);
 
-    expect($this->music.'/Some Band - Some Album/01 - Intro.mp3')->toBeFile()
+    expect($this->library.'/Some Band - Some Album/01 - Intro.mp3')->toBeFile()
         ->and(Track::count())->toBe(2)
-        ->and(glob($this->music.'/*/*.part'))->toBe([]);
+        ->and(glob($this->library.'/*/*.part'))->toBe([]);
 });
 
 it('puts loose files in a folder named after the zip', function () {
     upload(zipUpload(['one.mp3' => song(), 'two.mp3' => song()], 'My: Mixtape?.zip'))
         ->assertOk()->assertJsonPath('archives.0.folder', 'My_ Mixtape');
 
-    expect($this->music.'/My_ Mixtape/one.mp3')->toBeFile();
+    expect($this->library.'/My_ Mixtape/one.mp3')->toBeFile();
 });
 
 it('keeps only audio and cover images and drops hidden files, resource forks and everything else', function () {
@@ -100,18 +97,18 @@ it('keeps only audio and cover images and drops hidden files, resource forks and
         '__MACOSX/Album/._track.mp3' => 'fork',
     ]))->assertOk()->assertJsonPath('archives.0.added', 2)->assertJsonPath('archives.0.skipped', 4);
 
-    expect(glob($this->music.'/Album/*'))->toHaveCount(2)
-        ->and($this->music.'/__MACOSX')->not->toBeDirectory();
+    expect(glob($this->library.'/Album/*'))->toHaveCount(2)
+        ->and($this->library.'/__MACOSX')->not->toBeDirectory();
 });
 
 it('never overwrites a file that is already in the library', function () {
-    mkdir($this->music.'/Album');
-    file_put_contents($this->music.'/Album/track.mp3', 'original');
+    mkdir($this->library.'/Album');
+    file_put_contents($this->library.'/Album/track.mp3', 'original');
 
     upload(zipUpload(['Album/track.mp3' => song(), 'Album/other.mp3' => song()]))
         ->assertOk()->assertJsonPath('archives.0.added', 1)->assertJsonPath('archives.0.existing', 1);
 
-    expect(file_get_contents($this->music.'/Album/track.mp3'))->toBe('original');
+    expect(file_get_contents($this->library.'/Album/track.mp3'))->toBe('original');
 });
 
 it('refuses a zip with a path that leaves the library, and writes nothing', function () {
@@ -120,7 +117,9 @@ it('refuses a zip with a path that leaves the library, and writes nothing', func
             ->assertOk()->assertJsonPath('archives.0.ok', false);
     }
 
-    expect(glob($this->music.'/*'))->toBe([])
+    expect(glob($this->library.'/*'))->toBe([])
+        ->and(file_exists($this->music.'/users/evil.mp3'))->toBeFalse()
+        ->and(file_exists($this->music.'/evil.mp3'))->toBeFalse()
         ->and(file_exists(dirname($this->music).'/evil.mp3'))->toBeFalse();
 });
 
@@ -128,13 +127,13 @@ it('does not extract symlinks', function () {
     upload(zipUpload(['Album/track.mp3' => song(), 'Album/link.mp3' => '/etc/passwd'], modes: ['Album/link.mp3' => 0120777]))
         ->assertOk()->assertJsonPath('archives.0.added', 1)->assertJsonPath('archives.0.skipped', 1);
 
-    expect(file_exists($this->music.'/Album/link.mp3') || is_link($this->music.'/Album/link.mp3'))->toBeFalse();
+    expect(file_exists($this->library.'/Album/link.mp3') || is_link($this->library.'/Album/link.mp3'))->toBeFalse();
 });
 
 it('does not follow a symlink that is already in the library', function () {
     $outside = sys_get_temp_dir().'/magnetite-outside-'.uniqid();
     mkdir($outside);
-    symlink($outside, $this->music.'/Link');
+    symlink($outside, $this->library.'/Link');
 
     upload(zipUpload(['Link/track.mp3' => song()]))->assertOk()->assertJsonPath('archives.0.ok', false);
 
@@ -148,7 +147,7 @@ it('refuses a zip that is too large once unpacked and leaves nothing behind', fu
     upload(zipUpload(['Album/track.mp3' => song()]))
         ->assertOk()->assertJsonPath('archives.0.ok', false);
 
-    expect(glob($this->music.'/*'))->toBe([]);
+    expect(glob($this->library.'/*'))->toBe([]);
 });
 
 it('stops copying and removes what it wrote when the real size passes the limit', function () {
@@ -158,7 +157,7 @@ it('stops copying and removes what it wrote when the real size passes the limit'
     upload(zipUpload(['Album/a.mp3' => song(), 'Album/b.mp3' => song()]))
         ->assertOk()->assertJsonPath('archives.0.ok', false);
 
-    expect(glob($this->music.'/Album/*'))->toBe([]);
+    expect(glob($this->library.'/Album/*'))->toBe([]);
 });
 
 it('refuses a zip without audio', function () {

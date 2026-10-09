@@ -1,18 +1,18 @@
 <?php
 
 use App\Models\Track;
-use App\Models\User;
 use App\Services\LibraryScanner;
 use App\Services\TranscodeCache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
-    $this->actingAs(User::factory()->create());
     Storage::fake('local');
-    config(['magnetite.music_path' => base_path('tests/Fixtures/music')]);
-    app(LibraryScanner::class)->scan();
+    $this->actingAs(makeLibrary());
+    app(LibraryScanner::class)->scan($this->user);
 });
+
+afterEach(fn () => File::deleteDirectory($this->music));
 
 function cachedFlacs(): array
 {
@@ -83,7 +83,7 @@ describe('with ffmpeg', function () {
     });
 
     it('never sends a non-audio file to ffmpeg', function () {
-        $notAudio = Track::create([
+        $notAudio = Track::create(['user_id' => $this->user->id,
             'path' => 'Loose/notes.txt', 'title' => 'x', 'codec' => 'alac', 'mime' => 'audio/mp4', 'size' => 1, 'mtime' => 1,
         ]);
 

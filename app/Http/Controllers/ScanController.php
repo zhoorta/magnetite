@@ -5,18 +5,19 @@ namespace App\Http\Controllers;
 use App\Jobs\ScanLibrary;
 use App\Support\ScanStatus;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ScanController extends Controller
 {
-    public function show(): JsonResponse
+    public function show(Request $request): JsonResponse
     {
-        return response()->json(ScanStatus::get());
+        return response()->json(ScanStatus::get($request->user()->id));
     }
 
-    public function store(): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        ScanLibrary::request();
+        ScanLibrary::request($request->user());
 
-        return response()->json(ScanStatus::get(), 202);
+        return response()->json(ScanStatus::get($request->user()->id), 202);
     }
 }

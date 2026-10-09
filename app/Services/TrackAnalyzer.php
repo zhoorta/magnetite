@@ -58,7 +58,7 @@ class TrackAnalyzer
     /** Measure and save. Throws when the file cannot be decoded. */
     public function analyze(Track $track): Track
     {
-        $path = TrackLibrary::resolve($track->path);
+        $path = TrackLibrary::resolve($track->path, $track->user);
         if ($path === null) {
             throw new RuntimeException('File not found in the library');
         }

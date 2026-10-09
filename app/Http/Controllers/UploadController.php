@@ -35,7 +35,7 @@ class UploadController extends Controller
 
         foreach ($request->file('archives') as $archive) {
             try {
-                $result = $uploader->extract($archive->getRealPath(), $archive->getClientOriginalName());
+                $result = $uploader->extract($request->user(), $archive->getRealPath(), $archive->getClientOriginalName());
                 $added += $result['added'];
                 $results[] = ['name' => $archive->getClientOriginalName(), 'ok' => true] + $result;
             } catch (RuntimeException $e) {
@@ -45,9 +45,9 @@ class UploadController extends Controller
 
         // Only look at the folder again when something new was written, and do it in the queue: it can take minutes.
         if ($added > 0) {
-            ScanLibrary::request();
+            ScanLibrary::request($request->user());
         }
 
-        return response()->json(['archives' => $results, 'scan' => $added > 0 ? ScanStatus::get() : null]);
+        return response()->json(['archives' => $results, 'scan' => $added > 0 ? ScanStatus::get($request->user()->id) : null]);
     }
 }

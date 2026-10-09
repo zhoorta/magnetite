@@ -1,13 +1,12 @@
 <?php
 
 use App\Http\Controllers\CoverController;
+use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\ScanController;
+use App\Http\Controllers\ShareController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\UploadController;
-use App\Models\Album;
-use App\Models\Track;
-use App\Support\FileTruth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => view('pages.welcome'))->name('welcome');
@@ -23,17 +22,11 @@ Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')-
 
 // The library, the files and the upload are only for signed-in users.
 Route::middleware('auth')->group(function () {
-    Route::get('/library', function () {
-        $albums = Album::with('tracks')->orderBy('artist')->orderBy('year')->orderBy('title')->get()
-            ->each(fn (Album $a) => $a->tracks->each->setRelation('album', $a));
+    Route::get('/library', [LibraryController::class, 'library'])->name('library');
+    Route::get('/shared', [LibraryController::class, 'shared'])->name('shared');
 
-        $loose = Track::whereNull('album_id')->orderBy('title')->get();
-
-        // Duplicates are found across the whole library, so the page gets them from every track.
-        $copies = FileTruth::copies(Track::get(['id', 'title', 'artist', 'path', 'duration', 'pcm_sha1']));
-
-        return view('pages.library', ['albums' => $albums, 'loose' => $loose, 'copies' => $copies]);
-    })->name('library');
+    Route::post('/share/{kind}/{id}', [ShareController::class, 'store'])->whereIn('kind', ['albums', 'tracks'])->whereNumber('id')->name('share.store');
+    Route::delete('/share/{kind}/{id}', [ShareController::class, 'destroy'])->whereIn('kind', ['albums', 'tracks'])->whereNumber('id')->name('share.destroy');
 
     Route::get('/stream/{track}', StreamController::class)->whereNumber('track')->name('stream');
     Route::get('/cover/{album}', CoverController::class)->whereNumber('album')->name('cover');

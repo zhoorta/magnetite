@@ -22,7 +22,7 @@ class AnalyzeLibrary extends Command
             return self::FAILURE;
         }
 
-        $tracks = Track::query()
+        $tracks = Track::query()->with('user')->whereNotNull('user_id')
             ->when(! $this->option('force'), fn ($q) => $q->where(fn ($q) => $q->whereNull('analysis_version')->orWhere('analysis_version', '<', TrackAnalyzer::VERSION)))
             ->orderBy('id')
             ->when($this->option('limit'), fn ($q, $n) => $q->limit((int) $n))

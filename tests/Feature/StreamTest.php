@@ -2,16 +2,17 @@
 
 use App\Models\Album;
 use App\Models\Track;
-use App\Models\User;
 use App\Services\LibraryScanner;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
-    $this->actingAs(User::factory()->create());
     Storage::fake('local');
-    config(['magnetite.music_path' => base_path('tests/Fixtures/music')]);
-    app(LibraryScanner::class)->scan();
+    $this->actingAs(makeLibrary());
+    app(LibraryScanner::class)->scan($this->user);
 });
+
+afterEach(fn () => File::deleteDirectory($this->music));
 
 it('streams a track inline with safe headers', function () {
     $track = Track::where('title', 'First Song')->sole();
@@ -35,7 +36,7 @@ it('answers range requests so seeking works', function () {
 });
 
 it('never serves a path that escapes the music folder', function () {
-    $track = Track::create([
+    $track = Track::create(['user_id' => $this->user->id,
         'path' => '../../../../.env', 'title' => 'x', 'mime' => 'audio/mpeg', 'size' => 1, 'mtime' => 1,
     ]);
 
@@ -43,7 +44,7 @@ it('never serves a path that escapes the music folder', function () {
 });
 
 it('does not serve non-audio files even if a row points at one', function () {
-    $track = Track::create([
+    $track = Track::create(['user_id' => $this->user->id,
         'path' => 'Loose/notes.txt', 'title' => 'x', 'mime' => 'audio/mpeg', 'size' => 1, 'mtime' => 1,
     ]);
 
@@ -51,7 +52,7 @@ it('does not serve non-audio files even if a row points at one', function () {
 });
 
 it('returns 404 when the file has disappeared', function () {
-    $track = Track::create([
+    $track = Track::create(['user_id' => $this->user->id,
         'path' => 'Tagged/Album/gone.mp3', 'title' => 'x', 'mime' => 'audio/mpeg', 'size' => 1, 'mtime' => 1,
     ]);
 
@@ -68,7 +69,7 @@ it('serves album covers as immutable jpegs', function () {
 });
 
 it('rejects a cover name that is not a content hash', function () {
-    $album = Album::create(['title' => 'Evil', 'cover' => '../../.env']);
+    $album = Album::create(['user_id' => $this->user->id, 'title' => 'Evil', 'cover' => '../../.env']);
 
     $this->get(route('cover', $album))->assertNotFound();
 });

@@ -10,16 +10,13 @@ use Illuminate\Support\Facades\Storage;
 beforeEach(function () {
     Storage::fake('local');
 
-    // Work on a copy so tests can add, touch and delete files freely.
-    $this->music = sys_get_temp_dir().'/magnetite-test-'.uniqid();
-    File::copyDirectory(base_path('tests/Fixtures/music'), $this->music);
-    config(['magnetite.music_path' => $this->music]);
+    makeLibrary();
 });
 
 afterEach(fn () => File::deleteDirectory($this->music));
 
 it('imports tags, album and codec for tagged files', function () {
-    $counts = app(LibraryScanner::class)->scan();
+    $counts = app(LibraryScanner::class)->scan($this->user);
 
     expect($counts)->toMatchArray(['added' => 5, 'failed' => 0]); // notes.txt is ignored
 
@@ -45,7 +42,7 @@ it('imports tags, album and codec for tagged files', function () {
 });
 
 it('keeps untagged files, titled from the file name, outside any album', function () {
-    app(LibraryScanner::class)->scan();
+    app(LibraryScanner::class)->scan($this->user);
 
     $loose = Track::where('path', 'Loose/07_no_tags.mp3')->sole();
 
@@ -54,7 +51,7 @@ it('keeps untagged files, titled from the file name, outside any album', functio
 });
 
 it('stores the embedded cover once as a resized jpeg', function () {
-    app(LibraryScanner::class)->scan();
+    app(LibraryScanner::class)->scan($this->user);
 
     $album = Album::where('title', 'Test Album')->sole();
 
@@ -67,21 +64,21 @@ it('stores the embedded cover once as a resized jpeg', function () {
 
 it('skips unchanged files, re-reads forced ones and drops deleted ones', function () {
     $scanner = app(LibraryScanner::class);
-    $scanner->scan();
+    $scanner->scan($this->user);
 
-    expect($scanner->scan())->toMatchArray(['added' => 0, 'unchanged' => 5, 'removed' => 0])
-        ->and($scanner->scan(force: true))->toMatchArray(['updated' => 5, 'unchanged' => 0]);
+    expect($scanner->scan($this->user))->toMatchArray(['added' => 0, 'unchanged' => 5, 'removed' => 0])
+        ->and($scanner->scan($this->user, force: true))->toMatchArray(['updated' => 5, 'unchanged' => 0]);
 
-    File::delete("{$this->music}/Loose/07_no_tags.mp3");
+    File::delete("{$this->library}/Loose/07_no_tags.mp3");
 
-    expect($scanner->scan())->toMatchArray(['removed' => 1, 'unchanged' => 4])
+    expect($scanner->scan($this->user))->toMatchArray(['removed' => 1, 'unchanged' => 4])
         ->and(Track::count())->toBe(4);
 });
 
 it('does not abort the scan on an unreadable file', function () {
-    File::put("{$this->music}/Loose/broken.mp3", 'this is not audio');
+    File::put("{$this->library}/Loose/broken.mp3", 'this is not audio');
 
-    $counts = app(LibraryScanner::class)->scan();
+    $counts = app(LibraryScanner::class)->scan($this->user);
 
     // getID3 is lenient: a junk file becomes a track without usable tags rather than an exception,
     // but either way the real files must still be imported.
@@ -90,7 +87,7 @@ it('does not abort the scan on an unreadable file', function () {
 });
 
 it('groups a compilation without album artist by folder and shows various artists', function () {
-    app(LibraryScanner::class)->scan();
+    app(LibraryScanner::class)->scan($this->user);
 
     $mixtape = Album::with('tracks')->where('title', 'Mixtape')->sole();
 

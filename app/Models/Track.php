@@ -4,9 +4,11 @@ namespace App\Models;
 
 use App\Services\TranscodeCache;
 use App\Support\FileTruth;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Track extends Model
 {
@@ -25,6 +27,28 @@ class Track extends Model
     public function album(): BelongsTo
     {
         return $this->belongsTo(Album::class);
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function share(): HasOne
+    {
+        return $this->hasOne(SharedItem::class);
+    }
+
+    /**
+     * The one rule for who may use a track (stream, cover, queue): their own tracks, the tracks of an album in the
+     * shared area, and tracks shared one by one. Listings are separate; see docs/multi-user.md.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): void
+    {
+        $query->where(fn (Builder $q) => $q
+            ->where('tracks.user_id', $user->id)
+            ->orWhereHas('share')
+            ->orWhereHas('album', fn (Builder $a) => $a->whereHas('share')));
     }
 
     /** Playable in any browser: not ALAC, or ALAC that the stream endpoint converts to FLAC. */

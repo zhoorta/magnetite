@@ -1,6 +1,7 @@
 @props(['title' => 'Magnetite'])
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{{ $title }}</title>
 {{-- Apply the saved theme before first paint so a full reload does not flash the default colours.
      boot.js saves the resolved theme (colours, radius, font) under this key when it is chosen. --}}

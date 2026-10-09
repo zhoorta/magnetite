@@ -1,4 +1,4 @@
-{{-- The tracks of one section. Expects `tracks` in the surrounding x-data and the helpers of the library page. --}}
+{{-- The tracks of one section. Expects `tracks` in the surrounding x-data and the helpers of the library page (including sharing). --}}
 <div class="divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
     <template x-for="(t, i) in tracks" :key="t.id">
         <div x-show="shown(t)">
@@ -21,6 +21,9 @@
                       :class="drClass(t.truth.dr_class)" title="Dynamic range (DR): higher is more dynamic, 7 or less is heavily compressed"
                       x-text="'DR' + t.truth.dr"></span>
                 <span class="w-10 shrink-0 text-right text-xs tabular-nums text-muted" x-text="$store.player.fmt(t.duration)"></span>
+                    <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" :class="isShared('tracks', t.id) && 'text-accent'"
+                            :title="isShared('tracks', t.id) ? 'Shared on its own. Click to stop sharing.' : 'Share just this track'"
+                            @click="toggleShare('tracks', t.id)" x-text="isShared('tracks', t.id) ? 'Shared' : 'Share'"></button>
                 <button type="button" x-show="t.truth.analyzed" class="shrink-0 text-xs text-muted hover:text-accent"
                         :aria-expanded="open === t.id" title="What the measurements say about this file"
                         @click="open = open === t.id ? null : t.id">

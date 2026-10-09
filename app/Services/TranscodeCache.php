@@ -105,6 +105,6 @@ class TranscodeCache
 
     private function name(Track $track): string
     {
-        return sha1("{$track->path}|{$track->size}|{$track->mtime}").'.flac';
+        return sha1("{$track->user_id}|{$track->path}|{$track->size}|{$track->mtime}").'.flac';
     }
 }

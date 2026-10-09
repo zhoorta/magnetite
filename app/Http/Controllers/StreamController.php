@@ -5,14 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\Track;
 use App\Services\TranscodeCache;
 use App\Support\TrackLibrary;
+use Illuminate\Http\Request;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StreamController extends Controller
 {
-    public function __invoke(Track $track, TranscodeCache $transcodes): BinaryFileResponse
+    public function __invoke(Request $request, Track $track, TranscodeCache $transcodes): BinaryFileResponse
     {
-        $path = TrackLibrary::resolve($track->path);
+        // Someone else's unshared track is answered like one that does not exist, so ids reveal nothing.
+        abort_unless($request->user()->can('view', $track), 404);
+
+        $path = TrackLibrary::resolve($track->path, $track->user);
         abort_if($path === null, 404);
 
         $type = TrackLibrary::contentType($path);

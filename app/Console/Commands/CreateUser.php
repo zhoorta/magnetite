@@ -8,7 +8,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
 
-#[Signature('magnetite:user {username : Name to sign in with} {--password= : Password (asked for when left out, which keeps it out of the shell history)} {--reset : Change the password of an existing user}')]
+#[Signature('magnetite:user {username : Name to sign in with} {--password= : Password (asked for when left out, which keeps it out of the shell history)} {--reset : Change the password of an existing user} {--admin : Make the user an administrator}')]
 #[Description('Create a user, or reset the password of an existing one')]
 class CreateUser extends Command
 {
@@ -16,6 +16,13 @@ class CreateUser extends Command
     {
         $username = mb_strtolower(trim((string) $this->argument('username')));
         $existing = User::where('username', $username)->first();
+
+        if ($existing && $this->option('admin') && ! $this->option('reset') && $this->option('password') === null) {
+            $existing->forceFill(['is_admin' => true])->save();
+            $this->info("'{$username}' is an administrator now.");
+
+            return self::SUCCESS;
+        }
 
         if ($existing && ! $this->option('reset')) {
             $this->error("User '{$username}' already exists. Use --reset to change the password.");
@@ -33,7 +40,7 @@ class CreateUser extends Command
 
         $validator = Validator::make(
             ['username' => $username, 'password' => $password],
-            ['username' => ['required', 'string', 'max:64', 'regex:/^[\p{L}\p{N}._-]+$/u'], 'password' => ['required', 'string', 'min:8']],
+            ['username' => ['required', 'string', 'max:64', 'regex:/^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u'], 'password' => ['required', 'string', 'min:8']],
         );
 
         if ($validator->fails()) {
@@ -51,7 +58,9 @@ class CreateUser extends Command
             return self::SUCCESS;
         }
 
-        User::create(['name' => $username, 'username' => $username, 'password' => $password]);
+        $user = new User(['name' => $username, 'username' => $username, 'password' => $password]);
+        $user->is_admin = (bool) $this->option('admin');
+        $user->save();
         $this->info("User '{$username}' created.");
 
         return self::SUCCESS;

@@ -7,6 +7,16 @@
     <div x-data="{
             onlyIssues: false,
             open: null,
+            shares: @js($shared),
+            isShared(kind, id) { return this.shares[kind].includes(id); },
+            async toggleShare(kind, id) {
+                const on = this.isShared(kind, id);
+                const r = await fetch('/share/' + kind + '/' + id, {
+                    method: on ? 'DELETE' : 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Accept': 'application/json' },
+                });
+                if (r.ok) this.shares[kind] = on ? this.shares[kind].filter((x) => x !== id) : [...this.shares[kind], id];
+            },
             worst(t) { const l = t.truth.flags.map((f) => f.level); return l.includes('problem') ? 'problem' : l.includes('warn') ? 'warn' : null; },
             shown(t) { return ! this.onlyIssues || this.worst(t) !== null; },
             drClass(c) { return { excellent: 'text-emerald-500 bg-emerald-500/15', good: 'text-lime-500 bg-lime-500/15', fair: 'text-amber-500 bg-amber-500/15', poor: 'text-red-500 bg-red-500/15' }[c]; },
@@ -30,7 +40,7 @@
         </div>
 
         @if ($albums->isEmpty() && $loose->isEmpty())
-            <p class="text-muted">Nothing here yet. Set <code>MAGNETITE_MUSIC_PATH</code> and run <code>php artisan magnetite:scan</code>.</p>
+            <p class="text-muted">Nothing here yet. <a href="{{ route('upload') }}" wire:navigate class="text-accent">Upload a zip</a> of your music, or ask the person who runs this server to put it in your folder and scan it.</p>
         @elseif (! $analysed)
             <p class="mb-6 rounded-theme border border-white/10 bg-surface px-3 py-2 text-xs text-muted">
                 Run <code>php artisan magnetite:analyze</code> to measure dynamic range, clipping, loudness and the spectrum of every file, and to find fake hi-res, lossy files in disguise and duplicates.
@@ -56,6 +66,11 @@
                                       :class="drClass('{{ App\Support\FileTruth::drClass($album->dr) }}')"
                                       title="Album dynamic range: the average of the track scores. Higher is more dynamic.">DR{{ $album->dr }}</span>
                             @endif
+                            <button type="button" class="ml-auto shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
+                                    :class="isShared('albums', {{ $album->id }}) && 'text-accent'"
+                                    :title="isShared('albums', {{ $album->id }}) ? 'Shared with everyone who has an account. Click to stop sharing.' : 'Share this album with everyone who has an account'"
+                                    @click="toggleShare('albums', {{ $album->id }})"
+                                    x-text="isShared('albums', {{ $album->id }}) ? 'Shared' : 'Share'"></button>
                         </p>
 
                         @include('pages.partials.track-list')
