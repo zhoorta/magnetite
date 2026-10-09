@@ -17,6 +17,26 @@
              class="mx-auto w-full max-w-sm border border-white/10">
     </section>
 
+    @php($apk = public_path('downloads/magnetite-0.1.0.apk'))
+    @if (is_file($apk))
+        <section id="android" class="scroll-mt-8 border-t border-white/10 py-10">
+            <h2 class="text-2xl font-semibold">Android app <span class="ml-2 text-xs uppercase tracking-widest text-muted">beta</span></h2>
+            <p class="mt-2 max-w-prose text-muted">
+                A native app for your own Magnetite server: library, folders, playback with lock-screen controls.
+                Enter your server's address when you sign in.
+            </p>
+            <div class="mt-5 flex flex-wrap items-center gap-4 text-sm">
+                <a href="/downloads/magnetite-0.1.0.apk" download class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Download the APK</a>
+                <span class="text-muted">Version 0.1.0 · {{ number_format(filesize($apk) / 1048576, 1) }} MB · Android 8 or newer</span>
+            </div>
+            <p class="mt-4 max-w-prose text-xs text-muted">
+                Not on the Play Store: open the file after downloading and allow installs from your browser when Android asks.
+                Play Protect may warn about an unknown developer; choose "Install anyway".
+            </p>
+            <p class="mt-2 break-all font-mono text-xs text-muted">SHA-256 {{ Cache::rememberForever('apk.sha256.'.filemtime($apk), fn () => hash_file('sha256', $apk)) }}</p>
+        </section>
+    @endif
+
     <section id="themes" x-data class="scroll-mt-8 py-10">
         <h2 class="text-2xl font-semibold">Pick a look, the whole page follows</h2>
         <p class="mt-2 max-w-prose text-muted">
@@ -82,7 +102,12 @@
                 ['Up to four at once', 'Show a pair of wide VU meters next to a scope, or a third-octave analyser above a spectrogram. Each one draws in its own cell, in the dock or in full screen.'],
                 ['Vintage and instrument', 'Needle dials, LED meters, a magic eye tube, wide cassette-deck meters. Each is a small module that draws on one canvas.'],
                 ['File truth', 'Decodes every file once and says what it really is: likely lossy source, upsampled, clipped, very compressed, over 0 dBTP, duplicates. Dynamic range per track and album.'],
-                ['Your files, untouched', 'The library is read from a folder and never written to. Files stream with range support and strict headers, and ALAC is converted to FLAC on first play and cached.'],
+                ['Your files, your rules', 'Files stream with range support and strict headers, and ALAC is converted to FLAC on first play and cached. Uploads accept only audio and covers, never overwrite anything and refuse unsafe paths.'],
+                ['Your own library', 'Every person signs in to a library of their own. Tidy it with folders, edit titles, artist, year and label, add a missing cover from the web, or delete what you no longer want.'],
+                ['Names for untagged albums', 'Folders without tags get suggestions from the folder and file names, from MusicBrainz and, if you want, from an audio fingerprint. You see the proposal before anything changes.'],
+                ['Playlists and sharing', 'Private playlists with drag-and-drop ordering. Share an album, a track or a playlist with another person: they play what they are allowed to, nothing else.'],
+                ['Picks up where you left off', 'The queue, the track and the position come back after a reload, paused. Keyboard shortcuts for everything: space, arrows, number keys, N and P, M for meters, F for full screen.'],
+                ['An app for your phone', 'A native Android app with the same library, folders and playback with lock-screen controls. Download it above and point it at your own server.'],
             ] as [$title, $text])
                 <div class="rounded-theme border border-white/10 bg-surface p-5">
                     <h3 class="font-semibold text-accent">{{ $title }}</h3>
@@ -103,6 +128,6 @@
 
     <footer class="mt-8 border-t border-white/10 pt-6 text-xs text-muted">
         A personal project, made for fun by the maker of Ferrite. Not a hosted service: it plays the files on your own
-        server, and there is no download yet.
+        server. The Android app is a beta; the server code has no public release yet.
     </footer>
 </x-layouts.app>

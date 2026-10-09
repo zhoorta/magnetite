@@ -16,9 +16,23 @@ android {
         versionName = "0.1.0"
     }
 
+    // Key and passwords come from ~/.gradle/gradle.properties, never from the repo.
+    val keystore = providers.gradleProperty("MAGNETITE_KEYSTORE").orNull
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = providers.gradleProperty("MAGNETITE_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("MAGNETITE_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("MAGNETITE_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (keystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 
