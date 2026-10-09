@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\LibraryController;
@@ -53,6 +54,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/upload', [UploadController::class, 'create'])->name('upload');
     Route::post('/upload', [UploadController::class, 'store'])->name('upload.store');
+
+    Route::get('/analysis', [AnalysisController::class, 'show'])->name('analysis.show');
+    Route::post('/analysis', [AnalysisController::class, 'store'])->name('analysis.store');
 
     Route::get('/scan', [ScanController::class, 'show'])->name('scan.show');
     Route::post('/scan', [ScanController::class, 'store'])->name('scan.store');

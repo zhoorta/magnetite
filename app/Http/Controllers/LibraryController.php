@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\AnalyzeTracks;
 use App\Models\Album;
 use App\Models\Playlist;
 use App\Models\SharedItem;
@@ -30,7 +31,7 @@ class LibraryController extends Controller
             'tracks' => SharedItem::where('user_id', $me->id)->whereNotNull('track_id')->pluck('track_id')->all(),
         ];
 
-        return view('pages.library', ['albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared]);
+        return view('pages.library', ['albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'toAnalyse' => AnalyzeTracks::missing($me)->count()]);
     }
 
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */

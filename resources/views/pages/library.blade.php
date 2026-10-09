@@ -32,6 +32,30 @@
                 }
                 if (this.covers.found > 0) Livewire.navigate(window.location.href);
             },
+            analysis: { state: 'idle', done: 0, total: 0, failed: 0 },
+            analysisError: null,
+            init() {
+                // An analysis started before this page loaded (or before a reload) carries on showing its progress.
+                fetch('/analysis', { headers: { 'Accept': 'application/json' } }).then((r) => r.ok ? r.json() : null).then((a) => {
+                    if (a && ['queued', 'running'].includes(a.state)) { this.analysis = a; this.followAnalysis(); }
+                }).catch(() => {});
+            },
+            async analyse() {
+                this.analysisError = null;
+                const r = await fetch('/analysis', { method: 'POST', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } });
+                if (! r.ok) { this.analysisError = (await r.json().catch(() => ({}))).message || 'Could not start the analysis.'; return; }
+                this.analysis = await r.json();
+                await this.followAnalysis();
+            },
+            async followAnalysis() {
+                while (['queued', 'running'].includes(this.analysis.state)) {
+                    await new Promise((res) => setTimeout(res, 2000));
+                    const p = await fetch('/analysis', { headers: { 'Accept': 'application/json' } });
+                    if (! p.ok) return;
+                    this.analysis = await p.json();
+                }
+                Livewire.navigate(window.location.href);
+            },
             worst(t) { const l = t.truth.flags.map((f) => f.level); return l.includes('problem') ? 'problem' : l.includes('warn') ? 'warn' : null; },
             shown(t) { return ! this.onlyIssues || this.worst(t) !== null; },
             drClass(c) { return { excellent: 'text-emerald-500 bg-emerald-500/15', good: 'text-lime-500 bg-lime-500/15', fair: 'text-amber-500 bg-amber-500/15', poor: 'text-red-500 bg-red-500/15' }[c]; },
@@ -56,6 +80,16 @@
                     <span x-show="covers.state === 'done'" x-cloak x-text="covers.found + ' of ' + covers.total + ' found'"></span>
                 </button>
             @endif
+            @if ($toAnalyse > 0)
+                <button type="button" class="rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent disabled:opacity-60"
+                        title="Measure dynamic range, clipping, loudness and the spectrum of {{ $toAnalyse }} file(s), and look for fake hi-res, lossy files in disguise and duplicates. Files are only read."
+                        :disabled="['queued', 'running'].includes(analysis.state)" @click="analyse()">
+                    <span x-show="! ['queued', 'running'].includes(analysis.state)">{{ $analysed ? 'Analyse '.$toAnalyse.' new file(s)' : 'Analyse files' }}</span>
+                    <span x-show="analysis.state === 'queued'" x-cloak>Waiting for the queue worker…</span>
+                    <span x-show="analysis.state === 'running'" x-cloak x-text="'Analysing ' + analysis.done + '/' + analysis.total + '…'"></span>
+                </button>
+                <span x-show="analysis.state === 'running'" x-cloak class="max-w-[16rem] truncate text-xs text-muted" x-text="(analysis.current ? analysis.current : '') + (analysis.failed ? ' · ' + analysis.failed + ' failed' : '')"></span>
+            @endif
             @if ($analysed)
                 <label class="flex cursor-pointer items-center gap-2 text-xs text-muted">
                     <input type="checkbox" x-model="onlyIssues" class="accent-[var(--c-accent)]">
@@ -68,9 +102,10 @@
             <p class="text-muted">Nothing here yet. <a href="{{ route('upload') }}" wire:navigate class="text-accent">Upload a zip</a> of your music, or ask the person who runs this server to put it in your folder and scan it.</p>
         @elseif (! $analysed)
             <p class="mb-6 rounded-theme border border-white/10 bg-surface px-3 py-2 text-xs text-muted">
-                Run <code>php artisan magnetite:analyze</code> to measure dynamic range, clipping, loudness and the spectrum of every file, and to find fake hi-res, lossy files in disguise and duplicates.
+                Use <strong>Analyse files</strong> above to measure dynamic range, clipping, loudness and the spectrum of every file, and to find fake hi-res, lossy files in disguise and duplicates.
             </p>
         @endif
+        <p x-show="analysisError" x-cloak x-text="analysisError" class="mb-4 text-xs text-red-500"></p>
 
         <div class="space-y-8">
             @foreach ($albums as $album)

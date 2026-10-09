@@ -1,10 +1,16 @@
 <?php
 
+use App\Jobs\AnalyzeTracks;
+use App\Jobs\FindCovers;
+use App\Jobs\ScanLibrary;
 use App\Models\Track;
+use App\Models\User;
 use App\Services\LibraryScanner;
 use App\Services\TrackAnalyzer;
+use App\Support\AnalysisStatus;
 use App\Support\FileTruth;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Process\Process;
 
@@ -101,13 +107,86 @@ describe('with ffmpeg and node', function () {
     });
 });
 
-it('shows the scores on the library page, or says how to get them', function () {
+it('shows the scores on the library page, or offers the button to get them', function () {
     app(LibraryScanner::class)->scan($this->user);
 
-    $this->get(route('library'))->assertOk()->assertSee('magnetite:analyze');
+    $this->get(route('library'))->assertOk()->assertSee('Analyse files');
 
     $track = Track::where('title', 'First Song')->sole();
     $track->forceFill(['dr' => 9, 'analysis' => ['sample_rate' => 44100, 'source' => ['codec' => 'mp3'], 'loudness' => ['integrated' => -12.3], 'spectrum' => ['db' => []]]])->save();
 
-    $this->get(route('library'))->assertOk()->assertSee('DR9')->assertDontSee('Run <code>php artisan magnetite:analyze', false);
+    $this->get(route('library'))->assertOk()->assertSee('DR9')->assertDontSee('Use <strong>Analyse files</strong>', false);
 });
+
+describe('the Analyse button', function () {
+    it('queues one job for the signed-in user, and reports progress', function () {
+        Queue::fake();
+        config(['queue.default' => 'database']); // the sync driver never treats a waiting job as one to coalesce with
+        app(LibraryScanner::class)->scan($this->user);
+
+        $this->postJson(route('analysis.store'))->assertStatus(202)->assertJson(['state' => 'queued']);
+        $this->postJson(route('analysis.store'))->assertStatus(202);
+
+        Queue::assertPushed(AnalyzeTracks::class, 1);
+        $this->getJson(route('analysis.show'))->assertOk()->assertJson(['state' => 'queued']);
+    });
+
+    it('is offered only while some file has no current analysis', function () {
+        app(LibraryScanner::class)->scan($this->user);
+        $this->get(route('library'))->assertSee('Analyse files');
+
+        Track::query()->update(['analysis_version' => TrackAnalyzer::VERSION]);
+        $this->get(route('library'))->assertDontSee('Measure dynamic range, clipping')->assertDontSee('new file(s)');
+
+        Track::query()->first()->update(['analysis_version' => TrackAnalyzer::VERSION - 1]);
+        $this->get(route('library'))->assertSee('spectrum of 1 file(s)');
+    });
+
+    it('refuses to run inside the request with the sync queue', function () {
+        Queue::fake();
+        config(['queue.default' => 'sync']);
+
+        $this->postJson(route('analysis.store'))->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'queue worker'));
+        Queue::assertNothingPushed();
+    })->skip(fn () => app(TrackAnalyzer::class)->missing() !== [], 'ffmpeg, ffprobe or node not installed');
+
+    it('says what the server lacks instead of queueing', function () {
+        Queue::fake();
+        config(['queue.default' => 'database', 'magnetite.ffmpeg' => '/nonexistent/ffmpeg', 'magnetite.node' => '/nonexistent/node']);
+        app()->forgetInstance(TrackAnalyzer::class);
+
+        $this->postJson(route('analysis.store'))->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'ffmpeg'));
+        Queue::assertNothingPushed();
+    });
+
+    it('needs a signed-in user', function () {
+        auth()->logout();
+
+        $this->postJson(route('analysis.store'))->assertUnauthorized();
+    });
+
+    it('measures only this user\'s tracks in the job, and counts a broken file without stopping', function () {
+        app(TrackAnalyzer::class)->missing() === [] || $this->markTestSkipped('ffmpeg, ffprobe or node not installed');
+        app(LibraryScanner::class)->scan($this->user);
+        $other = User::factory()->create(['username' => 'bob']);
+        $theirs = Track::query()->first()->replicate();
+        $theirs->forceFill(['user_id' => $other->id, 'path' => 'x.mp3'])->save();
+        Track::where('title', 'First Song')->update(['path' => 'gone.mp3']);
+
+        AnalyzeTracks::dispatchSync($this->user->id);
+
+        expect(Track::where('user_id', $this->user->id)->whereNull('analysis')->pluck('title')->all())->toBe(['First Song'])
+            ->and(Track::find($theirs->id)->analysis)->toBeNull()
+            ->and(AnalysisStatus::get($this->user->id))->toMatchArray(['state' => 'done', 'failed' => 1]);
+    });
+});
+
+it('can be released back to the queue when another run holds the lock', function (string $job) {
+    // WithoutOverlapping calls release() on the job; without InteractsWithQueue that was a fatal error.
+    expect(method_exists($job, 'release'))->toBeTrue();
+})->with([AnalyzeTracks::class, ScanLibrary::class, FindCovers::class]);
+
+it('keeps retrying while another run holds the lock', function (string $job) {
+    // A released job counts as an attempt; without retryUntil() the second one failed with "attempted too many times".
+    expect(method_exists($job, 'retryUntil'))->toBeTrue();
+})->with([AnalyzeTracks::class, ScanLibrary::class, FindCovers::class]);
