@@ -35,10 +35,11 @@
 
         <p x-show="tracks.length === 0" class="text-muted">Empty. Add tracks with the + Playlist button in <a href="{{ route('library') }}" wire:navigate class="text-accent">your library</a> or in the <a href="{{ route('shared') }}" wire:navigate class="text-accent">shared music</a>.</p>
 
-        <div x-show="tracks.length" class="divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
+        <div x-show="tracks.length" x-ref="list" class="divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
             <template x-for="(t, i) in tracks" :key="t.id">
-                <div class="flex items-center gap-2 pr-3 text-sm">
-                    <button type="button" class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3 text-left hover:text-accent"
+                <div data-row class="flex items-center gap-2 pr-3 text-sm">
+                    <span data-handle class="shrink-0 cursor-grab touch-none select-none py-2 pl-3 text-muted hover:text-accent" title="Drag to reorder" aria-hidden="true">⠿</span>
+                    <button type="button" class="flex min-w-0 flex-1 items-center gap-3 py-2 text-left hover:text-accent"
                             @click="$store.player.setQueue([...tracks], i)">
                         <span class="w-5 shrink-0 text-xs text-muted" x-text="i + 1"></span>
                         <span class="min-w-0 flex-1 truncate"><span x-text="t.title"></span><span class="text-muted" x-show="t.artist" x-text="' · ' + t.artist"></span></span>

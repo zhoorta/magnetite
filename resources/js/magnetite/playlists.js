@@ -1,4 +1,5 @@
 import { Alpine, Livewire } from '../../../vendor/livewire/livewire/dist/livewire.esm';
+import Sortable from 'sortablejs';
 import { send } from './http';
 
 /**
@@ -68,6 +69,46 @@ export function playlistView(id, name, tracks, shared) {
         note: '',
         editing: false,
         draft: name,
+        sortable: null,
+
+        // Alpine calls init() and destroy() by themselves (on creation and when the page is left).
+        init() {
+            this.$nextTick(() => {
+                if (!this.$refs.list) return;
+
+                this.sortable = Sortable.create(this.$refs.list, {
+                    handle: '[data-handle]',
+                    draggable: '[data-row]',
+                    animation: 150,
+                    ghostClass: 'opacity-40',
+                    // The browser's own drag and drop does not work with touch; this works with mouse, pen and finger alike.
+                    forceFallback: true,
+                    onEnd: (e) => this.dropped(e),
+                });
+            });
+        },
+
+        destroy() {
+            this.sortable?.destroy();
+        },
+
+        /**
+         * A row was dropped. Sortable has moved the element itself; put it back and change the array instead, so Alpine
+         * stays the one that renders the list.
+         */
+        async dropped({ item, from, oldIndex, oldDraggableIndex, newDraggableIndex }) {
+            from.removeChild(item);
+            from.insertBefore(item, from.children[oldIndex] ?? null);
+
+            if (oldDraggableIndex === newDraggableIndex) return;
+
+            const before = [...this.tracks];
+            const [moved] = this.tracks.splice(oldDraggableIndex, 1);
+            this.tracks.splice(newDraggableIndex, 0, moved);
+
+            const r = await send('PUT', `/playlists/${this.id}/order`, { ids: this.tracks.map((t) => t.id) });
+            if (!r.ok) this.tracks = before;
+        },
 
         async remove(i) {
             const [track] = this.tracks.splice(i, 1);
