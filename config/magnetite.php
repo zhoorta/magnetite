@@ -35,4 +35,12 @@ return [
     'covers' => [
         'user_agent' => env('MAGNETITE_COVERS_USER_AGENT', 'Magnetite/1.0'),
     ],
+
+    // Identifying albums by fingerprint (docs/identify-albums.md, level 3): Chromaprint's `fpcalc` (empty: look it up
+    // on PATH) and an AcoustID application key (free, https://acoustid.org/new-application). Without both, the
+    // fingerprint step is skipped. Only a fingerprint and the length of a few tracks per folder are sent.
+    'fpcalc' => env('MAGNETITE_FPCALC'),
+    'acoustid' => [
+        'key' => env('MAGNETITE_ACOUSTID_KEY'),
+    ],
 ];

@@ -20,11 +20,11 @@ COPY resources resources
 COPY public public
 RUN npm run build
 
-# 3. The image that runs: FrankenPHP (Caddy + PHP), ffmpeg for ALAC and file analysis, Node for bin/measure.mjs.
+# 3. The image that runs: FrankenPHP (Caddy + PHP), ffmpeg for ALAC and file analysis, fpcalc for album fingerprints, Node for bin/measure.mjs.
 FROM dunglas/frankenphp:1-php8.4 AS app
 RUN install-php-extensions gd zip intl opcache pcntl \
     && apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg libchromaprint-tools \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=node:22-slim /usr/local/bin/node /usr/local/bin/node
 

@@ -26,7 +26,7 @@ The processes run as `www-data` (uid 33), not root. The music folder has to be w
 
 ## Inside the image
 
-PHP 8.4 with `gd`, `zip`, `intl`, `opcache`, `pcntl`; ffmpeg and ffprobe (ALAC to FLAC, `magnetite:analyze`); Node 22 (`bin/measure.mjs`). Size is about 1.7 GB, mostly the base image and ffmpeg. Logs go to stderr (`docker compose logs`).
+PHP 8.4 with `gd`, `zip`, `intl`, `opcache`, `pcntl`; ffmpeg and ffprobe (ALAC to FLAC, `magnetite:analyze`); `fpcalc` (album fingerprints, used only when `MAGNETITE_ACOUSTID_KEY` is set); Node 22 (`bin/measure.mjs`). Size is about 1.7 GB, mostly the base image and ffmpeg. Logs go to stderr (`docker compose logs`).
 
 ## A library in Ferrite
 
