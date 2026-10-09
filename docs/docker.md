@@ -28,6 +28,18 @@ The processes run as `www-data` (uid 33), not root. The music folder has to be w
 
 PHP 8.4 with `gd`, `zip`, `intl`, `opcache`, `pcntl`; ffmpeg and ffprobe (ALAC to FLAC, `magnetite:analyze`); Node 22 (`bin/measure.mjs`). Size is about 1.7 GB, mostly the base image and ffmpeg. Logs go to stderr (`docker compose logs`).
 
+## A library in Ferrite
+
+Nothing in the image changes: the container only needs outbound HTTPS to Ferrite. What to know on a running deployment:
+
+- **Update:** `git pull && docker compose up -d --build`. The web container migrates on start (adds `users.store` and `tracks.store_key`/`store_hash`); the worker waits for it.
+- **Point a user at Ferrite** (the token is asked for, so it stays out of the shell history): `docker compose exec -u www-data app php artisan magnetite:storage jose --ferrite=https://files.example.com`. It prints the Ferrite folder, access and expiry, or why it failed. Then `docker compose exec -u www-data app php artisan magnetite:scan jose --queue`. Go back with `--local`.
+- **The token is stored encrypted with `APP_KEY`.** Keep `APP_KEY` as it is (back it up with `data`), or the stored tokens cannot be read and `magnetite:storage` has to be run again.
+- **The worker matters more:** scans, the prefetch of the next track and nothing else run there. Without it a track still plays (through the proxy) but the next one is not fetched ahead.
+- **Cache:** `/app/storage/app/private/ferrite-cache` in the `storage` volume, capped by `MAGNETITE_CACHE_MAX_GB` (default 10; set it to what the disk can spare). Clear it from the Storage page.
+- **Streaming:** `/stream` passes Ferrite's bytes through the container with Range, so a reverse proxy in front must not buffer whole responses (nginx: `proxy_buffering off` for `/stream/`, or at least do not cache), or the first byte waits for the whole file.
+- A library on Ferrite no longer needs `/music` for that user; users on the local store still do.
+
 ## Limits
 
 - `MAGNETITE_UPLOAD_MAX_MB` (default 2048) sets PHP's `upload_max_filesize` as well as the app's own limit; `post_max_size` is unlimited and the number of files is capped at 20.
