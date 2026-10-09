@@ -26,6 +26,12 @@ Route::middleware('guest')->group(function () {
 
 Route::post('/logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
 
+// Files and covers answer the browser (session cookie) and the Android app (Bearer token) alike.
+Route::middleware('auth:web,sanctum')->group(function () {
+    Route::get('/stream/{track}', StreamController::class)->whereNumber('track')->name('stream');
+    Route::get('/cover/{album}', CoverController::class)->whereNumber('album')->name('cover');
+});
+
 // The library, the files and the upload are only for signed-in users.
 Route::middleware('auth')->group(function () {
     Route::get('/library', [LibraryController::class, 'library'])->name('library');
@@ -47,9 +53,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/playlists/{playlist}/copy', [PlaylistController::class, 'copy'])->whereNumber('playlist')->name('playlists.copy');
     Route::put('/playlists/{playlist}/order', [PlaylistController::class, 'reorder'])->whereNumber('playlist')->name('playlists.order');
 
-    Route::get('/stream/{track}', StreamController::class)->whereNumber('track')->name('stream');
     Route::post('/prefetch/{track}', PrefetchController::class)->whereNumber('track')->middleware('throttle:60,1')->name('prefetch');
-    Route::get('/cover/{album}', CoverController::class)->whereNumber('album')->name('cover');
 
     Route::get('/covers/find', [CoverSearchController::class, 'show'])->name('covers.find.show');
     Route::post('/covers/find', [CoverSearchController::class, 'store'])->name('covers.find');
