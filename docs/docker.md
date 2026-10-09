@@ -1,5 +1,7 @@
 # Docker image
 
+Not what magnetite.stackcare.pt runs: that server uses nginx, PHP-FPM and MySQL without Docker (`docs/bare-metal.md`). This image stays for anyone who wants one.
+
 One image (`Dockerfile`), two containers (`compose.yaml`): `app` (FrankenPHP, which is Caddy with PHP) and `worker` (`queue:work`, runs the library scans). SQLite lives in a volume, so there is no database container.
 
 ## Deploy
