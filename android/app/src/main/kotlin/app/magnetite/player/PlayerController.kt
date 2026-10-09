@@ -82,7 +82,8 @@ class PlayerController(context: Context, private val session: Session) {
     private fun save() {
         val c = controller ?: return
         val user = session.username ?: return
-        if (queue.isEmpty() || c.mediaItemCount == 0) return
+        // The queue may have been replaced from outside the app (a car): save only what this screen's list still describes.
+        if (queue.isEmpty() || c.mediaItemCount != queue.size) return
         store.save(user, SavedPlayback(queue, c.currentMediaItemIndex, c.currentPosition))
     }
 
@@ -141,17 +142,5 @@ class PlayerController(context: Context, private val session: Session) {
     fun next() = controller?.seekToNext()
     fun previous() = controller?.seekToPrevious()
 
-    private fun mediaItem(t: Track): MediaItem =
-        MediaItem.Builder()
-            .setMediaId(t.id.toString())
-            .setUri(t.streamUrl!!)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(t.title)
-                    .setArtist(t.artist)
-                    .setAlbumTitle(t.album)
-                    .setArtworkUri(t.coverUrl?.toUri())
-                    .build(),
-            )
-            .build()
+    private fun mediaItem(t: Track): MediaItem = t.toMediaItem()
 }

@@ -115,3 +115,13 @@ The app has the web's nine meters under the same ids (`vu-wide`, `vu-needle`, `v
 ## Pull to refresh (2026-10-09)
 
 Library, Shared, Playlists, a playlist and an album reload when pulled down (`ui/Refresh.kt`: `PullRefresh` around the list, `ScrollingMessage` so the empty and loading states can be pulled too). The Library reload reloads folders and albums and keeps the expanded folders; a failed reload keeps what is on screen.
+
+## Android Auto (2026-10-10)
+
+The app is a media app for Android Auto: `PlaybackService` is a `MediaLibraryService` (also answering the older `android.media.browse.MediaBrowserService` action, which Auto uses to browse), and the manifest carries `com.google.android.gms.car.application` pointing at `res/xml/automotive_app_desc.xml` (`<uses name="media"/>`).
+
+- Browse tree (`player/LibraryTree.kt`, from the same API as the app, so a person sees only what they may play): Library (folders, then albums; an album opens to its tracks), Playlists, Shared. Lists are paged for the browser; not signed in answers "authentication required".
+- Playing: a browser that sends one track id gets the whole list that track was browsed in, starting there (`LibraryTree.resolve`, used by `onSetMediaItems` / `onAddMediaItems`). Checked on the emulator with a Media3 `MediaBrowser` against the running service (root, folders, albums, playlists, and one id queueing the playlist at the right index); not checked in a car or the Desktop Head Unit.
+- The phone app only saves its own queue (`PlayerController.save` skips when the queue was replaced from outside).
+- Known limits: cover art in Auto may be missing (the covers need the Bearer token, which Auto cannot send); no search, no voice commands yet; the meters are phone-only.
+- To try it: on the phone open Android Auto settings, tap Version about 10 times, then ⋮ → Developer settings → turn on Unknown sources (sideloaded apps are hidden otherwise). Then connect to a car, or run the Desktop Head Unit (`adb forward tcp:5277 tcp:5277`, Android Auto → ⋮ → Start head unit server, then `desktop-head-unit`).
