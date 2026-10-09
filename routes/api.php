@@ -17,6 +17,7 @@ use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\FolderController as FolderWrites;
 use App\Http\Controllers\LibraryEditController;
 use App\Http\Controllers\LibraryRemoveController;
+use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\ScanController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,6 +28,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::delete('/token', [TokenController::class, 'destroy'])->name('api.token.destroy');
         Route::get('/me', MeController::class)->name('api.me');
+        Route::put('/settings/meters', [MeterSettingController::class, 'update'])->name('api.settings.meters');
 
         Route::get('/albums', [AlbumController::class, 'index'])->name('api.albums');
         Route::get('/albums/{album}', [AlbumController::class, 'show'])->whereNumber('album')->name('api.albums.show');

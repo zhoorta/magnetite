@@ -141,3 +141,21 @@ describe('files', function () {
         $this->get(route('stream', $this->aliceTrack))->assertRedirect(route('login'));
     });
 });
+
+describe('meters', function () {
+    it('saves the meter list through the API and returns it from /me', function () {
+        $this->putJson('/api/v1/settings/meters', ['ids' => ['vu-needle', 'scope']], bearer($this->alice))
+            ->assertOk()->assertJson(['meters' => ['vu-needle', 'scope']]);
+        $this->getJson('/api/v1/me', bearer($this->alice))->assertJson(['meters' => ['vu-needle', 'scope']]);
+        expect($this->bob->fresh()->meters)->toBeNull();
+    });
+
+    it('refuses more than four and duplicates', function () {
+        $this->putJson('/api/v1/settings/meters', ['ids' => ['a', 'b', 'c', 'd', 'e']], bearer($this->alice))->assertUnprocessable();
+        $this->putJson('/api/v1/settings/meters', ['ids' => ['scope', 'scope']], bearer($this->alice))->assertUnprocessable();
+    });
+
+    it('answers guests with 401', function () {
+        $this->putJson('/api/v1/settings/meters', ['ids' => []])->assertUnauthorized();
+    });
+});
