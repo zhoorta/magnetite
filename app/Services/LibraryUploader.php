@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\User;
 use App\Support\TrackLibrary;
 use FilesystemIterator;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Throwable;
@@ -75,6 +76,69 @@ class LibraryUploader
         } finally {
             $zip->close();
         }
+    }
+
+    /**
+     * Single audio files (the mobile apps), put in the root of the user's own folder. Audio only: no cover images, and
+     * nothing that already exists is replaced. The name is the client's, cleaned to one plain file name.
+     *
+     * @param  list<UploadedFile>  $files
+     * @return list<array{name: string, ok: bool, status?: string, error?: string}> status: added, existing or conflict
+     */
+    public function addFiles(User $user, array $files): array
+    {
+        $store = $user->store();
+        $remote = $store instanceof FerriteStore;
+        $remote && $this->assertWritable($store);
+        $base = $remote ? '' : $this->libraryRoot($user);
+
+        $results = [];
+        foreach ($files as $file) {
+            $client = $file->getClientOriginalName();
+            $name = $this->plainName($client);
+
+            if ($name === null || TrackLibrary::contentType($name) === null) {
+                $results[] = ['name' => $client, 'ok' => false, 'error' => 'Only audio files can be added (mp3, m4a, flac, ogg, opus or wav).'];
+
+                continue;
+            }
+
+            try {
+                $remote || $this->checkQuota($user, $base, (int) $file->getSize());
+
+                if ($remote) {
+                    $status = $store->put($file->getRealPath(), $name);
+                } elseif (file_exists($base.'/'.$name) || is_link($base.'/'.$name)) {
+                    $status = 'existing';
+                } else {
+                    $partial = $base.'/'.$name.'.part';
+                    if (! copy($file->getRealPath(), $partial) || ! chmod($partial, 0644) || ! rename($partial, $base.'/'.$name)) {
+                        @unlink($partial);
+
+                        throw new RuntimeException('Could not save '.$name.'.');
+                    }
+                    $status = 'added';
+                }
+
+                $results[] = ['name' => $name, 'ok' => true, 'status' => $status];
+            } catch (RuntimeException|FerriteException $e) {
+                $results[] = ['name' => $name, 'ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        return $results;
+    }
+
+    /** One plain file name from whatever the client sent: no folders, no control characters, not hidden. */
+    private function plainName(string $client): ?string
+    {
+        $name = basename(str_replace('\\', '/', $client));
+
+        if (! mb_check_encoding($name, 'UTF-8') || preg_match('/[\x00-\x1f\x7f]/', $name) || str_starts_with($name, '.') || strlen($name) > 255) {
+            return null;
+        }
+
+        return $name === '' ? null : $name;
     }
 
     /** Uploading needs a token that may add files, and says so before anything is unpacked. */

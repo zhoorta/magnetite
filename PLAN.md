@@ -80,6 +80,14 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
 - [x] Drag-and-drop ordering in playlists (2026-10-09): SortableJS (dev dependency, bundled by Vite) with a drag handle, `forceFallback` so mouse, pen and touch behave the same; Sortable's DOM move is undone and the array changed instead, then saved with the existing order endpoint (reverted if the save fails); the up/down buttons stay for keyboard use. Dragged with real mouse events in headless Chrome (move, numbers, reload); touch not tried on a phone
 - [x] Missing covers from the web (2026-10-09, `docs/covers.md`): `CoverFinder` asks MusicBrainz / Cover Art Archive, then iTunes, for albums without a cover; `magnetite:covers [username] [--retry] [--queue]`, a `FindCovers` job with per-user status, a "Find missing covers" button and a per-album "Find cover" button in the library, owner only. Exact title and artist match, allowlisted hosts, re-encoded by `CoverStore`, own files win over downloads. Pest tests with `Http::fake()`; not tried against the real services or in a browser
 - [ ] Android (`docs/android.md`; read-only `/api/v1` with Sanctum tokens built 2026-10-09, Kotlin project in `android/` started 2026-10-09: sign-in, library, album page and Media3 playback with notification and media keys work on the emulator; now-playing with seek bar, playlists and shared tabs; local resume of the queue and position; queue editing, playlist editing and search next): PWA first (manifest, service worker, Media Session), then decide on a native Kotlin/Media3 client, which needs a Sanctum token API (`/api/v1`) that reuses `visibleTo` and the policies
+- [x] Write API for the mobile clients, server side (2026-10-09, `docs/android.md` "Write API"; 21 Pest tests in `ApiWriteTest`; not used by the Android app yet, not tried against a running server): the web-only features open to Android and later iOS through `/api/v1`, with the same policies and 404s
+  - [x] Folders (list, create, rename, move, delete, album into folder; `folder_id` in `AlbumResource`)
+  - [x] Scan start and status
+  - [x] Album and track detail and editing (title, artist, year, label, number; find titles online; file-truth fields for the owner)
+  - [x] Covers: find for one album or all, send an image from the phone
+  - [x] Upload single audio files (audio only, no covers), landing in the root of the user's folder, not only zips
+  - [x] Put a file in an album and take it out (moves the file to the album's folder, or out to the parent folder / root; never deletes); delete for real stays separate
+  - [x] Separate token abilities for write and delete; Pest tests for every endpoint (owner, other user 404, shared item read-only, read-only token)
 - [ ] Fullscreen now-playing polish, add to queue / play next, Media Session (hardware keys, lock screen)
 - [ ] Flux UI for library, queue and settings screens
 - [ ] Licence (AGPL is consistent with the other projects), README, demo GIF
@@ -90,3 +98,4 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
 - Albums without an album-artist tag are grouped by title within their folder; a compilation split across folders becomes several albums.
 - The scan runs synchronously from the command; move it to a queued job when the library page offers a rescan button.
 - Gapless playback and crossfade need a second element; skipped for v1.
+- [x] Android look (2026-10-09, `docs/android.md`): Terminal theme in Compose, launcher icon and login logo from the landing logo; checked on the emulator. Not done: other themes, folders in the app (the API has no folders yet)

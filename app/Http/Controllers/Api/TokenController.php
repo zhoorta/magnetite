@@ -21,6 +21,7 @@ class TokenController extends Controller
             'username' => ['required', 'string'],
             'password' => ['required', 'string'],
             'device_name' => ['required', 'string', 'max:100'],
+            'read_only' => ['sometimes', 'boolean'],
         ]);
 
         $username = mb_strtolower(trim($data['username']));
@@ -43,7 +44,7 @@ class TokenController extends Controller
         RateLimiter::clear($throttle);
 
         return response()->json([
-            'token' => $user->createToken($data['device_name'])->plainTextToken,
+            'token' => $user->createToken($data['device_name'], $request->boolean('read_only') ? ['library:read'] : ['*'])->plainTextToken,
             'user' => ['id' => $user->id, 'username' => $user->username, 'meters' => $user->meters ?? ['vu-wide']],
         ], 201);
     }

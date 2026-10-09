@@ -23,6 +23,11 @@ class TrackResource extends JsonResource
             'duration' => $this->duration,
             'codec' => $this->codec,
             'cover_url' => $this->album?->coverUrl(),
+            'bitrate' => $this->bitrate,
+            'size' => $this->size,
+            // The owner's own details: what can be edited, as stored, and the measurements (without the long spectrum).
+            'edit' => $this->when($this->user_id === $request->user()?->id, fn () => ['title' => $this->title, 'artist' => $this->artist, 'track_number' => $this->track_number]),
+            'truth' => $this->when($this->user_id === $request->user()?->id, fn () => array_diff_key($this->resource->toTruth(), ['spectrum' => 1])),
             'open' => (bool) $open,
             'stream_url' => $open ? route('stream', $this->id) : null,
         ];
