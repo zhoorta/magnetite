@@ -1,6 +1,6 @@
 # Android app
 
-Status: design only (2026-10-09), nothing built. Decide between the PWA and a native client first.
+Status (2026-10-09): native client chosen, to live in `android/` in this repo. The read-only token API (`/api/v1`) is built and tested (`tests/Feature/ApiTest.php`); the Android project is not created yet. Android Studio and SDK 37 are installed (AVD `Medium_Phone_API_37.0`; no system JDK, use Studio's bundled one). The PWA is still open in `PLAN.md`.
 
 ## Options
 
@@ -26,6 +26,9 @@ There is no JSON API today; the web app is Livewire and session cookies. A nativ
 - Laravel Sanctum personal access tokens (not installed yet). `POST /api/v1/token` with `username`, `password`, `device_name`; same throttle as the web login (5 tries). Returns a token; the app keeps it in the Android Keystore (EncryptedSharedPreferences).
 - `DELETE /api/v1/token` revokes the current token. Token abilities: one ability set for now.
 - `/stream` and `/cover` accept `auth:sanctum,web` so the same url works for the browser (cookie) and for ExoPlayer (`Authorization: Bearer`, set in the `DataSource` factory). Range requests unchanged.
+
+### Built so far
+Sanctum is installed; `routes/api.php` holds `POST/DELETE /api/v1/token`, `GET /me`, `/albums`, `/albums/{id}`, `/shared`, `/playlists`, `/playlists/{id}`, `/search?q=` (throttle 120/min). `/stream/{track}` and `/cover/{album}` moved to `auth:web,sanctum`, so one url serves the browser (cookie) and ExoPlayer (Bearer). Track resources never carry a path; `stream_url` is `null` and `open` is `false` for tracks the viewer cannot play. Not built: playlist editing, meters setting, sharing, pagination of search.
 
 ### Endpoints (v1, read first)
 - `GET /api/v1/me`: id, username, meters.
