@@ -63,6 +63,10 @@ class LibraryScanner
 
             $onFile && $onFile($relative);
 
+            // getID3 calls set_time_limit(30) while it reads an MP3, which also switches off a limit that was lifted for
+            // the request. A scan run inside a web request (sync queue) would then time out after 30 s of other files.
+            @set_time_limit(0);
+
             try {
                 $this->import($user, $reader, $file, $relative);
                 $counts[$existing ? 'updated' : 'added']++;
