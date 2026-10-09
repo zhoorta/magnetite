@@ -1,0 +1,40 @@
+{
+	# TLS is the job of the reverse proxy in front; this listens on a plain, unprivileged port.
+	auto_https off
+	admin off
+	frankenphp
+	order php_server before file_server
+}
+
+:8080 {
+	root * /app/public
+
+	# Audio is already compressed: only compress text.
+	encode zstd gzip {
+		match {
+			header Content-Type text/*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type image/svg+xml*
+		}
+	}
+
+	# PHP reads a whole upload to disk before Laravel can say no, so the body size is capped here: zip uploads get a
+	# generous limit, everything else (sign-in, pages) a small one.
+	@upload path /upload
+	request_body @upload {
+		max_size {$MAGNETITE_UPLOAD_BODY_MAX:16GB}
+	}
+	@other not path /upload
+	request_body @other {
+		max_size 4MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy same-origin
+		-Server
+	}
+
+	php_server
+}

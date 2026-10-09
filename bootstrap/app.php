@@ -13,6 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectUsersTo(fn () => route('library'));
+
+        // Behind a reverse proxy the real address and scheme come from forwarded headers. Trusting them from anywhere
+        // would let a visitor fake an address and dodge the sign-in throttle, so the proxy addresses are listed.
+        $proxies = array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', ''))));
+        $proxies && $middleware->trustProxies(at: $proxies);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
