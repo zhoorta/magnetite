@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Support\TrackLibrary;
+use FilesystemIterator;
+use Illuminate\Support\Facades\File;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -20,10 +22,17 @@ class LibraryUploader
 
     private const CHUNK = 1024 * 1024;
 
-    /** @return array{folder: string, added: int, existing: int, skipped: int, bytes: int} */
+    /** @return array{folder: string, added: int, existing: int, conflicts: int, skipped: int, bytes: int} */
     public function extract(User $user, string $zipPath, string $originalName): array
     {
-        $base = $this->libraryRoot($user);
+        $store = $user->store();
+        $remote = $store instanceof FerriteStore;
+
+        if ($remote) {
+            $this->assertWritable($store);
+        }
+
+        $base = $remote ? '' : $this->libraryRoot($user);
         $maxFiles = (int) config('magnetite.upload.max_files');
         $maxBytes = (int) (config('magnetite.upload.max_unpacked_mb') * 1024 * 1024);
 
@@ -53,14 +62,78 @@ class LibraryUploader
                 throw new RuntimeException('The zip is too large once unpacked.');
             }
 
-            $this->checkQuota($user, $base, $unpacked);
+            // Ferrite keeps its own quota; the folder check is only for a local library.
+            $remote || $this->checkQuota($user, $base, $unpacked);
 
             $prefix = $this->needsFolder($entries) ? $this->folderName($originalName).'/' : '';
 
-            return $this->write($zip, $base, $entries, $prefix, $maxBytes) + ['skipped' => $skipped];
+            $result = $remote
+                ? $this->writeToFerrite($zip, $store, $entries, $prefix, $maxBytes)
+                : $this->write($zip, $base, $entries, $prefix, $maxBytes) + ['conflicts' => 0];
+
+            return $result + ['skipped' => $skipped];
         } finally {
             $zip->close();
         }
+    }
+
+    /** Uploading needs a token that may add files, and says so before anything is unpacked. */
+    private function assertWritable(FerriteStore $store): void
+    {
+        try {
+            $writable = $store->canWrite();
+        } catch (FerriteException $e) {
+            throw new RuntimeException($e->getMessage(), 0, $e);
+        }
+
+        if (! $writable) {
+            throw new RuntimeException('The Ferrite token of this library is read-only, so music cannot be uploaded here.');
+        }
+    }
+
+    /**
+     * Send each entry to Ferrite, one at a time through a temporary file (the size a zip declares cannot be trusted, so
+     * it is counted while copying). Nothing is replaced. Ferrite's token cannot delete, so a failure halfway cannot be
+     * rolled back: the message says how many files already arrived, and sending the same zip again finishes the job.
+     *
+     * @return array{folder: string, added: int, existing: int, conflicts: int, bytes: int}
+     */
+    private function writeToFerrite(ZipArchive $zip, FerriteStore $store, array $entries, string $prefix, int $maxBytes): array
+    {
+        $dir = sys_get_temp_dir().'/magnetite-up-'.bin2hex(random_bytes(6));
+        mkdir($dir, 0700);
+
+        $counts = ['added' => 0, 'existing' => 0, 'conflict' => 0];
+        $total = 0;
+
+        try {
+            foreach ($entries as $entry) {
+                $local = $dir.'/file';
+                $total += $this->copy($zip, $entry, $local, $maxBytes - $total);
+
+                try {
+                    $counts[$store->put($local, $prefix.$entry['path'])]++;
+                } finally {
+                    @unlink($local);
+                }
+            }
+        } catch (FerriteException $e) {
+            $done = array_sum($counts);
+
+            throw new RuntimeException($done > 0
+                ? "{$e->getMessage()} {$done} of ".count($entries).' files had arrived; send the same zip again to finish.'
+                : $e->getMessage(), 0, $e);
+        } finally {
+            File::deleteDirectory($dir);
+        }
+
+        return [
+            'folder' => rtrim($prefix, '/') ?: strstr($entries[0]['path'], '/', true),
+            'added' => $counts['added'],
+            'existing' => $counts['existing'],
+            'conflicts' => $counts['conflict'],
+            'bytes' => $total,
+        ];
     }
 
     /** The user's folder, created on the first upload. It always sits inside the music folder's `users/`. */
@@ -98,7 +171,7 @@ class LibraryUploader
         }
 
         $used = 0;
-        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($base, \FilesystemIterator::SKIP_DOTS)) as $file) {
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS)) as $file) {
             $used += $file->isFile() && ! $file->isLink() ? $file->getSize() : 0;
         }
 

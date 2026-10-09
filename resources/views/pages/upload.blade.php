@@ -43,7 +43,7 @@
                 <p>
                     <span class="font-medium" x-text="a.name"></span>
                     <span x-show="a.ok" class="text-muted"
-                          x-text="': ' + a.added + ' files added' + (a.existing ? ', ' + a.existing + ' already there' : '') + (a.skipped ? ', ' + a.skipped + ' left out' : '') + ' (' + size(a.bytes) + ')'"></span>
+                          x-text="': ' + a.added + ' files added' + (a.existing ? ', ' + a.existing + ' already there' : '') + (a.conflicts ? ', ' + a.conflicts + ' not added because a different file has that name' : '') + (a.skipped ? ', ' + a.skipped + ' left out' : '') + ' (' + size(a.bytes) + ')'"></span>
                     <span x-show="! a.ok" class="text-accent2" x-text="': ' + a.error"></span>
                 </p>
             </template>

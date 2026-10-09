@@ -65,6 +65,119 @@ class FerriteStore implements LibraryStore
         return $this->failure ?? 'Ferrite cannot be used.';
     }
 
+    /** Whether the token may add files, per `GET /root`. Throws FerriteException when Ferrite cannot be used. */
+    public function canWrite(): bool
+    {
+        return ($this->root()['access'] ?? 'read') === 'read+write';
+    }
+
+    /**
+     * Add a local file at $path, never replacing anything. Returns `added`, `existing` (the same bytes are already
+     * there) or `conflict` (a different file is in the way, left alone). Sends the file in the chunks Ferrite asks
+     * for, resumes from the offset Ferrite reports after an interruption, then waits until Ferrite has stored it.
+     */
+    public function put(string $localFile, string $path): string
+    {
+        $size = (int) filesize($localFile);
+        $hash = (string) hash_file('sha256', $localFile);
+
+        $start = $this->send(fn (PendingRequest $http) => $http->post($this->api('uploads'), ['path' => $path, 'size' => $size, 'fingerprint' => $hash]), [200, 201, 409, 422]);
+
+        if ($start->status() === 409) {
+            return hash_equals($hash, (string) $start->json('sha256')) ? 'existing' : 'conflict';
+        }
+
+        if ($start->status() === 422) {
+            throw new FerriteException(collect($start->json('errors') ?? [])->flatten()->first() ?? 'Ferrite refused the upload.');
+        }
+
+        $id = (string) $start->json('id');
+        $chunk = max(1, (int) $start->json('chunk_size'));
+        $offset = (int) $start->json('offset');
+        $handle = fopen($localFile, 'rb');
+        $state = $start;
+
+        $sent = false;
+        $stalled = 0;
+
+        try {
+            // An empty file still needs one (empty) chunk to be completed.
+            while ($offset < $size || ! $sent) {
+                $sent = true;
+                fseek($handle, $offset);
+                $body = (string) fread($handle, $chunk);
+
+                $state = $this->send(fn (PendingRequest $http) => $http
+                    ->withBody($body, 'application/octet-stream')
+                    ->withHeaders(['Upload-Offset' => (string) $offset])
+                    ->patch($this->api("uploads/{$id}")), [200, 202, 409, 422]);
+
+                if ($state->status() === 422) {
+                    return $this->failed($state);
+                }
+
+                if ($state->status() === 409) {
+                    // Ferrite is at another offset (a chunk that arrived after all) or is busy; carry on from where it really is.
+                    if ($state->json('status') !== 'receiving') {
+                        break;
+                    }
+
+                    $stalled = (int) $state->json('offset') === $offset ? $stalled + 1 : 0;
+                    if ($stalled > 5) {
+                        throw new FerriteException('Ferrite did not accept the upload.');
+                    }
+                    sleep($stalled);
+                    $offset = (int) $state->json('offset');
+
+                    continue;
+                }
+
+                $offset += strlen($body);
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        return $this->await($id, $state);
+    }
+
+    /** Wait for Ferrite to finish storing an upload (it does so on a queue), up to ten minutes. */
+    private function await(string $id, HttpResponse $last): string
+    {
+        $deadline = time() + 600;
+
+        for ($wait = 0; ; $wait = min(5, $wait + 1)) {
+            $status = $last->json('status');
+
+            if ($status === 'done') {
+                return 'added';
+            }
+
+            if ($status === 'failed') {
+                return $this->failed($last);
+            }
+
+            if (time() > $deadline) {
+                throw new FerriteException('Ferrite is taking too long to store a file.');
+            }
+
+            sleep($wait);
+            $last = $this->send(fn (PendingRequest $http) => $http->get($this->api("uploads/{$id}")));
+        }
+    }
+
+    /** A failed upload: a name that was taken meanwhile is a conflict, anything else stops the upload. */
+    private function failed(HttpResponse $response): string
+    {
+        $error = (string) ($response->json('error') ?? $response->json('message') ?? 'Ferrite could not store the file.');
+
+        if (str_contains($error, 'already exists')) {
+            return 'conflict';
+        }
+
+        throw new FerriteException($error);
+    }
+
     public function files(): iterable
     {
         $this->loadIndex();

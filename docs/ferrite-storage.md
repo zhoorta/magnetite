@@ -87,7 +87,15 @@ Recommended staging, stop when it stops paying off: (1) `LibraryStore` + `LocalS
 - Scan: a file is unchanged when its hash and Ferrite id match (folders still use size and mtime). A failed listing keeps the old tracks and says why (`LibraryStore::unavailableReason()`).
 - `/stream`: a track that is not cached goes through `FerriteStore::proxy()` (Range, If-Range, If-None-Match forwarded; type, `nosniff`, `inline` are Magnetite's own); a cached one is served from disk; ALAC goes through the cache and the converter. Ferrite down and not cached: 502 with the reason.
 - Measured with both apps on one machine (real Ferrite on MySQL, `php artisan serve`): first byte 85 ms cold, 21 ms for a Range request; fixture files only (4 KB), so this says nothing about a remote Ferrite yet. Still to do: measure against the real server with a full-size album.
-- Not built: uploads and `put()`, prefetch, the Storage page, `magnetite:claim` and the zip upload for Ferrite users. Ferrite's reads are limited to 120/min per token: a first scan of a big library waits on the limit (the store sleeps for `Retry-After`), and playback Range requests count too, so Ferrite may need a higher limit for content.
+- Not built: prefetch, the Storage page, `magnetite:claim` for Ferrite users. Ferrite's reads are limited to 120/min per token: a first scan of a big library waits on the limit (the store sleeps for `Retry-After`), and playback Range requests count too, so Ferrite may need a higher limit for content.
+
+## Built 2026-10-09: writing (step 4)
+
+- `FerriteStore::put($localFile, $path)` uses Ferrite's chunked upload API (a write token, `on_conflict=fail`): it returns `added`, `existing` (409 with the same sha256) or `conflict` (409 with another hash, or a name taken while the file was on its way; nothing is replaced). It follows the chunk size Ferrite gives, resumes from the offset Ferrite reports after a 409, and polls until the file is stored (up to ten minutes).
+- `LibraryUploader::extract()` keeps every rule it had (types, traversal, symlinks, hidden files, counted size, no audio, limits) and, for a Ferrite library, copies each entry to a temporary file (counting the real bytes) and `put()`s it. It first checks `GET /root`: a read-only token says so before anything is unpacked. The folder quota (`users.quota_mb`) applies to local libraries only; Ferrite's own quota applies to the rest.
+- No rollback: the token cannot delete, so a failure halfway leaves what arrived. The error says "N of M files had arrived; send the same zip again to finish", and sending it again counts the arrived ones as already there.
+- The result has a new `conflicts` count, shown on the upload page. The scan is queued after any upload that added files, as before.
+- Checked against a real Ferrite (MySQL, token limited to a folder): five files in 0.35 s, the same zip again 0.09 s with everything already there, then the scan read them back.
 
 ## Build order
 
