@@ -46,6 +46,11 @@ Route::prefix('v1')->group(function () {
         // Changing the library needs a token that may write. The work and the rules are the web controllers', so both agree.
         Route::middleware('abilities:library:write')->group(function () {
             Route::put('/playlists/{playlist}/order', [PlaylistWrites::class, 'reorder'])->whereNumber('playlist')->name('api.playlists.order');
+            Route::post('/playlists', [PlaylistWrites::class, 'store'])->name('api.playlists.store');
+            Route::patch('/playlists/{playlist}', [PlaylistWrites::class, 'update'])->whereNumber('playlist')->name('api.playlists.update');
+            Route::post('/playlists/{playlist}/tracks', [PlaylistWrites::class, 'addTrack'])->whereNumber('playlist')->name('api.playlists.tracks.store');
+            Route::delete('/playlists/{playlist}/tracks/{track}', [PlaylistWrites::class, 'removeTrack'])->whereNumber(['playlist', 'track'])->name('api.playlists.tracks.destroy');
+            Route::post('/playlists/{playlist}/copy', [PlaylistWrites::class, 'copy'])->whereNumber('playlist')->name('api.playlists.copy');
             Route::post('/analysis', [AnalysisController::class, 'store'])->name('api.analysis.store');
             Route::post('/scan', [ScanController::class, 'store'])->name('api.scan.store');
             Route::post('/folders', [FolderWrites::class, 'store'])->name('api.folders.store');
@@ -66,6 +71,7 @@ Route::prefix('v1')->group(function () {
         // Deleting for real is a separate ability.
         Route::middleware('abilities:library:delete')->group(function () {
             Route::delete('/folders/{folder}', [FolderWrites::class, 'destroy'])->whereNumber('folder')->name('api.folders.destroy');
+            Route::delete('/playlists/{playlist}', [PlaylistWrites::class, 'destroy'])->whereNumber('playlist')->name('api.playlists.destroy');
             Route::delete('/albums/{album}', [LibraryRemoveController::class, 'album'])->whereNumber('album')->name('api.albums.destroy');
             Route::delete('/tracks/{track}', [LibraryRemoveController::class, 'track'])->whereNumber('track')->name('api.tracks.destroy');
         });

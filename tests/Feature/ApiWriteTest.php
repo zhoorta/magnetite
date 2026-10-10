@@ -117,6 +117,50 @@ describe('playlist order', function () {
     });
 });
 
+describe('playlist editing', function () {
+    beforeEach(function () {
+        $this->one = Track::where('user_id', $this->alice->id)->where('title', 'First Song')->sole();
+        $this->playlist = Playlist::create(['user_id' => $this->alice->id, 'name' => 'Mine']);
+    });
+
+    it('creates, renames, adds, removes and deletes my playlist', function () {
+        $id = $this->postJson('/api/v1/playlists', ['name' => 'Road trip', 'track_id' => $this->one->id], writer($this->alice))->assertCreated()->json('id');
+        expect(Playlist::find($id)->tracks)->toHaveCount(1);
+
+        $this->patchJson("/api/v1/playlists/{$id}", ['name' => 'Drive'], writer($this->alice))->assertOk();
+        expect(Playlist::find($id)->name)->toBe('Drive');
+
+        $this->postJson("/api/v1/playlists/{$this->playlist->id}/tracks", ['album_id' => $this->album->id], writer($this->alice))->assertOk();
+        expect($this->playlist->fresh()->tracks()->count())->toBeGreaterThan(0);
+
+        $this->deleteJson("/api/v1/playlists/{$this->playlist->id}/tracks/{$this->one->id}", [], writer($this->alice))->assertOk();
+        expect($this->playlist->fresh()->tracks()->where('tracks.id', $this->one->id)->exists())->toBeFalse();
+
+        $this->deleteJson("/api/v1/playlists/{$id}", [], writer($this->alice))->assertOk();
+        expect(Playlist::find($id))->toBeNull();
+    });
+
+    it('does not let me add a track I cannot see', function () {
+        $this->postJson("/api/v1/playlists/{$this->playlist->id}/tracks", ['track_id' => $this->bobTrack->id], writer($this->alice))->assertNotFound();
+    });
+
+    it('answers 404 for someone else\'s playlist', function () {
+        $this->patchJson("/api/v1/playlists/{$this->playlist->id}", ['name' => 'x'], writer($this->bob))->assertNotFound();
+    });
+
+    it('answers 404 when someone else deletes my playlist', function () {
+        $this->deleteJson("/api/v1/playlists/{$this->playlist->id}", [], writer($this->bob))->assertNotFound();
+    });
+
+    it('refuses a read-only token', function () {
+        $this->postJson('/api/v1/playlists', ['name' => 'x'], writer($this->alice, readOnly: true))->assertForbidden();
+    });
+
+    it('refuses a token that may not delete', function () {
+        $this->deleteJson("/api/v1/playlists/{$this->playlist->id}", [], writer($this->alice, readOnly: true))->assertForbidden();
+    });
+});
+
 describe('scan', function () {
     it('queues a scan and reports its status', function () {
         $h = writer($this->alice);
