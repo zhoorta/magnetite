@@ -36,6 +36,8 @@ import app.magnetite.player.Loudness
 import app.magnetite.player.MeterTap
 import app.magnetite.player.Spectrum
 import kotlin.math.PI
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.max
@@ -90,7 +92,7 @@ private fun levels(playing: Boolean): Lv {
 
 /** Redraws every frame while playing and for two seconds after, so needles and bars settle; then stops drawing. */
 @Composable
-private fun MeterCanvas(playing: Boolean, modifier: Modifier, draw: DrawScope.(dt: Float, lv: Lv) -> Unit) {
+private fun MeterCanvas(playing: Boolean, modifier: Modifier, work: ((dt: Float, lv: Lv) -> Unit)? = null, draw: DrawScope.(dt: Float, lv: Lv) -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     var dt by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(playing) {
@@ -100,6 +102,8 @@ private fun MeterCanvas(playing: Boolean, modifier: Modifier, draw: DrawScope.(d
             val now = withFrameNanos { it }
             dt = if (last == 0L) 0f else min(0.1f, (now - last) / 1e9f)
             last = now
+            // The heavy part (FFTs) runs off the UI thread; the canvas only draws what it left behind.
+            if (work != null) { val lv = levels(playing); withContext(Dispatchers.Default) { work(dt, lv) } }
             tick++
             if (!playing) { idle += dt; if (idle > 2f) break }
         }
@@ -302,6 +306,11 @@ private fun DrawScope.scope(lv: Lv) {
 
 // ---- goniometer -------------------------------------------------------------------------------------------------
 
+private const val GONIO = 1024
+private val gonioL = FloatArray(GONIO)
+private val gonioR = FloatArray(GONIO)
+private val gonioPath = Path()
+
 private fun DrawScope.goniometer(lv: Lv) {
     val margin = min(size.width, size.height) * 0.06f
     val font = max(10f, min(size.height * 0.045f, size.width * 0.03f))
@@ -324,13 +333,13 @@ private fun DrawScope.goniometer(lv: Lv) {
     text("L", cx - q - font * 0.9f, cy - q - font * 0.3f, font, Terminal.Muted)
     text("R", cx + q + font * 0.9f, cy - q - font * 0.3f, font, Terminal.Muted)
 
-    // Trace: the last 1024 samples, oldest first. Mid is up, side across.
+    // Trace: the last 1024 samples at the playhead, oldest first. Mid is up, side across.
     val k = r * 0.7f
-    val path = Path()
-    val start = Loudness.gonioPos
-    for (n in 0 until Loudness.GONIO) {
-        val i = ((start + n) % Loudness.GONIO) * 2
-        val l = Loudness.gonio[i]; val rr = Loudness.gonio[i + 1]
+    val path = gonioPath
+    path.rewind()
+    if (lv.live) MeterTap.recentStereo(gonioL, gonioR)
+    for (n in 0 until GONIO) {
+        val l = gonioL[n]; val rr = gonioR[n]
         val x = cx + (rr - l) / sqrt(2f) * k
         val y = cy - (l + rr) / sqrt(2f) * k
         if (n == 0) path.moveTo(x, y) else path.lineTo(x, y)
@@ -396,8 +405,7 @@ private fun ThirdOctave(playing: Boolean, modifier: Modifier) {
     val value = remember { FloatArray(THIRDS) { -120f } }
     val peak = remember { FloatArray(THIRDS) { -120f } }
     val hold = remember { FloatArray(THIRDS) }
-    MeterCanvas(playing, modifier) { dt, lv ->
-        if (lv.live) spectrum.read(raw) else raw.fill(-120f)
+    MeterCanvas(playing, modifier, work = { _, lv -> if (lv.live) spectrum.read(raw) else raw.fill(-120f) }) { dt, _ ->
         for (i in 0 until THIRDS) {
             val d = raw[i]
             value[i] = if (d > value[i]) d else d + (value[i] - d) * kotlin.math.exp(-dt / (0.35f / 4.6f))
@@ -454,13 +462,13 @@ private fun Spectrogram(playing: Boolean, modifier: Modifier) {
             androidx.compose.ui.graphics.lerp(c0, c1, ((t - t0) / (t1 - t0)).coerceIn(0f, 1f)).toArgb()
         }
     }
-    MeterCanvas(playing, modifier) { dt, lv ->
-        if (lv.live) {
+    val fresh = remember { booleanArrayOf(false) }
+    MeterCanvas(playing, modifier, work = { _, lv -> fresh[0] = lv.live; if (lv.live) spectrum.read(raw) }) { dt, lv ->
+        if (fresh[0]) {
             state[0] += dt * COLS / 13f // about 13 seconds from the right edge to the left
             val n = min(COLS, state[0].toInt())
             if (n >= 1) {
                 state[0] -= n
-                spectrum.read(raw)
                 for (row in 0 until ROWS) {
                     System.arraycopy(pixels, row * COLS + n, pixels, row * COLS, COLS - n)
                     // the treble gets a little lift so music (about -3 dB per octave) does not fade to black

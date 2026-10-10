@@ -13,55 +13,65 @@ class Spectrum(private val bands: Int = 48, private val n: Int = 2048, private v
     private val im = FloatArray(n)
     private val samples = FloatArray(n)
 
-    /** Fills [out] (size = bands) with dBFS per band, floor -120. */
-    fun read(out: FloatArray) {
-        MeterTap.recent(samples)
-        for (i in 0 until n) { re[i] = samples[i] * window[i]; im[i] = 0f }
-        fft()
-        val rate = MeterTap.sampleRate
+    private val cosT = FloatArray(n / 2) { cos(-2 * PI * it / n).toFloat() }
+    private val sinT = FloatArray(n / 2) { sin(-2 * PI * it / n).toFloat() }
+    private val rev = IntArray(n).also { r ->
+        val bits = Integer.numberOfTrailingZeros(n)
+        for (i in 0 until n) r[i] = Integer.reverse(i) ushr (32 - bits)
+    }
+
+    // First and last bin of each band; depends on the sample rate, so it is rebuilt only when that changes.
+    private var edgesRate = 0
+    private val first = IntArray(bands)
+    private val last = IntArray(bands)
+
+    private fun edges(rate: Int) {
+        if (rate == edgesRate) return
+        edgesRate = rate
         val hi = minOf(topHz, rate / 2.0)
         val binHz = rate.toDouble() / n
         for (b in 0 until bands) {
             val f0 = lo * Math.pow(hi / lo, b.toDouble() / bands)
             val f1 = lo * Math.pow(hi / lo, (b + 1.0) / bands)
-            val i0 = (f0 / binHz).toInt().coerceIn(1, n / 2 - 1)
-            val i1 = maxOf(i0, (f1 / binHz).toInt()).coerceAtMost(n / 2 - 1)
+            first[b] = (f0 / binHz).toInt().coerceIn(1, n / 2 - 1)
+            last[b] = maxOf(first[b], (f1 / binHz).toInt()).coerceAtMost(n / 2 - 1)
+        }
+    }
+
+    /** Fills [out] (size = bands) with dBFS per band, floor -120. */
+    fun read(out: FloatArray) {
+        MeterTap.recent(samples)
+        for (i in 0 until n) { val j = rev[i]; re[j] = samples[i] * window[i]; im[j] = 0f }
+        fft()
+        edges(MeterTap.sampleRate)
+        for (b in 0 until bands) {
             var peak = 0f
-            for (i in i0..i1) peak = maxOf(peak, sqrt(re[i] * re[i] + im[i] * im[i]))
+            for (i in first[b]..last[b]) peak = maxOf(peak, re[i] * re[i] + im[i] * im[i])
             // Hann window: coherent gain 0.5, so a full-scale sine reads 0 dB.
-            val amp = peak * 4f / n
+            val amp = sqrt(peak) * 4f / n
             out[b] = if (amp <= 1e-6f) -120f else 20f * log10(amp)
         }
     }
 
-    /** In-place radix-2 FFT of re/im. */
+    /** In-place radix-2 FFT of re/im, input already in bit-reversed order. */
     private fun fft() {
-        var j = 0
-        for (i in 1 until n) {
-            var bit = n shr 1
-            while (j and bit != 0) { j = j xor bit; bit = bit shr 1 }
-            j = j xor bit
-            if (i < j) { val t = re[i]; re[i] = re[j]; re[j] = t; val u = im[i]; im[i] = im[j]; im[j] = u }
-        }
         var len = 2
         while (len <= n) {
-            val ang = -2 * PI / len
-            val wr = cos(ang).toFloat()
-            val wi = sin(ang).toFloat()
+            val half = len / 2
+            val stride = n / len
             var i = 0
             while (i < n) {
-                var cr = 1f
-                var ci = 0f
-                for (k in 0 until len / 2) {
+                var t = 0
+                for (k in 0 until half) {
                     val a = i + k
-                    val b = a + len / 2
+                    val b = a + half
+                    val cr = cosT[t]
+                    val ci = sinT[t]
+                    t += stride
                     val tr = re[b] * cr - im[b] * ci
                     val ti = re[b] * ci + im[b] * cr
                     re[b] = re[a] - tr; im[b] = im[a] - ti
                     re[a] += tr; im[a] += ti
-                    val nr = cr * wr - ci * wi
-                    ci = cr * wi + ci * wr
-                    cr = nr
                 }
                 i += len
             }

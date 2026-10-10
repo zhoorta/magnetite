@@ -130,3 +130,9 @@ The app is a media app for Android Auto: `PlaybackService` is a `MediaLibrarySer
 
 - A swipe down on Now Playing (meters or cover view) returns to the mini player; it only watches the gesture (Initial pass, not consumed), so the slider and scrolling keep working, and a scrolled page closes only at the top.
 - Tapping the cover opens the album or playlist the queue came from: `PlayerController.play(tracks, start, from: PlaySource?)` remembers it (saved with the queue in `SavedPlayback.source`); lists with no single source (Shared tracks) fall back to the album of the current track.
+
+## Meters follow the playhead (2026-10-10)
+
+- `MeterTap` keeps ~1.3 s of left/right samples. The sink wrapper in `PlaybackService` (`ForwardingAudioSink`) reports the media position being heard and the media time of each buffer; `MeterTap.playheadFrame()` maps that to a ring index, so peak/RMS (1024-sample window), scope, spectra and goniometer show what is heard now, not what just entered the sink buffer. LUFS and true peak are still measured on entry (they lead slightly).
+- FFTs for third-octave and spectrogram run on `Dispatchers.Default` (`MeterCanvas(work = …)`); `Spectrum` has precomputed twiddles and band edges.
+- `MainActivity.preferHighRefreshRate()` asks for the fastest display mode at the current resolution (adaptive-refresh phones otherwise drop for touch-free animation).

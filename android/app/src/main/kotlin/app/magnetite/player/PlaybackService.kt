@@ -11,6 +11,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.ForwardingAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.common.MediaItem
 import androidx.media3.session.LibraryResult
@@ -46,11 +47,22 @@ class PlaybackService : MediaLibraryService() {
         // The renderers are the stock ones; only the audio sink gets MeterTap added to its processors.
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-                DefaultAudioSink.Builder(context)
-                    .setEnableFloatOutput(enableFloatOutput)
-                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                    .setAudioProcessors(arrayOf(MeterTap))
-                    .build()
+                // The wrapper only listens: which media time is being heard now, and the media time of each buffer going in.
+                object : ForwardingAudioSink(
+                    DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessors(arrayOf(MeterTap))
+                        .build(),
+                ) {
+                    override fun handleBuffer(buffer: java.nio.ByteBuffer, presentationTimeUs: Long, encodedAccessUnitCount: Int): Boolean {
+                        MeterTap.noteBuffer(presentationTimeUs)
+                        return super.handleBuffer(buffer, presentationTimeUs, encodedAccessUnitCount)
+                    }
+
+                    override fun getCurrentPositionUs(sourceEnded: Boolean): Long =
+                        super.getCurrentPositionUs(sourceEnded).also(MeterTap::noteSinkPosition)
+                }
         }
         val player = ExoPlayer.Builder(this, renderers)
             .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(http))

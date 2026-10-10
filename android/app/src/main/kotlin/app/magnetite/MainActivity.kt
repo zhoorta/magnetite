@@ -51,6 +51,8 @@ class MainActivity : ComponentActivity() {
         // Android 17+ blocks connections to a private-network server (home, 10.0.2.2) without the second.
         requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS, "android.permission.ACCESS_LOCAL_NETWORK"), 1)
 
+        preferHighRefreshRate()
+
         setContent {
             MagnetiteTheme {
                 var signedIn by remember { mutableStateOf(app.session.signedIn) }
@@ -122,5 +124,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** The meters animate without touch, which makes adaptive-refresh phones drop to 60 Hz or less; ask for the fastest mode at the current resolution. */
+    @Suppress("DEPRECATION")
+    private fun preferHighRefreshRate() {
+        val display = (if (android.os.Build.VERSION.SDK_INT >= 30) display else windowManager.defaultDisplay) ?: return
+        val current = display.mode
+        val best = display.supportedModes
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .maxByOrNull { it.refreshRate } ?: return
+        window.attributes = window.attributes.also { it.preferredDisplayModeId = best.modeId }
     }
 }
