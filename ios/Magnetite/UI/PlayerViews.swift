@@ -13,6 +13,8 @@ struct MiniPlayer: View {
     @EnvironmentObject var meters: MeterStore
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var dragging: Double?
+    /// Swiping down folds the meters away; swiping up brings them back (and, with nothing folded, opens Now Playing).
+    @AppStorage("miniMetersCollapsed") private var collapsed = false
 
     private var current: Track? { player.current }
 
@@ -28,8 +30,17 @@ struct MiniPlayer: View {
     }
 
     var body: some View {
-        let bare = meters.ids.isEmpty
+        let bare = meters.ids.isEmpty || collapsed
         VStack(spacing: 8) {
+            // The handle's row is always there, so the space above the cover does not change with the meters.
+            Button { withAnimation(.easeInOut(duration: 0.2)) { collapsed = false } } label: {
+                Image(systemName: "chevron.compact.up").font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Terminal.accent.opacity(0.8)).frame(maxWidth: .infinity).frame(height: 14)
+                    .opacity(collapsed && !meters.ids.isEmpty ? 1 : 0)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).disabled(!(collapsed && !meters.ids.isEmpty)).accessibilityLabel("Show meters")
+            .padding(.top, -2).padding(.bottom, -6)
             if !bare {
                 MeterPanel {
                     // Two side by side on the iPad (four make two rows); stacked on the phone.
@@ -38,7 +49,7 @@ struct MiniPlayer: View {
                         ForEach(Array(stride(from: 0, to: meters.ids.count, by: columns)), id: \.self) { start in
                             GridRow {
                                 ForEach(meters.ids[start..<min(start + columns, meters.ids.count)], id: \.self) {
-                                    MeterView(id: $0, compact: true, scale: columns == 2 ? 1.6 : 1.4)
+                                    MeterView(id: $0, compact: true, scale: columns == 2 ? 1.6 : (sizeClass == .regular ? 1.4 : 0.85))
                                 }
                             }
                         }
@@ -66,11 +77,18 @@ struct MiniPlayer: View {
                     }.contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 Button(action: open) { Color.clear.frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32) }.buttonStyle(.plain)
-                Button { meters.picking = true } label: {
+                // Accent while meters are chosen (like the web), filled a little while they are folded.
+                Button {
+                    // Folded meters unfold, and the picker opens either way.
+                    if collapsed, !meters.ids.isEmpty { withAnimation(.easeInOut(duration: 0.2)) { collapsed = false } }
+                    meters.picking = true
+                } label: {
                     bordered(HStack(spacing: 5) {
                         Image(systemName: "waveform")
                         Text("\(meters.ids.count)").font(.mono(12))
                     })
+                    .opacity(meters.ids.isEmpty ? 0.6 : 1)
+                    .background(collapsed && !meters.ids.isEmpty ? Terminal.accent.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                 }.buttonStyle(.plain).accessibilityLabel("Choose meters")
                 Button(action: open) {
                     bordered(Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 12)))
@@ -105,9 +123,15 @@ struct MiniPlayer: View {
         .frame(maxWidth: .infinity)
         .background(Terminal.surface)
         .overlay(alignment: .top) { Rectangle().fill(Terminal.line).frame(height: 1) }
-        // A swipe up anywhere on the bar opens Now Playing (mostly vertical, so the seek slider keeps its drags).
+        // Swipes on the bar (mostly vertical, so the seek slider keeps its drags): down folds the meters away,
+        // up unfolds them, or opens Now Playing when nothing is folded.
         .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded {
-            if $0.translation.height < -40, abs($0.translation.width) < abs($0.translation.height) / 2 { open() }
+            let dy = $0.translation.height
+            guard abs($0.translation.width) < abs(dy) / 2 else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if dy > 40, !meters.ids.isEmpty, !collapsed { collapsed = true }
+                else if dy < -40 { if collapsed, !meters.ids.isEmpty { collapsed = false } else { open() } }
+            }
         })
     }
 }
