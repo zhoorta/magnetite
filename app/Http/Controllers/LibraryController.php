@@ -58,7 +58,7 @@ class LibraryController extends Controller
             'tracks' => SharedItem::where('user_id', $me->id)->whereNotNull('track_id')->pluck('track_id')->all(),
         ];
 
-        return view('pages.library', ['childrenOf' => $childrenOf, 'albumsIn' => $albumsIn, 'folderList' => $folderList, 'albumCount' => $albumCount, 'albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'suggestions' => $suggestions, 'toIdentify' => $toIdentify, 'trashOnly' => $me->store() instanceof FerriteStore]);
+        return view('pages.library', ['childrenOf' => $childrenOf, 'albumsIn' => $albumsIn, 'folderList' => $folderList, 'albumFolder' => $albums->whereNotNull('folder_id')->pluck('folder_id', 'id'), 'albumCount' => $albumCount, 'albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'suggestions' => $suggestions, 'toIdentify' => $toIdentify, 'trashOnly' => $me->store() instanceof FerriteStore]);
     }
 
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */

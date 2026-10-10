@@ -72,6 +72,13 @@
             },
             // The owner's folders (flat, with depth, for the pickers) and which are open, remembered in this browser.
             folderList: @js($folderList),
+            albumFolder: @js($albumFolder),
+            // Does this folder, or one below it, hold the album that is playing? Marks the way to it.
+            holdsPlaying(id) {
+                const album = Alpine.store('player').current?.album_id;
+                for (let f = this.folderList.find((x) => x.id === this.albumFolder[album]); f; f = this.folderList.find((x) => x.id === f.parent_id)) if (f.id === id) return true;
+                return false;
+            },
             folderIsOpen(id) { try { return localStorage.getItem('magnetite.folder.' + id) === '1'; } catch (e) { return false; } },
             rememberFolder(id, open) { try { open ? localStorage.setItem('magnetite.folder.' + id, '1') : localStorage.removeItem('magnetite.folder.' + id); } catch (e) {} },
             // Open a folder and the ones around it, so a moved album is where the eye lands.

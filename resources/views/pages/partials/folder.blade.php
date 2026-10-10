@@ -4,10 +4,13 @@
              init() { this.folderOpen = this.folderIsOpen({{ $folder->id }}); },
              toggle() { this.folderOpen = ! this.folderOpen; this.rememberFolder({{ $folder->id }}, this.folderOpen); },
          }">
-    <div class="flex items-center gap-2 rounded-theme border border-white/10 bg-surface px-3 py-2">
+    <div class="flex items-center gap-2 rounded-theme border bg-surface px-3 py-2" :class="holdsPlaying({{ $folder->id }}) ? 'border-accent/50' : 'border-white/10'">
         <button type="button" class="flex min-w-0 flex-1 items-center gap-2 text-left" :aria-expanded="folderOpen" @click="toggle()">
             <span class="w-3 shrink-0 text-xs text-muted" x-text="folderOpen ? '▾' : '▸'"></span>
-            <span class="truncate font-semibold">{{ $folder->name }}</span>
+            <span class="truncate font-semibold" :class="holdsPlaying({{ $folder->id }}) && 'text-accent'">{{ $folder->name }}</span>
+            <span x-show="holdsPlaying({{ $folder->id }})" x-cloak class="flex shrink-0 items-end gap-px text-accent" title="Playing from this folder" role="img" aria-label="Playing from this folder">
+                <span class="h-2 w-0.5 animate-pulse bg-current"></span><span class="h-3 w-0.5 animate-pulse bg-current [animation-delay:150ms]"></span><span class="h-1.5 w-0.5 animate-pulse bg-current [animation-delay:300ms]"></span>
+            </span>
             <span class="shrink-0 text-xs text-muted">{{ $albumCount[$folder->id] ?? 0 }} {{ Str::plural('album', $albumCount[$folder->id] ?? 0) }}</span>
         </button>
         <x-menu label="Actions for this folder" width="w-48">
