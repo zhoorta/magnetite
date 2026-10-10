@@ -22,6 +22,12 @@ class MagnetiteApp : Application(), SingletonImageLoader.Factory {
     val meters = androidx.compose.runtime.mutableStateListOf("vu-wide")
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
+    /** The chosen theme is local to the phone. */
+    fun setLook(l: app.magnetite.ui.Look) {
+        app.magnetite.ui.Looking.current = l
+        getSharedPreferences("look", MODE_PRIVATE).edit().putString("id", l.id).apply()
+    }
+
     suspend fun loadMeters() {
         runCatching { api.meters() }.onSuccess { meters.clear(); meters.addAll(it) }
     }
@@ -36,6 +42,7 @@ class MagnetiteApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        app.magnetite.ui.Looking.current = app.magnetite.ui.Looking.byId(getSharedPreferences("look", MODE_PRIVATE).getString("id", null))
         session = Session(this)
         api = Api(session)
         player = PlayerController(this, session)

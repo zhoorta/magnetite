@@ -150,7 +150,7 @@ class Ballistic {
     }
 }
 
-private val Panel = Terminal.Surface
+private val Panel get() = Palette.Surface
 
 // ---- needle dials (vu-needle) -----------------------------------------------------------------------------------
 
@@ -179,11 +179,11 @@ private fun DrawScope.dial(x: Float, y: Float, w: Float, h: Float, name: String,
     val cy = y + h * 0.93f
     val angleOf = { d: Float -> -sweep / 2 + sweep * ((d - min) / (max - min)) }
     val pt = { d: Float, len: Float -> Offset(cx + (sin(angleOf(d)) * len).toFloat(), cy - (cos(angleOf(d)) * len).toFloat()) }
-    val ink = Terminal.Accent
+    val ink = Palette.Accent
     clipRect(x, y, x + w, y + h) {
         drawRoundRect(Panel, Offset(x, y), Size(w, h), CornerRadius(min(w, h) * 0.06f))
         val rr = r * 0.93f
-        drawArc(Terminal.Red, deg(angleOf(redFrom) - PI / 2), deg(angleOf(max) - angleOf(redFrom)), false, Offset(cx - rr, cy - rr), Size(rr * 2, rr * 2), style = Stroke(r * 0.05f))
+        drawArc(Palette.Red, deg(angleOf(redFrom) - PI / 2), deg(angleOf(max) - angleOf(redFrom)), false, Offset(cx - rr, cy - rr), Size(rr * 2, rr * 2), style = Stroke(r * 0.05f))
         var d = min
         while (d <= max) {
             val major = d.toInt() in majorDb
@@ -193,7 +193,7 @@ private fun DrawScope.dial(x: Float, y: Float, w: Float, h: Float, name: String,
         }
         text(name, x + w * 0.1f, y + h * 0.16f, max(12f, r * 0.14f), ink)
         text("dB", cx, cy - r * 0.36f, max(10f, r * 0.08f), ink)
-        drawCircle(Terminal.Red.a(if (m.clipLeft > 0) 1f else 0.18f), r * 0.045f, Offset(x + w * 0.9f, y + h * 0.15f))
+        drawCircle(Palette.Red.a(if (m.clipLeft > 0) 1f else 0.18f), r * 0.045f, Offset(x + w * 0.9f, y + h * 0.15f))
         val a = -sweep / 2 + sweep * m.value
         drawLine(ink, Offset(cx - (sin(a) * r * 0.08).toFloat(), cy + (cos(a) * r * 0.08).toFloat()), Offset(cx + (sin(a) * r * 0.92).toFloat(), cy - (cos(a) * r * 0.92).toFloat()), r * 0.018f + 1f)
         drawCircle(ink, r * 0.045f, Offset(cx, cy))
@@ -236,10 +236,10 @@ private fun DrawScope.wide(x: Float, y: Float, w: Float, h: Float, name: String,
     val py = y + h * 0.42f + r
     val angleOf = { d: Float -> -theta + 2 * theta * ((d - min) / (max - min)) }
     val pt = { d: Float, len: Float -> Offset(cx + (sin(angleOf(d)) * len).toFloat(), py - (cos(angleOf(d)) * len).toFloat()) }
-    val ink = Terminal.Accent
+    val ink = Palette.Accent
     clipRect(x, y, x + w, y + h) {
         drawRoundRect(Panel, Offset(x, y), Size(w, h), CornerRadius(h * 0.1f))
-        drawArc(Terminal.Red, deg(angleOf(-6f) - PI / 2), deg(angleOf(max) - angleOf(-6f)), false, Offset(cx - r, py - r), Size(r * 2, r * 2), style = Stroke(h * 0.07f))
+        drawArc(Palette.Red, deg(angleOf(-6f) - PI / 2), deg(angleOf(max) - angleOf(-6f)), false, Offset(cx - r, py - r), Size(r * 2, r * 2), style = Stroke(h * 0.07f))
         var d = min
         while (d <= max) {
             val major = d.toInt() in majorDb
@@ -248,7 +248,7 @@ private fun DrawScope.wide(x: Float, y: Float, w: Float, h: Float, name: String,
             d += 2f
         }
         text(name, x + w * 0.035f, y + h * 0.22f, max(10f, h * 0.24f), ink, Paint.Align.LEFT)
-        drawCircle(Terminal.Red.a(if (m.clipLeft > 0) 1f else 0.18f), h * 0.05f, Offset(x + w * 0.965f, y + h * 0.2f))
+        drawCircle(Palette.Red.a(if (m.clipLeft > 0) 1f else 0.18f), h * 0.05f, Offset(x + w * 0.965f, y + h * 0.2f))
         val a = -theta + 2 * theta * m.value
         drawLine(ink, Offset(cx + (sin(a) * (r - h * 1.3f)).toFloat(), py - (cos(a) * (r - h * 1.3f)).toFloat()), Offset(cx + (sin(a) * (r + h * 0.06f)).toFloat(), py - (cos(a) * (r + h * 0.06f)).toFloat()), max(1.5f, h * 0.022f))
     }
@@ -269,17 +269,17 @@ private fun DrawScope.magicEyes(dt: Float, lv: Lv) {
     listOf("L" to eyeL, "R" to eyeR).forEachIndexed { i, (name, m) ->
         val cx = x0 + d / 2 + i * (d + gap)
         eye(cx, cy, d / 2, m.value)
-        text(name, cx, cy + d / 2 + d * 0.16f, max(10f, d * 0.1f), Terminal.Muted)
+        text(name, cx, cy + d / 2 + d * 0.16f, max(10f, d * 0.1f), Palette.Muted)
     }
 }
 
 private fun DrawScope.eye(cx: Float, cy: Float, r: Float, v: Float) {
     val glass = Color(0xFF050806)
-    val phosphor = Terminal.Accent2
+    val phosphor = Palette.Accent2
     val half = 78f * (1 - v)
     val target = r * 0.84f
     drawCircle(glass, r, Offset(cx, cy))
-    drawCircle(Terminal.Muted, r, Offset(cx, cy), style = Stroke(r * 0.05f))
+    drawCircle(Palette.Muted, r, Offset(cx, cy), style = Stroke(r * 0.05f))
     // Glow: a few concentric discs fading outwards (shaders per frame were the cost of this meter).
     val glowR = target * (1.1f + 0.3f * v)
     for (i in 0 until 3) drawCircle(phosphor.a((0.5f + 0.5f * v) * 0.24f), glowR * (1f - i * 0.08f), Offset(cx, cy))
@@ -312,7 +312,7 @@ private fun DrawScope.scope(lv: Lv) {
         val y = mid - v.coerceIn(-1f, 1f) * mid
         if (p == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
-    drawPath(path, Terminal.Accent, style = Stroke(2.5f))
+    drawPath(path, Palette.Accent, style = Stroke(2.5f))
 }
 
 // ---- goniometer -------------------------------------------------------------------------------------------------
@@ -334,16 +334,16 @@ private fun DrawScope.goniometer(lv: Lv) {
     val top = (size.height - sz - strip) / 2
     val cy = top + sz / 2
     val r = sz / 2
-    val grid = Terminal.Muted.a(0.4f)
+    val grid = Palette.Muted.a(0.4f)
     drawCircle(grid, r, Offset(cx, cy), style = Stroke(1f))
     drawLine(grid, Offset(cx, cy - r), Offset(cx, cy + r), 1f)
     drawLine(grid, Offset(cx - r, cy), Offset(cx + r, cy), 1f)
     val q = r * 0.7071f
     drawLine(grid, Offset(cx - q, cy - q), Offset(cx + q, cy + q), 1f)
     drawLine(grid, Offset(cx + q, cy - q), Offset(cx - q, cy + q), 1f)
-    text("M", cx, cy - r - font * 0.7f, font, Terminal.Muted)
-    text("L", cx - q - font * 0.9f, cy - q - font * 0.3f, font, Terminal.Muted)
-    text("R", cx + q + font * 0.9f, cy - q - font * 0.3f, font, Terminal.Muted)
+    text("M", cx, cy - r - font * 0.7f, font, Palette.Muted)
+    text("L", cx - q - font * 0.9f, cy - q - font * 0.3f, font, Palette.Muted)
+    text("R", cx + q + font * 0.9f, cy - q - font * 0.3f, font, Palette.Muted)
 
     // Trace: the last 1024 samples at the playhead. Mid is up, side across. Drawn as points: a stroked path of 1024 segments costs several frames.
     val k = r * 0.7f
@@ -355,7 +355,7 @@ private fun DrawScope.goniometer(lv: Lv) {
             gonioPts[n * 2 + 1] = cy - (l + rr) / sqrt(2f) * k
         }
         goniometerPaint.strokeWidth = max(1.5f, sz / 200f)
-        goniometerPaint.color = Terminal.Accent.a(0.6f).toArgb()
+        goniometerPaint.color = Palette.Accent.a(0.6f).toArgb()
         drawIntoCanvas { it.nativeCanvas.drawPoints(gonioPts, goniometerPaint) }
     }
 
@@ -364,12 +364,12 @@ private fun DrawScope.goniometer(lv: Lv) {
     val y0 = cy + r + font * 0.9f
     val at = { v: Float -> x0 + (v + 1) / 2 * bw }
     val c = (if (lv.live) Loudness.correlation else 0f).coerceIn(-1f, 1f)
-    drawRect(Terminal.Muted.a(0.25f), Offset(x0, y0), Size(bw, barH))
-    drawRect(if (c < 0) Terminal.Red else Terminal.Accent, Offset(min(at(0f), at(c)), y0), Size(kotlin.math.abs(at(c) - at(0f)), barH))
-    text("-1", at(-1f), y0 + barH + font * 0.9f, font * 0.9f, Terminal.Muted, Paint.Align.LEFT)
-    text("0", at(0f), y0 + barH + font * 0.9f, font * 0.9f, Terminal.Muted)
-    text("+1", at(1f), y0 + barH + font * 0.9f, font * 0.9f, Terminal.Muted, Paint.Align.RIGHT)
-    text("correlation ${if (c >= 0) "+" else "−"}${"%.2f".format(kotlin.math.abs(c))}", cx, y0 + barH + font * 2.1f, font, Terminal.Text)
+    drawRect(Palette.Muted.a(0.25f), Offset(x0, y0), Size(bw, barH))
+    drawRect(if (c < 0) Palette.Red else Palette.Accent, Offset(min(at(0f), at(c)), y0), Size(kotlin.math.abs(at(c) - at(0f)), barH))
+    text("-1", at(-1f), y0 + barH + font * 0.9f, font * 0.9f, Palette.Muted, Paint.Align.LEFT)
+    text("0", at(0f), y0 + barH + font * 0.9f, font * 0.9f, Palette.Muted)
+    text("+1", at(1f), y0 + barH + font * 0.9f, font * 0.9f, Palette.Muted, Paint.Align.RIGHT)
+    text("correlation ${if (c >= 0) "+" else "−"}${"%.2f".format(kotlin.math.abs(c))}", cx, y0 + barH + font * 2.1f, font, Palette.Text)
 }
 
 // ---- loudness ---------------------------------------------------------------------------------------------------
@@ -389,26 +389,26 @@ private fun DrawScope.loudness() {
     val numW = big * 3.4f
     val barW = size.width - margin * 2 - numW - label * 4.5f
     val at = { v: Double -> ((v - -41) / 36).toFloat().coerceIn(0f, 1f) }
-    listOf(Triple("MOMENTARY", Loudness.momentary, Terminal.Accent), Triple("SHORT-TERM", Loudness.shortTerm, Terminal.Accent), Triple("INTEGRATED", Loudness.integrated, Terminal.Accent2)).forEachIndexed { i, (name, v, color) ->
+    listOf(Triple("MOMENTARY", Loudness.momentary, Palette.Accent), Triple("SHORT-TERM", Loudness.shortTerm, Palette.Accent), Triple("INTEGRATED", Loudness.integrated, Palette.Accent2)).forEachIndexed { i, (name, v, color) ->
         val y = top + i * rowH
         val barH = max(4f, rowH * 0.16f)
         val barY = y + rowH * 0.62f
-        text(name, margin, y + label, label, Terminal.Muted, Paint.Align.LEFT)
-        drawRect(Terminal.Muted.a(0.22f), Offset(margin, barY), Size(barW, barH))
+        text(name, margin, y + label, label, Palette.Muted, Paint.Align.LEFT)
+        drawRect(Palette.Muted.a(0.22f), Offset(margin, barY), Size(barW, barH))
         drawRect(color, Offset(margin, barY), Size(barW * at(v), barH))
-        drawRect(Terminal.Text, Offset(margin + barW * at(-23.0) - 0.5f, barY - barH * 0.35f), Size(1.5f, barH * 1.7f))
-        text(fmt(v), size.width - margin - label * 3.2f, y + rowH * 0.45f, big, Terminal.Text, Paint.Align.RIGHT)
-        text("LUFS", size.width - margin, y + rowH * 0.45f, label, Terminal.Muted, Paint.Align.RIGHT)
+        drawRect(Palette.Text, Offset(margin + barW * at(-23.0) - 0.5f, barY - barH * 0.35f), Size(1.5f, barH * 1.7f))
+        text(fmt(v), size.width - margin - label * 3.2f, y + rowH * 0.45f, big, Palette.Text, Paint.Align.RIGHT)
+        text("LUFS", size.width - margin, y + rowH * 0.45f, label, Palette.Muted, Paint.Align.RIGHT)
     }
     val y = top + rowH * 3.4f
-    text("TRUE PEAK", margin, y + label, label, Terminal.Muted, Paint.Align.LEFT)
+    text("TRUE PEAK", margin, y + label, label, Palette.Muted, Paint.Align.LEFT)
     listOf("L" to Loudness.truePeakL, "R" to Loudness.truePeakR).forEachIndexed { i, (name, lin) ->
         val d = if (lin > 0) db(lin).toDouble() else Double.NEGATIVE_INFINITY
         val x = margin + barW * 0.45f + i * barW * 0.28f
-        text(name, x, y + rowH * 0.4f, label, Terminal.Muted, Paint.Align.LEFT)
-        text(fmt(d), x + label * 1.6f, y + rowH * 0.4f, big * 0.8f, if (d > -1.0) Terminal.Red else Terminal.Text, Paint.Align.LEFT)
+        text(name, x, y + rowH * 0.4f, label, Palette.Muted, Paint.Align.LEFT)
+        text(fmt(d), x + label * 1.6f, y + rowH * 0.4f, big * 0.8f, if (d > -1.0) Palette.Red else Palette.Text, Paint.Align.LEFT)
     }
-    text("dBTP", size.width - margin, y + rowH * 0.4f, label, Terminal.Muted, Paint.Align.RIGHT)
+    text("dBTP", size.width - margin, y + rowH * 0.4f, label, Palette.Muted, Paint.Align.RIGHT)
 }
 
 // ---- third-octave -----------------------------------------------------------------------------------------------
@@ -444,15 +444,15 @@ private fun ThirdOctave(playing: Boolean, modifier: Modifier) {
             for (s in 0 until segs) {
                 val on = s < n
                 val isPeak = s == pk && peak[i] > min
-                val c = if ((isPeak && s >= n) || s > segs * 0.85f) Terminal.Accent2 else Terminal.Accent
+                val c = if ((isPeak && s >= n) || s > segs * 0.85f) Palette.Accent2 else Palette.Accent
                 drawRect(c.a(if (on || isPeak) 1f else 0.1f), Offset(x, bottom - (s + 1) * segH + segH * 0.12f), Size(bw, segH * 0.76f))
             }
         }
-        for (d in listOf(-60, -48, -36, -24, -12)) text(d.toString(), left - font * 0.3f, bottom - (d - min) / (max - min) * plotH, font, Terminal.Muted, Paint.Align.RIGHT)
+        for (d in listOf(-60, -48, -36, -24, -12)) text(d.toString(), left - font * 0.3f, bottom - (d - min) / (max - min) * plotH, font, Palette.Muted, Paint.Align.RIGHT)
         // 31.5 Hz is band 1 of the web's 20 Hz start; here band 0 is 25 Hz, so the labels are placed by frequency.
         for ((f, label) in listOf(31.5 to "31", 125.0 to "125", 500.0 to "500", 1000.0 to "1k", 4000.0 to "4k", 16000.0 to "16k")) {
             val i = (kotlin.math.ln(f / 25.0) / kotlin.math.ln(20000.0 / 25.0) * THIRDS).toInt().coerceIn(0, THIRDS - 1)
-            text(label, left + i * slot + slot / 2, size.height - font * 0.5f, font, Terminal.Muted)
+            text(label, left + i * slot + slot / 2, size.height - font * 0.5f, font, Palette.Muted)
         }
     }
 }
@@ -466,11 +466,11 @@ private const val ROWS = 64
 private fun Spectrogram(playing: Boolean, modifier: Modifier) {
     val spectrum = remember { Spectrum(ROWS, 4096, 25.0, 20000.0) }
     val raw = remember { FloatArray(ROWS) }
-    val pixels = remember { IntArray(COLS * ROWS) { Terminal.Bg.toArgb() } }
+    val pixels = remember { IntArray(COLS * ROWS) { Palette.Bg.toArgb() } }
     val bitmap = remember { Bitmap.createBitmap(COLS, ROWS, Bitmap.Config.ARGB_8888) }
     val state = remember { floatArrayOf(0f) }
     val lut = remember {
-        val stops = listOf(0f to Terminal.Bg, 0.4f to Terminal.Accent, 0.75f to Terminal.Accent2, 1f to Terminal.Text)
+        val stops = listOf(0f to Palette.Bg, 0.4f to Palette.Accent, 0.75f to Palette.Accent2, 1f to Palette.Text)
         IntArray(256) { i ->
             val t = i / 255f
             var k = 1
@@ -505,7 +505,7 @@ private fun Spectrogram(playing: Boolean, modifier: Modifier) {
         }
         for ((f, label) in listOf(100.0 to "100", 1000.0 to "1k", 10000.0 to "10k")) {
             val y = size.height * (1 - (kotlin.math.ln(f / 25.0) / kotlin.math.ln(800.0)).toFloat())
-            text(label, left - 4f, y, font, Terminal.Muted, Paint.Align.RIGHT)
+            text(label, left - 4f, y, font, Palette.Muted, Paint.Align.RIGHT)
         }
     }
 }

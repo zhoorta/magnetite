@@ -27,6 +27,7 @@ import app.magnetite.ui.LibraryScreen
 import app.magnetite.ui.LoginScreen
 import app.magnetite.ui.MagnetiteTheme
 import app.magnetite.ui.MeterPicker
+import app.magnetite.ui.ThemePicker
 import app.magnetite.ui.MiniPlayer
 import app.magnetite.player.PlaySource
 import app.magnetite.ui.NowPlayingScreen
@@ -60,6 +61,8 @@ class MainActivity : ComponentActivity() {
                 var detail by remember { mutableStateOf<Detail?>(null) }
                 var showNowPlaying by remember { mutableStateOf(false) }
                 var pickMeters by remember { mutableStateOf(false) }
+                var pickTheme by remember { mutableStateOf(false) }
+                if (pickTheme) ThemePicker({ app.setLook(it) }, { pickTheme = false })
                 if (pickMeters) MeterPicker(app.meters.toList(), { app.setMeters(it) }, { pickMeters = false })
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
                 androidx.compose.runtime.LaunchedEffect(signedIn) { if (signedIn) app.loadMeters() }
@@ -87,6 +90,7 @@ class MainActivity : ComponentActivity() {
                                 app.api,
                                 onOpen = { detail = Detail.Album(it) },
                                 onPickMeters = { pickMeters = true },
+                                onPickTheme = { pickTheme = true },
                                 onSignOut = {
                                     // The player forgets the saved queue while the user name is still known.
                                     app.player.signOut()
