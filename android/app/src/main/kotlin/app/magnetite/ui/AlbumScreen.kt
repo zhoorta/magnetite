@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import app.magnetite.data.Album
 import app.magnetite.data.Api
 import app.magnetite.player.PlayerController
+import app.magnetite.player.PlaySource
 import androidx.compose.foundation.clickable
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,7 +60,7 @@ fun AlbumScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Unit)
                     }
                 }
                 items(a.tracks, key = { it.id }) { track ->
-                    TrackRow(track, player.currentId == track.id.toString(), { player.play(a.tracks, track) }, leading = "${track.number ?: ""}")
+                    TrackRow(track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}")
                 }
             }
         }

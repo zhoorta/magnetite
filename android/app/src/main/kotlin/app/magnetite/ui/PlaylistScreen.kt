@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import app.magnetite.data.Api
 import app.magnetite.data.Playlist
 import app.magnetite.player.PlayerController
+import app.magnetite.player.PlaySource
 import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,7 +65,7 @@ fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Un
             LazyColumn(Modifier.fillMaxSize(), state = list) {
                 itemsIndexed(rows, key = { _, r -> r.first }) { i, (uid, track) ->
                     TrackRow(
-                        track, player.currentId == track.id.toString(), { player.play(rows.map { it.second }, track) }, leading = "${i + 1}",
+                        track, player.currentId == track.id.toString(), { player.play(rows.map { it.second }, track, PlaySource.Playlist(id)) }, leading = "${i + 1}",
                         modifier = Modifier.dragRow(
                             drag, list, scope, uid, enabled = p.mine,
                             onMove = { y ->

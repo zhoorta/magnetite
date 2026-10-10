@@ -18,6 +18,20 @@ import androidx.media3.session.SessionToken
 import app.magnetite.data.Session
 import app.magnetite.data.Track
 
+/** Where a queue came from, so Now Playing can go back to that album or playlist. */
+sealed interface PlaySource {
+    data class Album(val id: Int) : PlaySource
+    data class Playlist(val id: Int) : PlaySource
+}
+
+private fun PlaySource.encode() = when (this) { is PlaySource.Album -> "album:$id"; is PlaySource.Playlist -> "playlist:$id" }
+
+private fun decodeSource(s: String?): PlaySource? {
+    val (kind, id) = s?.split(':', limit = 2)?.takeIf { it.size == 2 } ?: return null
+    val n = id.toIntOrNull() ?: return null
+    return when (kind) { "album" -> PlaySource.Album(n); "playlist" -> PlaySource.Playlist(n); else -> null }
+}
+
 /** Compose-facing handle on the [PlaybackService]'s player. Tracks the current item and play state. */
 class PlayerController(context: Context, private val session: Session) {
     private var controller: MediaController? = null
@@ -26,6 +40,11 @@ class PlayerController(context: Context, private val session: Session) {
 
     /** The tracks behind the player's queue, kept so the queue can be saved and restored. */
     private var queue: List<Track> = emptyList()
+    private var source: PlaySource? = null
+
+    /** The album or playlist the queue was started from; for a mixed list (shared tracks) the album of the current track. */
+    fun origin(): PlaySource? =
+        source ?: queue.firstOrNull { it.id.toString() == currentId }?.albumId?.let { PlaySource.Album(it) }
 
     var currentId by mutableStateOf<String?>(null)
         private set
@@ -76,6 +95,7 @@ class PlayerController(context: Context, private val session: Session) {
         val user = session.username ?: return
         val saved = store.load(user) ?: return
         queue = saved.queue
+        source = decodeSource(saved.source)
         c.setMediaItems(queue.map(::mediaItem), saved.index, saved.positionMs)
     }
 
@@ -84,7 +104,7 @@ class PlayerController(context: Context, private val session: Session) {
         val user = session.username ?: return
         // The queue may have been replaced from outside the app (a car): save only what this screen's list still describes.
         if (queue.isEmpty() || c.mediaItemCount != queue.size) return
-        store.save(user, SavedPlayback(queue, c.currentMediaItemIndex, c.currentPosition))
+        store.save(user, SavedPlayback(queue, c.currentMediaItemIndex, c.currentPosition, source?.encode()))
     }
 
     // While playing, the position moves without any event, so write it every few seconds.
@@ -102,6 +122,7 @@ class PlayerController(context: Context, private val session: Session) {
             clearMediaItems()
         }
         queue = emptyList()
+        source = null
         session.username?.let(store::forget)
     }
 
@@ -118,11 +139,12 @@ class PlayerController(context: Context, private val session: Session) {
     }
 
     /** Replace the queue with the tracks the viewer may play (`stream_url` is null for the others) and start at [start]. */
-    fun play(tracks: List<Track>, start: Track) {
+    fun play(tracks: List<Track>, start: Track, from: PlaySource? = null) {
         val c = controller ?: return
         val playable = tracks.filter { it.open && it.streamUrl != null }
         val index = playable.indexOfFirst { it.id == start.id }.takeIf { it >= 0 } ?: return
         queue = playable
+        source = from
         c.setMediaItems(playable.map(::mediaItem), index, 0)
         c.prepare()
         c.play()

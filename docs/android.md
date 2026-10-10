@@ -125,3 +125,8 @@ The app is a media app for Android Auto: `PlaybackService` is a `MediaLibrarySer
 - The phone app only saves its own queue (`PlayerController.save` skips when the queue was replaced from outside).
 - Known limits: cover art in Auto may be missing (the covers need the Bearer token, which Auto cannot send); no search, no voice commands yet; the meters are phone-only.
 - To try it: on the phone open Android Auto settings, tap Version about 10 times, then ⋮ → Developer settings → turn on Unknown sources (sideloaded apps are hidden otherwise). Then connect to a car, or run the Desktop Head Unit (`adb forward tcp:5277 tcp:5277`, Android Auto → ⋮ → Start head unit server, then `desktop-head-unit`).
+
+## Now Playing navigation (2026-10-10)
+
+- A swipe down on Now Playing (meters or cover view) returns to the mini player; it only watches the gesture (Initial pass, not consumed), so the slider and scrolling keep working, and a scrolled page closes only at the top.
+- Tapping the cover opens the album or playlist the queue came from: `PlayerController.play(tracks, start, from: PlaySource?)` remembers it (saved with the queue in `SavedPlayback.source`); lists with no single source (Shared tracks) fall back to the album of the current track.

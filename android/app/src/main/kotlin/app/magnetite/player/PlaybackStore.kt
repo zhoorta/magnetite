@@ -7,7 +7,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @Serializable
-data class SavedPlayback(val queue: List<Track>, val index: Int, val positionMs: Long)
+data class SavedPlayback(val queue: List<Track>, val index: Int, val positionMs: Long, val source: String? = null)
 
 /**
  * Queue, current track and position, per user, so the app comes back where it was (paused). Like the web player's

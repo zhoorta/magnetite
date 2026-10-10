@@ -1,7 +1,13 @@
 package app.magnetite.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,8 +45,9 @@ private fun clock(ms: Long): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NowPlayingScreen(player: PlayerController, meters: List<String>, onPickMeters: () -> Unit, onClose: () -> Unit) {
+fun NowPlayingScreen(player: PlayerController, meters: List<String>, onPickMeters: () -> Unit, onClose: () -> Unit, onOpenSource: () -> Unit) {
     BackHandler(onBack = onClose)
+    val scroll = androidx.compose.foundation.rememberScrollState()
 
     // While the finger is on the slider, show its value instead of the playing position.
     var dragging by remember { mutableStateOf<Float?>(null) }
@@ -53,7 +60,26 @@ fun NowPlayingScreen(player: PlayerController, meters: List<String>, onPickMeter
         }
     }
 
-    Scaffold(topBar = {
+    // A swipe down anywhere closes the page (back to the mini player). Watched in the Initial pass without consuming, so the slider and the
+    // scrolling still work; a page scrolled down only closes once it is back at the top.
+    val closeSwipe = Modifier.pointerInput(Unit) {
+        val threshold = 96.dp.toPx()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val atTop = scroll.value == 0
+            var dx = 0f
+            var dy = 0f
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val c = event.changes.firstOrNull { it.id == down.id } ?: break
+                dx += c.positionChange().x
+                dy += c.positionChange().y
+            } while (c.pressed)
+            if (atTop && dy > threshold && dy > kotlin.math.abs(dx) * 2) onClose()
+        }
+    }
+
+    Scaffold(modifier = closeSwipe, topBar = {
         TopAppBar(title = { Text("Now playing") }, navigationIcon = { TransportButton(Icon.Back, "Back", onClose) }, actions = { TransportButton(Icon.Meters, "Meters", onPickMeters) })
     }) { padding ->
         if (meters.isNotEmpty()) {
@@ -73,11 +99,11 @@ fun NowPlayingScreen(player: PlayerController, meters: List<String>, onPickMeter
             return@Scaffold
         }
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp).verticalScroll(scroll),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(16.dp))
-            Cover(player.coverUrl, Modifier.fillMaxWidth(0.6f))
+            Cover(player.coverUrl, Modifier.fillMaxWidth(0.6f).clickable(onClick = onOpenSource))
             Spacer(Modifier.height(24.dp))
             Text(player.title ?: "", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
             Text(player.artist ?: "", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)

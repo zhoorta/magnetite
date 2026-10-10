@@ -28,6 +28,7 @@ import app.magnetite.ui.LoginScreen
 import app.magnetite.ui.MagnetiteTheme
 import app.magnetite.ui.MeterPicker
 import app.magnetite.ui.MiniPlayer
+import app.magnetite.player.PlaySource
 import app.magnetite.ui.NowPlayingScreen
 import app.magnetite.ui.PlaylistScreen
 import app.magnetite.ui.PlaylistsScreen
@@ -67,7 +68,17 @@ class MainActivity : ComponentActivity() {
                         val d = detail
                         when {
                             !signedIn -> LoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
-                            showNowPlaying -> NowPlayingScreen(app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false })
+                            showNowPlaying -> NowPlayingScreen(
+                                app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false },
+                                onOpenSource = {
+                                    when (val o = app.player.origin()) {
+                                        is PlaySource.Album -> detail = Detail.Album(o.id)
+                                        is PlaySource.Playlist -> detail = Detail.Playlist(o.id)
+                                        null -> return@NowPlayingScreen
+                                    }
+                                    showNowPlaying = false
+                                },
+                            )
                             d is Detail.Album -> AlbumScreen(app.api, app.player, d.id, onBack = { detail = null })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
                             tab == Tab.Library -> LibraryScreen(
