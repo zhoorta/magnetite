@@ -50,9 +50,10 @@ struct RowText: View {
     let title: String
     var subtitle: String?
     var dim = false
+    var bold = false
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.mono(15)).lineLimit(1)
+            Text(title).font(.mono(15, weight: bold ? .bold : .regular)).lineLimit(1)
             if let subtitle, !subtitle.isEmpty { Text(subtitle).font(.mono(12)).foregroundStyle(Terminal.muted).lineLimit(1) }
         }
         .opacity(dim ? 0.4 : 1)

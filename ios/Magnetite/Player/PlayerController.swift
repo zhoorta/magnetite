@@ -80,46 +80,6 @@ final class PlayerController: ObservableObject {
         updateNowPlaying()
     }
 
-    // MARK: Queue editing
-
-    func playNext(_ track: Track) {
-        guard track.playable else { return }
-        guard hasQueue else { play([track], start: 0); return }
-        queue.insert(track, at: index + 1)
-        save()
-    }
-
-    func enqueue(_ track: Track) {
-        guard track.playable else { return }
-        guard hasQueue else { play([track], start: 0); return }
-        queue.append(track)
-        save()
-    }
-
-    func removeFromQueue(at i: Int) {
-        guard queue.indices.contains(i) else { return }
-        if queue.count == 1 { signOut(); return }
-        let wasPlaying = isPlaying
-        queue.remove(at: i)
-        if i < index { index -= 1 }
-        else if i == index {
-            index = min(index, queue.count - 1)
-            load(autoplay: wasPlaying, at: 0)
-        }
-        save()
-    }
-
-    func moveInQueue(from: IndexSet, to: Int) {
-        let currentOffset = index
-        var order = Array(queue.indices)
-        order.move(fromOffsets: from, toOffset: to)
-        queue = order.map { queue[$0] }
-        index = order.firstIndex(of: currentOffset) ?? index
-        save()
-    }
-
-    func jump(to i: Int) { guard queue.indices.contains(i) else { return }; index = i; load(autoplay: true, at: 0) }
-
     private func load(autoplay: Bool, at start: Double) {
         guard let track = current, let urlString = track.streamUrl, let url = URL(string: urlString) else { return }
         var headers: [String: String] = [:]

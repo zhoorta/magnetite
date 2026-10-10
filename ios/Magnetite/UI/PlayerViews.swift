@@ -4,77 +4,182 @@ struct TransportIcons {
     static func play(_ playing: Bool) -> String { playing ? "pause.fill" : "play.fill" }
 }
 
+/// Same structure as the web player: meters (or the cover card) on top, then meters and full-screen buttons,
+/// the seek row, and Prev / Play / Next centred.
 struct MiniPlayer: View {
     var open: () -> Void
+    var openAlbum: (Album) -> Void = { _ in }
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var meters: MeterStore
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var dragging: Double?
+
+    private var current: Track? { player.current }
+
+    private func gotoAlbum() {
+        if let t = current, let id = t.albumId {
+            openAlbum(Album(id: id, title: t.album ?? t.title, artist: t.artist, coverUrl: t.coverUrl))
+        } else { open() }
+    }
+
+    private func bordered<V: View>(_ v: V, width: CGFloat? = nil) -> some View {
+        v.foregroundStyle(Terminal.accent).padding(.horizontal, 10).frame(width: width, height: 32)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Terminal.line))
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if !meters.ids.isEmpty {
-                // All chosen meters stack here; a tap chooses meters, a swipe up opens Now Playing.
+        let bare = meters.ids.isEmpty
+        VStack(spacing: 8) {
+            if !bare {
                 MeterPanel {
-                    VStack(spacing: 6) { ForEach(meters.ids, id: \.self) { MeterView(id: $0, compact: true) } }
+                    // Two side by side on the iPad (four make two rows); stacked on the phone.
+                    let columns = sizeClass == .regular && meters.ids.count > 1 ? 2 : 1
+                    Grid(horizontalSpacing: 10, verticalSpacing: 8) {
+                        ForEach(Array(stride(from: 0, to: meters.ids.count, by: columns)), id: \.self) { start in
+                            GridRow {
+                                ForEach(meters.ids[start..<min(start + columns, meters.ids.count)], id: \.self) {
+                                    MeterView(id: $0, compact: true, scale: columns == 2 ? 1.6 : 1.4)
+                                }
+                            }
+                        }
+                    }
                 }
-                .padding(.horizontal, 12).padding(.top, 6)
+                .contentShape(Rectangle())
                 .onTapGesture { meters.picking = true }
-                .gesture(DragGesture(minimumDistance: 20).onEnded { if $0.translation.height < -40 { open() } })
+                .onLongPressGesture(minimumDuration: 0.4) { meters.picking = true }
             }
+
+            // Cover, title and the buttons on the right; the cover and the text go to the album.
             HStack(spacing: 12) {
-                Button(action: open) {
+                Button(action: gotoAlbum) {
                     HStack(spacing: 12) {
-                        CoverView(url: player.current?.coverUrl).frame(width: 40, height: 40)
-                        RowText(title: player.current?.title ?? "", subtitle: player.current?.artist)
-                        Spacer(minLength: 0)
+                        CoverView(url: current?.coverUrl).frame(width: bare ? 56 : 40, height: bare ? 56 : 40)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(current?.title ?? "Nothing playing").font(.mono(bare ? 16 : 14, weight: .bold)).lineLimit(1)
+                            if let artist = current?.artist, !artist.isEmpty {
+                                Text(artist).font(.mono(12)).foregroundStyle(Terminal.accent).lineLimit(1)
+                            }
+                            if bare, let album = current?.album, !album.isEmpty {
+                                Text(album).font(.mono(12)).foregroundStyle(Terminal.muted).lineLimit(1)
+                            }
+                        }
                     }.contentShape(Rectangle())
                 }.buttonStyle(.plain)
-                Button { player.previous() } label: { Image(systemName: "backward.fill") }
-                Button { player.toggle() } label: { Image(systemName: TransportIcons.play(player.isPlaying)).frame(width: 28) }
-                Button { player.next() } label: { Image(systemName: "forward.fill") }.disabled(player.index + 1 >= player.queue.count)
+                Button(action: open) { Color.clear.frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32) }.buttonStyle(.plain)
+                Button { meters.picking = true } label: {
+                    bordered(HStack(spacing: 5) {
+                        Image(systemName: "waveform")
+                        Text("\(meters.ids.count)").font(.mono(12))
+                    })
+                }.buttonStyle(.plain).accessibilityLabel("Choose meters")
+                Button(action: open) {
+                    bordered(Image(systemName: "arrow.up.left.and.arrow.down.right").font(.system(size: 12)))
+                }.buttonStyle(.plain).accessibilityLabel("Full screen")
             }
-            .foregroundStyle(Terminal.accent.opacity(0.75)).font(.system(size: 17))
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            ProgressView(value: player.duration > 0 ? min(player.position / player.duration, 1) : 0)
-                .progressViewStyle(.linear).tint(Terminal.accent).scaleEffect(x: 1, y: 0.5)
+
+            if let e = player.error { Text(e).font(.mono(11)).foregroundStyle(Terminal.red) }
+
+            // Seek: time, slider, duration.
+            HStack(spacing: 10) {
+                Text(clock(dragging ?? player.position)).frame(width: 40, alignment: .trailing)
+                Slider(value: Binding(get: { dragging ?? player.position }, set: { dragging = $0 }), in: 0...max(player.duration, 1)) { editing in
+                    if !editing, let d = dragging { player.seek(to: d); dragging = nil }
+                }
+                .tint(Terminal.accent)
+                Text(clock(player.duration)).frame(width: 40, alignment: .leading)
+            }
+            .font(.mono(11)).foregroundStyle(Terminal.muted)
+
+            // Like the full-screen controls, smaller.
+            HStack(spacing: 34) {
+                Button { player.previous() } label: { Image(systemName: "backward.fill").font(.system(size: 20)).frame(width: 44, height: 40).contentShape(Rectangle()) }
+                Button { player.toggle() } label: { Image(systemName: TransportIcons.play(player.isPlaying)).font(.system(size: 28)).frame(width: 48, height: 40).contentShape(Rectangle()) }
+                Button { player.next() } label: { Image(systemName: "forward.fill").font(.system(size: 20)).frame(width: 44, height: 40).contentShape(Rectangle()) }
+                    .disabled(player.index + 1 >= player.queue.count)
+            }
+            .foregroundStyle(Terminal.accent.opacity(0.75))
+            .buttonStyle(.plain)
         }
+        .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 6)
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
         .background(Terminal.surface)
         .overlay(alignment: .top) { Rectangle().fill(Terminal.line).frame(height: 1) }
+        // A swipe up anywhere on the bar opens Now Playing (mostly vertical, so the seek slider keeps its drags).
+        .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded {
+            if $0.translation.height < -40, abs($0.translation.width) < abs($0.translation.height) / 2 { open() }
+        })
+    }
+}
+
+/// An album page in its own navigation stack, shown as a sheet from the mini player and over Now Playing.
+struct AlbumSheet: View {
+    let api: Api
+    let album: Album
+    var done: () -> Void
+    var body: some View {
+        NavigationStack {
+            AlbumView(api: api, album: album)
+                .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done", action: done) } }
+                .navigationDestination(for: Album.self) { AlbumView(api: api, album: $0) }
+        }
+        .tint(Terminal.accent).presentationBackground(Terminal.bg)
     }
 }
 
 struct NowPlayingView: View {
+    let api: Api
+    @State private var albumShown: Album?
     @EnvironmentObject var player: PlayerController
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var dragging: Double?
-    @State private var showQueue = false
     @EnvironmentObject var meters: MeterStore
 
     var body: some View {
         VStack(spacing: 20) {
             Capsule().fill(Terminal.line).frame(width: 40, height: 4).padding(.top, 8)
             if meters.ids.isEmpty {
-                Spacer(minLength: 0)
+                // The same flexible area the meters use, so the title and the controls stay where they are.
                 CoverView(url: player.current?.coverUrl)
                     .aspectRatio(1, contentMode: .fit).frame(maxWidth: 420)
                     .overlay(Rectangle().stroke(Terminal.line))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 // With meters chosen this page is the meters, big; not past what a meter can use.
                 GeometryReader { geo in
+                    // Same rule as the mini player: two side by side on the iPad (four make two rows).
                     let gap: CGFloat = 8
+                    let columns = sizeClass == .regular && meters.ids.count > 1 ? 2 : 1
+                    let rows = (meters.ids.count + columns - 1) / columns
                     VStack(spacing: gap) {
-                        ForEach(meters.ids, id: \.self) { id in
-                            let wanted = (meterCatalog.first { $0.id == id }?.height ?? 150) * 2.2
-                            let h = min((geo.size.height - gap * CGFloat(meters.ids.count - 1)) / CGFloat(meters.ids.count), wanted)
-                            MeterPanel { MeterView(id: id, fill: true) }.frame(height: h)
+                        ForEach(0..<rows, id: \.self) { r in
+                            let row = Array(meters.ids[(r * columns)..<min((r + 1) * columns, meters.ids.count)])
+                            let wanted = row.map { id in (meterCatalog.first { $0.id == id }?.height ?? 150) * 2.2 }.max() ?? 150
+                            let h = min((geo.size.height - gap * CGFloat(rows - 1)) / CGFloat(rows), wanted)
+                            HStack(spacing: gap) {
+                                ForEach(row, id: \.self) { id in MeterPanel { MeterView(id: id, fill: true) }.frame(height: h) }
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
                     .onTapGesture { meters.picking = true }
+                    .onLongPressGesture(minimumDuration: 0.4) { meters.picking = true }
                 }
             }
             VStack(spacing: 4) {
-                Text(player.current?.title ?? "").font(.mono(20, weight: .bold)).foregroundStyle(Terminal.accent).multilineTextAlignment(.center)
-                Text([player.current?.artist, player.current?.album].compactMap { $0 }.joined(separator: " · ")).font(.mono(13)).foregroundStyle(Terminal.muted).multilineTextAlignment(.center)
+                // The title and the artist line go to the album.
+                Button {
+                    if let t = player.current, let id = t.albumId {
+                        albumShown = Album(id: id, title: t.album ?? t.title, artist: t.artist, coverUrl: t.coverUrl)
+                    }
+                } label: {
+                    VStack(spacing: 4) {
+                        Text(player.current?.title ?? "").font(.mono(20, weight: .bold)).foregroundStyle(Terminal.accent).multilineTextAlignment(.center)
+                        Text([player.current?.artist, player.current?.album].compactMap { $0 }.joined(separator: " · ")).font(.mono(13)).foregroundStyle(Terminal.muted).multilineTextAlignment(.center)
+                    }.contentShape(Rectangle())
+                }.buttonStyle(.plain)
                 if let e = player.error { Text(e).font(.mono(12)).foregroundStyle(Terminal.red) }
             }
             VStack(spacing: 2) {
@@ -92,14 +197,17 @@ struct NowPlayingView: View {
             }
             .font(.system(size: 26)).foregroundStyle(Terminal.accent.opacity(0.75))
             HStack(spacing: 28) {
-                Button { showQueue = true } label: { Label("Queue", systemImage: "list.bullet") }
                 Button { meters.picking = true } label: { Label("Meters", systemImage: "waveform") }
             }
             .buttonStyle(.plain).font(.mono(13)).foregroundStyle(Terminal.muted)
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 24).padding(.bottom, 16)
         .terminalScreen()
-        .sheet(isPresented: $showQueue) { QueueView().presentationBackground(Terminal.bg) }
+        // A swipe down closes Now Playing back to the mini player (mostly vertical, so the seek slider keeps its drags).
+        .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded {
+            if $0.translation.height > 100, abs($0.translation.width) < $0.translation.height / 2 { dismiss() }
+        })
+        // The album opens over Now Playing, which stays where it is.
+        .sheet(item: $albumShown) { album in AlbumSheet(api: api, album: album) { albumShown = nil } }
     }
 }

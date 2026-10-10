@@ -31,6 +31,7 @@ struct MeterView: View {
     let id: String
     var compact = false
     var fill = false
+    var scale: CGFloat = 1
     @EnvironmentObject var player: PlayerController
     @State private var state = MeterState()
     @State private var active = true
@@ -41,7 +42,7 @@ struct MeterView: View {
             TimelineView(.animation(paused: !active)) { tl in
                 Canvas { g, size in state.draw(id, g, size, tl.date, playing: player.isPlaying) }
             }
-            .frame(height: fill ? nil : (compact ? info.compact : info.height))
+            .frame(height: fill ? nil : (compact ? min(info.compact * scale, 150) : info.height))
             .onChange(of: player.isPlaying) { playing in
                 if playing { active = true } else {
                     Task { try? await Task.sleep(for: .seconds(2)); if !player.isPlaying { active = false } }

@@ -20,12 +20,9 @@ struct AddToPlaylistMenu: View {
 
 struct TrackMenu: View {
     let track: Track
-    @EnvironmentObject var player: PlayerController
 
     var body: some View {
         if track.playable {
-            Button("Play next", systemImage: "text.insert") { player.playNext(track) }
-            Button("Add to queue", systemImage: "text.append") { player.enqueue(track) }
             AddToPlaylistMenu(track: track)
         }
     }

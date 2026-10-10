@@ -15,6 +15,7 @@ struct RootView: View {
     @EnvironmentObject var meters: MeterStore
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var nowPlaying = false
+    @State private var albumShown: Album?
     @State private var tab = Int(ProcessInfo.processInfo.environment["MAGNETITE_TAB"] ?? "0") ?? 0
     @State private var sidebar: AppSection? = .library
 
@@ -22,8 +23,10 @@ struct RootView: View {
         Group {
             if session.signedIn {
                 signedIn
-                    .fullScreenCover(isPresented: $nowPlaying) { NowPlayingView().playlistPrompts().sheet(isPresented: Binding(get: { meters.picking && nowPlaying }, set: { meters.picking = $0 })) { MeterPicker() } }
+                    .fullScreenCover(isPresented: $nowPlaying) {
+                        NowPlayingView(api: api).playlistPrompts().sheet(isPresented: Binding(get: { meters.picking && nowPlaying }, set: { meters.picking = $0 })) { MeterPicker() } }
                     .playlistPrompts()
+                    .sheet(item: $albumShown) { album in AlbumSheet(api: api, album: album) { albumShown = nil } }
                     .sheet(isPresented: Binding(get: { meters.picking && !nowPlaying }, set: { meters.picking = $0 })) { MeterPicker() }
                     .onAppear { player.restore() }
                     .task { await store.refresh(); await meters.load() }
@@ -54,7 +57,9 @@ struct RootView: View {
 
     @ViewBuilder private var signedIn: some View {
         if sizeClass == .regular {
-            // iPad: sidebar and a detail stack, the mini player under the detail.
+            // iPad: sidebar and a detail stack; the mini player sits under both, outside the navigation containers
+            // (inside the detail column it vanished when an album was pushed).
+            VStack(spacing: 0) {
             NavigationSplitView {
                 List(AppSection.allCases, selection: $sidebar) { s in
                     Label(s.title, systemImage: s.icon).tag(s)
@@ -64,20 +69,18 @@ struct RootView: View {
                 .listStyle(.sidebar).terminalScreen()
                 .navigationTitle("Magnetite")
             } detail: {
-                NavigationStack { content(sidebar ?? .library) }
-                    .id(sidebar)
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        if player.hasQueue { MiniPlayer { nowPlaying = true } }
-                    }
+                NavigationStack { content(sidebar ?? .library) }.id(sidebar)
             }
             .tint(Terminal.accent)
+            if player.hasQueue { MiniPlayer(open: { nowPlaying = true }, openAlbum: { albumShown = $0 }) }
+            }
         } else {
             TabView(selection: $tab) {
                 ForEach(AppSection.allCases) { s in
-                    NavigationStack { content(s) }
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            if player.hasQueue { MiniPlayer { nowPlaying = true } }
-                        }
+                    VStack(spacing: 0) {
+                        NavigationStack { content(s) }
+                        if player.hasQueue { MiniPlayer(open: { nowPlaying = true }, openAlbum: { albumShown = $0 }) }
+                    }
                         .tabItem { Label(s.title, systemImage: s.icon) }.tag(s.rawValue)
                 }
             }

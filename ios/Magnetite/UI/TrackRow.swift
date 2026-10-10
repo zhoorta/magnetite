@@ -13,9 +13,9 @@ struct TrackRow: View {
             } else {
                 CoverView(url: track.coverUrl).frame(width: 44, height: 44)
             }
-            RowText(title: track.title, subtitle: [track.artist, track.sharedBy.map { "from \($0)" }].compactMap { $0 }.joined(separator: " · "), dim: !track.playable)
+            RowText(title: track.title, subtitle: [track.artist, track.sharedBy.map { "from \($0)" }].compactMap { $0 }.joined(separator: " · "), dim: !track.playable, bold: current)
             Spacer(minLength: 0)
-            if current { Image(systemName: "waveform").foregroundStyle(Terminal.accent) }
+            if current { Image(systemName: "speaker.wave.2.fill").foregroundStyle(Terminal.accent) }
             else if let d = track.duration { Text(clock(d)).font(.mono(12)).foregroundStyle(Terminal.muted) }
         }
         .contentShape(Rectangle())
