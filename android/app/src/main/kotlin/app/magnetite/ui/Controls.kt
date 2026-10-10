@@ -80,3 +80,24 @@ private fun DrawScope.glyph(icon: Icon, color: Color) {
         }
     }
 }
+
+/** A small speaker: marks the album that is playing, and the folders that hold it. */
+@Composable
+fun PlayingMark(modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.primary) {
+    Canvas(modifier.size(16.dp).semantics { contentDescription = "Playing" }) {
+        val w = size.width
+        val h = size.height
+        val body = Path().apply {
+            moveTo(0f, h * 0.36f); lineTo(w * 0.2f, h * 0.36f); lineTo(w * 0.5f, h * 0.1f)
+            lineTo(w * 0.5f, h * 0.9f); lineTo(w * 0.2f, h * 0.64f); lineTo(0f, h * 0.64f); close()
+        }
+        drawPath(body, color)
+        val line = h * 0.09f
+        for (r in listOf(0.2f, 0.4f)) {
+            drawArc(
+                color, -50f, 100f, false, Offset(w * (0.5f - r * 0.4f), h * (0.5f - r * 1.2f)), Size(w * r * 2.2f, h * r * 2.4f),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(line),
+            )
+        }
+    }
+}

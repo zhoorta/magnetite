@@ -41,11 +41,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import coil3.compose.AsyncImage
+import androidx.compose.ui.Alignment
+import app.magnetite.player.PlayerController
 import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
+fun LibraryScreen(api: Api, player: PlayerController, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
     val albums = remember { mutableStateListOf<Album>() }
     var page by remember { mutableStateOf(0) }
     var lastPage by remember { mutableStateOf(1) }
@@ -101,6 +103,18 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onP
     LaunchedEffect(page) { if (page in 1 until lastPage) loadMore() }
 
     val expanded = remember { mutableStateListOf<Int>() }
+
+    /** The folder, or one inside it, holds the album that is playing. */
+    fun holdsPlaying(f: Folder): Boolean {
+        val playing = player.albumId ?: return false
+        var at = albums.firstOrNull { it.id == playing }?.folderId
+        var steps = 0
+        while (at != null && steps++ < 50) {
+            if (at == f.id) return true
+            at = folders.firstOrNull { it.id == at }?.parentId
+        }
+        return false
+    }
 
     // Long-press an album and drag it onto a folder (or onto another album, to join that album's folder).
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -185,7 +199,10 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onP
                         )
                             .padding(start = 16.dp + 20.dp * depth, end = 16.dp, top = 14.dp, bottom = 14.dp),
                     ) {
-                        Text((if (open) "▾ " else "▸ ") + r.name, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Text((if (open) "▾ " else "▸ ") + r.name, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                            if (holdsPlaying(r)) PlayingMark(Modifier.padding(start = 8.dp))
+                        }
                         Text("${r.albumCount}", style = MaterialTheme.typography.bodySmall)
                         DropdownMenu(expanded = menuFor == r.id, onDismissRequest = { menuFor = null }) {
                             DropdownMenuItem(text = { Text("New subfolder") }, onClick = { menuFor = null; dialog = FolderDialog.Create(r.id) })
@@ -226,7 +243,10 @@ fun LibraryScreen(api: Api, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onP
                     ) {
                         Cover(album.coverUrl, Modifier.size(56.dp))
                         Column(Modifier.padding(start = 12.dp)) {
-                            Text(album.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(album.title, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                                if (player.albumId == album.id) PlayingMark(Modifier.padding(start = 8.dp))
+                            }
                             Text(
                                 listOfNotNull(album.artist, album.year?.toString(), album.trackCount?.let { "$it tracks" }).joinToString(" · "),
                                 maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,

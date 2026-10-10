@@ -48,6 +48,9 @@ class PlayerController(context: Context, private val session: Session) {
 
     var currentId by mutableStateOf<String?>(null)
         private set
+    /** The album the current track belongs to, whatever the queue was started from; the library marks it. */
+    var albumId by mutableStateOf<Int?>(null)
+        private set
     var title by mutableStateOf<String?>(null)
         private set
     var artist by mutableStateOf<String?>(null)
@@ -80,6 +83,7 @@ class PlayerController(context: Context, private val session: Session) {
 
     private fun sync(player: Player) {
         currentId = player.currentMediaItem?.mediaId
+        albumId = queue.firstOrNull { it.id.toString() == currentId }?.albumId
         title = player.mediaMetadata.title?.toString()
         artist = player.mediaMetadata.artist?.toString()
         val wasPlaying = isPlaying

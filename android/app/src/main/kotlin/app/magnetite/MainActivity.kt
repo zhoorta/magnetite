@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
                             d is Detail.Album -> AlbumScreen(app.api, app.player, d.id, onBack = { detail = null })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
                             tab == Tab.Library -> LibraryScreen(
-                                app.api,
+                                app.api, app.player,
                                 onOpen = { detail = Detail.Album(it) },
                                 onPickMeters = { pickMeters = true },
                                 onPickTheme = { pickTheme = true },
