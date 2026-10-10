@@ -4,6 +4,7 @@ use App\Jobs\ScanLibrary;
 use App\Models\SharedItem;
 use App\Models\Track;
 use App\Models\User;
+use App\Services\CoverStore;
 use App\Services\LibraryScanner;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
@@ -92,4 +93,19 @@ it('offers the copy in the + menu of other people\'s shared music, and not of yo
 
     $this->actingAs($this->bob)->get(route('shared'))->assertOk()->assertSee('Copy to my library')->assertSee("copy(&#039;albums&#039;, {$this->album->id})", false);
     $this->actingAs($this->alice)->get(route('shared'))->assertOk()->assertDontSee('Copy to my library');
+});
+
+it('copies the cover an album shows even when no cover file sits beside the music', function () {
+    Queue::fake();
+    $image = imagecreatetruecolor(8, 8);
+    ob_start();
+    imagejpeg($image);
+    $jpeg = (string) ob_get_clean();
+    $this->album->forceFill(['cover' => app(CoverStore::class)->store($jpeg), 'cover_source' => 'itunes'])->save();
+    SharedItem::create(['user_id' => $this->alice->id, 'track_id' => $this->track->id]);
+
+    $this->actingAs($this->bob)->postJson(route('copy.store', ['tracks', $this->track->id]))->assertCreated()->assertJson(['added' => 1]);
+
+    $folder = dirname($this->track->path);
+    expect(File::glob($this->music.'/users/bob/From alice/'.($folder === '.' ? '' : $folder.'/').'cover.*'))->toHaveCount(1);
 });

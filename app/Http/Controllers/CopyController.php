@@ -9,6 +9,7 @@ use App\Services\FerriteException;
 use App\Services\LibraryUploader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 /**
@@ -43,7 +44,8 @@ class CopyController extends Controller
 
         // The cover image that sits beside the music (cover.jpg, folder.png...), once per folder.
         foreach ($tracks->unique(fn ($t) => $t->user_id.'|'.dirname($t->path)) as $track) {
-            $cover = $track->user->store()->folderCover($track->path);
+            // The file beside the music, else a cover downloaded for the album.
+            $cover = $track->user->store()->folderCover($track->path) ?? $this->albumCover($track);
 
             $folder = dirname($track->path) === '.' ? '' : dirname($track->path).'/';
             $cover !== null && $items[] = ['cover' => $cover, 'path' => 'From '.$track->user->username.'/'.$folder.'cover'];
@@ -59,5 +61,13 @@ class CopyController extends Controller
         $result['added'] > 0 && ScanLibrary::request($me);
 
         return response()->json($result, 201);
+    }
+
+    /** The bytes of a cover that was downloaded for the album (it lives only in the cover store; embedded art travels inside the files). */
+    private function albumCover(Track $track): ?string
+    {
+        $name = $track->album?->cover_source !== null ? $track->album->cover : null;
+
+        return $name !== null && preg_match('/^[a-f0-9]{40}\.jpg$/', $name) ? Storage::disk('local')->get("covers/{$name}") : null;
     }
 }
