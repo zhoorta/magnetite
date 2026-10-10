@@ -17,7 +17,7 @@
              class="mx-auto w-full max-w-sm border border-white/10">
     </section>
 
-    @php($apk = public_path('downloads/magnetite-0.3.1.apk'))
+    @php($apk = public_path('downloads/magnetite-0.3.2.apk'))
     @if (is_file($apk))
         <section id="android" class="scroll-mt-8 border-t border-white/10 py-10">
             <h2 class="text-2xl font-semibold">Android app <span class="ml-2 text-xs uppercase tracking-widest text-muted">beta</span></h2>
@@ -26,8 +26,8 @@
                 Enter your server's address when you sign in.
             </p>
             <div class="mt-5 flex flex-wrap items-center gap-4 text-sm">
-                <a href="/downloads/magnetite-0.3.1.apk" download class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Download the APK</a>
-                <span class="text-muted">Version 0.3.1 · {{ number_format(filesize($apk) / 1048576, 1) }} MB · Android 8 or newer</span>
+                <a href="/downloads/magnetite-0.3.2.apk" download class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Download the APK</a>
+                <span class="text-muted">Version 0.3.2 · {{ number_format(filesize($apk) / 1048576, 1) }} MB · Android 8 or newer</span>
             </div>
             <p class="mt-4 max-w-prose text-xs text-muted">
                 Not on the Play Store: open the file after downloading and allow installs from your browser when Android asks.
