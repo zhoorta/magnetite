@@ -45,13 +45,23 @@ struct TrackList: View {
     }
 }
 
+/// The small speaker that says "playing from here" (the web's playing icon, without the fading waves).
+struct PlayingMark: View {
+    var body: some View {
+        Image(systemName: "speaker.wave.2.fill").font(.system(size: 12)).foregroundStyle(Terminal.accent.opacity(0.7))
+            .accessibilityLabel("Playing")
+    }
+}
+
 struct AlbumRow: View {
     let album: Album
+    @EnvironmentObject var player: PlayerController
     var body: some View {
         HStack(spacing: 12) {
             CoverView(url: album.coverUrl).frame(width: 52, height: 52)
             RowText(title: album.title, subtitle: [album.artist, album.year.map(String.init), album.sharedBy.map { "from \($0)" }].compactMap { $0 }.joined(separator: " · "))
             Spacer(minLength: 0)
+            if player.hasQueue && player.current?.albumId == album.id { PlayingMark() }
             if let n = album.trackCount { Text("\(n)").font(.mono(12)).foregroundStyle(Terminal.muted) }
         }
     }

@@ -25,7 +25,7 @@ struct MiniPlayer: View {
     }
 
     private func bordered<V: View>(_ v: V, width: CGFloat? = nil) -> some View {
-        v.foregroundStyle(Terminal.accent).padding(.horizontal, 10).frame(width: width, height: 32)
+        v.foregroundStyle(Terminal.accent).padding(.horizontal, sizeClass == .regular ? 10 : 7).frame(width: width, height: 32)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Terminal.line))
     }
 
@@ -61,7 +61,7 @@ struct MiniPlayer: View {
             }
 
             // Cover, title and the buttons on the right; the cover and the text go to the album.
-            HStack(spacing: 12) {
+            HStack(spacing: sizeClass == .regular ? 12 : 8) {
                 Button(action: gotoAlbum) {
                     HStack(spacing: 12) {
                         CoverView(url: current?.coverUrl).frame(width: bare ? 56 : 40, height: bare ? 56 : 40)
@@ -75,7 +75,7 @@ struct MiniPlayer: View {
                             }
                         }
                     }.contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).layoutPriority(1)
                 Button(action: open) { Color.clear.frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32) }.buttonStyle(.plain)
                 // Accent while meters are chosen (like the web), filled a little while they are folded.
                 Button {

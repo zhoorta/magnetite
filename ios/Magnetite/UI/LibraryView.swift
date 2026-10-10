@@ -29,6 +29,7 @@ struct LibraryView: View {
                             Image(systemName: expanded.contains(f.id) ? "chevron.down" : "chevron.right").font(.system(size: 12)).frame(width: 16)
                             Image(systemName: "folder").foregroundStyle(Terminal.accent)
                             RowText(title: f.name, subtitle: nil)
+                            if holdsPlaying(f) { PlayingMark() }
                             Spacer()
                             Text("\(f.albumCount ?? 0)").font(.mono(12)).foregroundStyle(Terminal.muted)
                         }
@@ -93,6 +94,18 @@ struct LibraryView: View {
         }
         for a in albums where a.folderId == parent { out.append(Row(id: "a\(a.id)", kind: .album(a), depth: depth)) }
         return out
+    }
+
+    /// The folder, or one inside it, holds the album that is playing.
+    private func holdsPlaying(_ f: Folder) -> Bool {
+        guard player.hasQueue, let albumId = player.current?.albumId, var at = albums.first(where: { $0.id == albumId })?.folderId else { return false }
+        var guardSteps = 0
+        while guardSteps < 50 {
+            if at == f.id { return true }
+            guard let parent = folders.first(where: { $0.id == at })?.parentId else { return false }
+            at = parent; guardSteps += 1
+        }
+        return false
     }
 
     private func toggle(_ f: Folder) { if !expanded.insert(f.id).inserted { expanded.remove(f.id) } }
