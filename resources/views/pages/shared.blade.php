@@ -6,18 +6,15 @@
 <x-layouts.app title="Shared · Magnetite">
     <div x-data="{
             // Copy someone else's shared album or track into my own library (real files, under 'From {user}').
-            copied: {},
             async copy(kind, id) {
-                const key = kind + id;
-                this.copied[key] = 'Copying…';
                 const r = await fetch('/copy/' + kind + '/' + id, {
                     method: 'POST',
                     headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Accept': 'application/json' },
                 }).catch(() => null);
                 const body = r ? await r.json().catch(() => ({})) : {};
-                this.copied[key] = !r ? 'Could not copy' : r.ok
-                    ? (body.added ? 'Copied to your library' : 'Already in your library') + (body.failed ? ' (' + body.failed + ' failed)' : '')
-                    : (body.message || 'Could not copy');
+                if (! r) return 'Could not copy';
+                if (! r.ok) return body.message || 'Could not copy';
+                return (body.added ? 'Copied to your library' : 'Already in your library') + (body.failed ? ' (' + body.failed + ' failed)' : '');
             },
             async unshare(kind, id, el) {
                 const r = await fetch('/share/' + kind + '/' + id, {
@@ -70,12 +67,8 @@
                             <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
                             <span class="ml-auto shrink-0 text-xs">shared by {{ $owner($album->user) }}</span>
                             <x-playlist-menu :item="'{ kind: \'album\', id: '.$album->id.', title: '.\Illuminate\Support\Js::from($album->title).' }'"
-                                             label="Add every track of this album to a playlist" />
-                            @if ($album->user_id !== $me->id)
-                                <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent" :disabled="copied['albums{{ $album->id }}'] === 'Copying…'"
-                                        title="Copy the files of this album into your own library"
-                                        @click="copy('albums', {{ $album->id }})" x-text="copied['albums{{ $album->id }}'] ?? 'Copy to my library'"></button>
-                            @endif
+                                             label="Add every track of this album to a playlist"
+                                             :copy="$album->user_id !== $me->id ? '\'albums\', '.$album->id : null" />
                             @if ($album->user_id === $me->id)
                                 <button type="button" class="shrink-0 rounded-theme border border-white/10 px-2 py-0.5 text-xs hover:text-accent"
                                         @click="unshare('albums', {{ $album->id }}, $el.closest('section'))">Unshare</button>
@@ -88,7 +81,7 @@
                         </button>
 
                         <div x-show="expanded" x-cloak>
-                            @include('pages.partials.shared-track-list')
+                            @include('pages.partials.shared-track-list', ['copyable' => $album->user_id !== $me->id])
                         </div>
                     </div>
                 </section>
@@ -106,13 +99,9 @@
                                     <span class="shrink-0 text-xs text-accent2" x-show="$store.player.current?.id === tracks[0].id"
                                           x-text="$store.player.playing ? 'playing' : 'paused'"></span>
                                 </button>
-                                <x-playlist-menu :item="'{ id: '.$track->id.', title: '.\Illuminate\Support\Js::from($track->title).' }'" />
+                                <x-playlist-menu :item="'{ id: '.$track->id.', title: '.\Illuminate\Support\Js::from($track->title).' }'"
+                                                 :copy="$track->user_id !== $me->id ? '\'tracks\', '.$track->id : null" />
                                 <span class="shrink-0 text-xs text-muted">shared by {{ $owner($track->user) }}</span>
-                                @if ($track->user_id !== $me->id)
-                                    <button type="button" class="shrink-0 text-xs text-muted hover:text-accent" :disabled="copied['tracks{{ $track->id }}'] === 'Copying…'"
-                                            title="Copy this track into your own library"
-                                            @click="copy('tracks', {{ $track->id }})" x-text="copied['tracks{{ $track->id }}'] ?? 'Copy to my library'"></button>
-                                @endif
                                 @if ($track->user_id === $me->id)
                                     <button type="button" class="shrink-0 text-xs text-muted hover:text-accent"
                                             @click="unshare('tracks', {{ $track->id }}, $el.parentElement)">Unshare</button>

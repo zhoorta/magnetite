@@ -11,7 +11,7 @@
             <span class="shrink-0 text-xs text-muted" x-show="! t.playable" title="This browser cannot decode ALAC and ffmpeg is not available to convert it">ALAC</span>
             <span class="w-10 shrink-0 text-right text-xs tabular-nums text-muted" x-text="$store.player.fmt(t.duration)"></span>
         </button>
-        <x-playlist-menu item="{ id: t.id, title: t.title }" />
+        <x-playlist-menu item="{ id: t.id, title: t.title }" :copy="($copyable ?? false) ? '\'tracks\', t.id' : null" />
         </div>
     </template>
 </div>
