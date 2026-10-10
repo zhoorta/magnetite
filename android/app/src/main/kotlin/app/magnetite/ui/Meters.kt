@@ -36,6 +36,7 @@ import app.magnetite.player.Loudness
 import app.magnetite.player.MeterTap
 import app.magnetite.player.Spectrum
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.cos
@@ -279,9 +280,11 @@ private fun DrawScope.eye(cx: Float, cy: Float, r: Float, v: Float) {
     val target = r * 0.84f
     drawCircle(glass, r, Offset(cx, cy))
     drawCircle(Terminal.Muted, r, Offset(cx, cy), style = Stroke(r * 0.05f))
-    drawCircle(Brush.radialGradient(listOf(phosphor.a(0.5f + 0.5f * v), phosphor.a(0f)), Offset(cx, cy), target * (1.1f + 0.3f * v)), target * (1.1f + 0.3f * v), Offset(cx, cy))
+    // Glow: a few concentric discs fading outwards (shaders per frame were the cost of this meter).
+    val glowR = target * (1.1f + 0.3f * v)
+    for (i in 0 until 3) drawCircle(phosphor.a((0.5f + 0.5f * v) * 0.24f), glowR * (1f - i * 0.08f), Offset(cx, cy))
     drawCircle(phosphor.a(0.45f + 0.55f * v), target, Offset(cx, cy))
-    drawCircle(Brush.radialGradient(listOf(Color.White.a((0.3f + 0.7f * v) * 0.55f), Color.White.a(0f)), Offset(cx, cy), target), target, Offset(cx, cy))
+    for (i in 0 until 2) drawCircle(Color.White.a((0.3f + 0.7f * v) * 0.2f), target * (1f - i * 0.35f), Offset(cx, cy))
     if (half > 0.1f) drawArc(glass, 90f - half, half * 2, true, Offset(cx - r, cy - r), Size(r * 2, r * 2))
     drawCircle(glass, r * 0.12f, Offset(cx, cy))
     drawCircle(phosphor.a(0.5f + 0.5f * v), r * 0.12f, Offset(cx, cy), style = Stroke(r * 0.02f))
@@ -290,16 +293,24 @@ private fun DrawScope.eye(cx: Float, cy: Float, r: Float, v: Float) {
 // ---- scope ------------------------------------------------------------------------------------------------------
 
 private val scopeBuf = FloatArray(1024)
+private val scopePath = Path()
 
 private fun DrawScope.scope(lv: Lv) {
     if (lv.live) MeterTap.recent(scopeBuf) else scopeBuf.fill(0f)
     val mid = size.height / 2
     drawLine(Color(0xFF1E2622), Offset(0f, mid), Offset(size.width, mid), 1f)
-    val path = Path()
-    for (i in scopeBuf.indices) {
-        val x = i * size.width / (scopeBuf.size - 1)
-        val y = mid - scopeBuf[i].coerceIn(-1f, 1f) * mid
-        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    // A path of 1024 anti-aliased segments is slow to stroke every frame; one point per ~3 px (the loudest sample of its bucket) looks the same.
+    val points = (size.width / 3f).toInt().coerceIn(32, scopeBuf.size)
+    val path = scopePath
+    path.rewind()
+    for (p in 0 until points) {
+        val from = p * scopeBuf.size / points
+        val to = maxOf(from + 1, (p + 1) * scopeBuf.size / points)
+        var v = scopeBuf[from]
+        for (i in from + 1 until to) if (abs(scopeBuf[i]) > abs(v)) v = scopeBuf[i]
+        val x = p * size.width / (points - 1)
+        val y = mid - v.coerceIn(-1f, 1f) * mid
+        if (p == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
     drawPath(path, Terminal.Accent, style = Stroke(2.5f))
 }
@@ -309,7 +320,8 @@ private fun DrawScope.scope(lv: Lv) {
 private const val GONIO = 1024
 private val gonioL = FloatArray(GONIO)
 private val gonioR = FloatArray(GONIO)
-private val gonioPath = Path()
+private val gonioPts = FloatArray(GONIO * 2)
+private val goniometerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
 
 private fun DrawScope.goniometer(lv: Lv) {
     val margin = min(size.width, size.height) * 0.06f
@@ -333,18 +345,19 @@ private fun DrawScope.goniometer(lv: Lv) {
     text("L", cx - q - font * 0.9f, cy - q - font * 0.3f, font, Terminal.Muted)
     text("R", cx + q + font * 0.9f, cy - q - font * 0.3f, font, Terminal.Muted)
 
-    // Trace: the last 1024 samples at the playhead, oldest first. Mid is up, side across.
+    // Trace: the last 1024 samples at the playhead. Mid is up, side across. Drawn as points: a stroked path of 1024 segments costs several frames.
     val k = r * 0.7f
-    val path = gonioPath
-    path.rewind()
-    if (lv.live) MeterTap.recentStereo(gonioL, gonioR)
-    for (n in 0 until GONIO) {
-        val l = gonioL[n]; val rr = gonioR[n]
-        val x = cx + (rr - l) / sqrt(2f) * k
-        val y = cy - (l + rr) / sqrt(2f) * k
-        if (n == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    if (lv.live) {
+        MeterTap.recentStereo(gonioL, gonioR)
+        for (n in 0 until GONIO) {
+            val l = gonioL[n]; val rr = gonioR[n]
+            gonioPts[n * 2] = cx + (rr - l) / sqrt(2f) * k
+            gonioPts[n * 2 + 1] = cy - (l + rr) / sqrt(2f) * k
+        }
+        goniometerPaint.strokeWidth = max(1.5f, sz / 200f)
+        goniometerPaint.color = Terminal.Accent.a(0.6f).toArgb()
+        drawIntoCanvas { it.nativeCanvas.drawPoints(gonioPts, goniometerPaint) }
     }
-    if (lv.live) drawPath(path, Terminal.Accent.a(0.6f), style = Stroke(max(1f, sz / 260f)))
 
     val bw = min(size.width - margin * 2, sz * 1.5f)
     val x0 = cx - bw / 2
@@ -361,7 +374,11 @@ private fun DrawScope.goniometer(lv: Lv) {
 
 // ---- loudness ---------------------------------------------------------------------------------------------------
 
-private fun fmt(v: Double) = if (v.isFinite()) "${if (v < 0) "−" else "+"}${"%.1f".format(kotlin.math.abs(v))}" else "−−.-"
+private fun fmt(v: Double): String {
+    if (!v.isFinite()) return "−−.-"
+    val tenths = kotlin.math.round(kotlin.math.abs(v) * 10).toInt() // no String.format: it allocates and runs several times per frame
+    return "${if (v < 0) "−" else "+"}${tenths / 10}.${tenths % 10}"
+}
 
 private fun DrawScope.loudness() {
     val margin = min(size.width, size.height) * 0.07f
@@ -442,7 +459,7 @@ private fun ThirdOctave(playing: Boolean, modifier: Modifier) {
 
 // ---- spectrogram ------------------------------------------------------------------------------------------------
 
-private const val COLS = 160
+private const val COLS = 400
 private const val ROWS = 64
 
 @Composable
@@ -465,7 +482,7 @@ private fun Spectrogram(playing: Boolean, modifier: Modifier) {
     val fresh = remember { booleanArrayOf(false) }
     MeterCanvas(playing, modifier, work = { _, lv -> fresh[0] = lv.live; if (lv.live) spectrum.read(raw) }) { dt, lv ->
         if (fresh[0]) {
-            state[0] += dt * COLS / 13f // about 13 seconds from the right edge to the left
+            state[0] += dt * COLS / 13f // about 13 seconds from the right edge to the left; the fraction slides the picture between whole columns
             val n = min(COLS, state[0].toInt())
             if (n >= 1) {
                 state[0] -= n
@@ -482,7 +499,10 @@ private fun Spectrogram(playing: Boolean, modifier: Modifier) {
         }
         val font = max(9f, size.height * 0.055f)
         val left = font * 3f
-        drawImage(bitmap.asImageBitmap(), dstOffset = IntOffset(left.toInt(), 0), dstSize = IntSize((size.width - left).toInt(), size.height.toInt()), filterQuality = androidx.compose.ui.graphics.FilterQuality.None)
+        val colW = (size.width - left) / COLS
+        clipRect(left, 0f, size.width, size.height) {
+            drawImage(bitmap.asImageBitmap(), dstOffset = IntOffset((left - state[0] * colW).toInt(), 0), dstSize = IntSize((size.width - left).toInt(), size.height.toInt()), filterQuality = androidx.compose.ui.graphics.FilterQuality.None)
+        }
         for ((f, label) in listOf(100.0 to "100", 1000.0 to "1k", 10000.0 to "10k")) {
             val y = size.height * (1 - (kotlin.math.ln(f / 25.0) / kotlin.math.ln(800.0)).toFloat())
             text(label, left - 4f, y, font, Terminal.Muted, Paint.Align.RIGHT)
