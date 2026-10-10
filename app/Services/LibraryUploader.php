@@ -129,6 +129,94 @@ class LibraryUploader
         return $results;
     }
 
+    /**
+     * Music files that already exist on this server (another user's shared tracks), copied into the user's own library
+     * under the given relative paths. Same rules as every other write: audio only, nothing replaced, the quota
+     * counted, paths cleaned to plain segments inside the user's folder.
+     *
+     * @param  list<array{source?: string, cover?: string, path: string}>  $items  `source` is an absolute file, or `cover` the bytes of a folder cover image; `path` is where it goes
+     * @return array{added: int, existing: int, failed: int}
+     */
+    public function copyIn(User $user, array $items): array
+    {
+        $store = $user->store();
+        $remote = $store instanceof FerriteStore;
+        $remote && $this->assertWritable($store);
+        $base = $remote ? '' : $this->libraryRoot($user);
+
+        $counts = ['added' => 0, 'existing' => 0, 'failed' => 0];
+
+        foreach ($items as $item) {
+            $clean = array_map(fn ($segment) => $this->plainName($segment), explode('/', $item['path']));
+            $temporary = null;
+
+            try {
+                if (isset($item['cover'])) {
+                    // A cover is judged by its bytes, not its name: a real jpeg or png of a sane size, stored as cover.jpg or cover.png.
+                    $extension = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png'][@getimagesizefromstring($item['cover'])[2] ?? 0] ?? null;
+                    if ($extension === null || strlen($item['cover']) > 15_000_000) {
+                        continue;
+                    }
+
+                    $clean[array_key_last($clean)] = 'cover.'.$extension;
+                    $source = $temporary = (string) tempnam(sys_get_temp_dir(), 'magnetite-cover-');
+                    file_put_contents($source, $item['cover']);
+                } else {
+                    $source = $item['source'];
+                    if (TrackLibrary::contentType((string) end($clean)) === null) {
+                        $counts['failed']++;
+
+                        continue;
+                    }
+                }
+
+                if (in_array(null, $clean, true) || ! is_file($source)) {
+                    $counts['failed']++;
+
+                    continue;
+                }
+
+                // Cover images are not counted: they ride along with their music.
+                $status = $remote ? $store->put($source, implode('/', $clean)) : $this->placeLocal($user, $base, $source, implode('/', $clean));
+                isset($item['cover']) || $counts[$status === 'added' ? 'added' : 'existing']++;
+            } finally {
+                $temporary !== null && @unlink($temporary);
+            }
+        }
+
+        return $counts;
+    }
+
+    /** Copy a file to a relative path inside the user's folder without replacing anything. Returns `added` or `existing`. */
+    private function placeLocal(User $user, string $base, string $source, string $path): string
+    {
+        $destination = $base.'/'.$path;
+        if (file_exists($destination) || is_link($destination)) {
+            return 'existing';
+        }
+
+        $this->checkQuota($user, $base, (int) filesize($source));
+
+        $directory = dirname($destination);
+        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
+            throw new RuntimeException('Could not create a folder in your library.');
+        }
+
+        $real = realpath($directory);
+        if ($real === false || ($real !== $base && ! str_starts_with($real, $base.'/'))) {
+            throw new RuntimeException('That would write outside your library.');
+        }
+
+        $partial = $destination.'.part';
+        if (! copy($source, $partial) || ! chmod($partial, 0644) || ! rename($partial, $destination)) {
+            @unlink($partial);
+
+            throw new RuntimeException('Could not copy '.basename($path).'.');
+        }
+
+        return 'added';
+    }
+
     /** One plain file name from whatever the client sent: no folders, no control characters, not hidden. */
     private function plainName(string $client): ?string
     {

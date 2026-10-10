@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AlbumTitlesController;
 use App\Http\Controllers\AnalysisController;
+use App\Http\Controllers\CopyController;
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\FolderController;
@@ -43,6 +44,7 @@ Route::middleware('auth')->group(function () {
 
     Route::post('/share/{kind}/{id}', [ShareController::class, 'store'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('share.store');
     Route::delete('/share/{kind}/{id}', [ShareController::class, 'destroy'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('share.destroy');
+    Route::post('/copy/{kind}/{id}', [CopyController::class, 'store'])->whereIn('kind', ['albums', 'tracks'])->whereNumber('id')->name('copy.store');
 
     Route::put('/settings/meters', [MeterSettingController::class, 'update'])->name('settings.meters');
 
