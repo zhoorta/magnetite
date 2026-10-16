@@ -48,11 +48,11 @@
                     :class="$store.player.expanded ? 'flex-1' : 'h-28'"
                     class="w-full"></canvas>
 
-            {{-- No meters: a compact row (small cover, title) so the page keeps its space; a big centred cover only in full screen. --}}
+            {{-- No meters: a row as tall as the meters (h-28), so the player is the same size either way; a big centred cover only in full screen. --}}
             <div x-show="! $store.player.panels.length" x-cloak
-                 :class="$store.player.expanded ? 'min-h-0 flex-1 flex-col justify-center gap-6 px-6 text-center' : 'px-4 py-2'"
+                 :class="$store.player.expanded ? 'min-h-0 flex-1 flex-col justify-center gap-6 px-6 text-center' : 'h-28 px-4'"
                  class="mx-auto flex w-full max-w-3xl items-center gap-4 sm:gap-6">
-                <div :class="$store.player.expanded ? 'aspect-square max-h-[50vh] w-[min(80vw,28rem)]' : 'h-12 w-12'"
+                <div :class="$store.player.expanded ? 'aspect-square max-h-[50vh] w-[min(80vw,28rem)]' : 'h-20 w-20'"
                      class="shrink-0 overflow-hidden rounded-theme bg-surface shadow-lg shadow-black/30">
                     <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
                 </div>
