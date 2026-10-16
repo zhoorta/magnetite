@@ -199,18 +199,26 @@
                 // An album is fetched again as soon as its own analysis ends, so its DR and findings show while the rest of the queue goes on.
                 const shown = new Set();
                 const finished = () => Object.entries(this.analysis.albums || {}).filter(([id, a]) => ['done', 'failed'].includes(a.state) && ! shown.has(id)).map(([id]) => id);
-                while (['queued', 'running'].includes(this.analysis.state)) {
-                    await new Promise((res) => setTimeout(res, 2000));
-                    const p = await fetch('/analysis', { headers: { 'Accept': 'application/json' } });
-                    if (! p.ok) { this.following = false; return; }
-                    this.analysis = await p.json();
-                    const ids = finished();
-                    if (ids.length) { ids.forEach((id) => shown.add(id)); await this.refresh(ids); }
-                }
+                const active = () => ['queued', 'running'].includes(this.analysis.state);
+                do {
+                    while (active()) {
+                        await new Promise((res) => setTimeout(res, 2000));
+                        const p = await fetch('/analysis', { headers: { 'Accept': 'application/json' } });
+                        if (! p.ok) { this.following = false; return; }
+                        this.analysis = await p.json();
+                        const ids = finished();
+                        if (ids.length) { ids.forEach((id) => shown.add(id)); await this.refresh(ids); }
+                    }
+                    // What is left (the last album, or a run with loose tracks only) is fetched again in the background: nothing jumps, and open albums stay open.
+                    const rest = finished();
+                    if (rest.length || ! Object.keys(this.analysis.albums || {}).length) await this.refresh(rest);
+                    // Something was queued while the page was being refreshed: carry on with that, instead of dropping it.
+                    if (! active()) {
+                        const p = await fetch('/analysis', { headers: { 'Accept': 'application/json' } }).catch(() => null);
+                        if (p && p.ok) this.analysis = await p.json();
+                    }
+                } while (active());
                 this.following = false;
-                // What is left (the last album, or a run with loose tracks only) is fetched again in the background: nothing jumps, and open albums stay open.
-                const rest = finished();
-                if (rest.length || ! Object.keys(this.analysis.albums || {}).length) await this.refresh(rest);
                 this.analysis = { state: 'idle', done: 0, total: 0, failed: 0, albums: {} };
             },
             // Fetch the library page in the background and swap in the fresh album sections (`ids`), or the whole list when `ids` is empty or an album is new.

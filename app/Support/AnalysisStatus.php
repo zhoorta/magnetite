@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 
 /** What the file analysis of one user is doing, kept in the cache so the web process can show what the queue worker is up to. */
@@ -50,57 +51,66 @@ class AnalysisStatus
     /** A job was put on the queue. `$albums` maps an album id to its number of tracks to measure; albums already waiting keep their place. */
     public static function queued(int $userId, array $albums = []): void
     {
-        $s = Cache::get(self::key($userId), []);
-        // Nothing waiting or running: the albums of the last run are old news.
-        $known = self::pending($userId) || ($s['running'] ?? false) ? ($s['albums'] ?? []) : [];
-        foreach ($albums as $id => $n) {
-            if (! in_array($known[$id]['state'] ?? null, ['queued', 'running'], true)) {
-                $known[$id] = ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n];
+        self::update($userId, function (array $s) use ($userId, $albums) {
+            $waiting = self::pending($userId);
+            // Nothing waiting or running: the albums of the last run are old news.
+            $known = $waiting || ($s['running'] ?? false) ? ($s['albums'] ?? []) : [];
+            foreach ($albums as $id => $n) {
+                if (! in_array($known[$id]['state'] ?? null, ['queued', 'running'], true)) {
+                    $known[$id] = ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n];
+                }
             }
-        }
 
-        self::put($userId, ['jobs' => (self::pending($userId) ? $s['jobs'] : 0) + 1, 'pending' => true, 'queued_at' => now()->getTimestamp(), 'finished' => false, 'albums' => $known]);
+            return ['jobs' => ($waiting ? $s['jobs'] : 0) + 1, 'pending' => true, 'queued_at' => now()->getTimestamp(), 'finished' => false, 'albums' => $known];
+        });
     }
 
     /** The worker took a job. Albums of other jobs still waiting keep their "queued"; `$albums` maps an album id to its tracks in this job. */
     public static function started(int $userId, int $total, array $albums = []): void
     {
-        $s = Cache::get(self::key($userId), []);
-        $known = $s['albums'] ?? [];
-        foreach ($albums as $id => $n) {
-            $known[$id] = ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n];
-        }
-        $jobs = max(0, ($s['jobs'] ?? 1) - 1);
+        self::update($userId, function (array $s) use ($total, $albums) {
+            $known = $s['albums'] ?? [];
+            foreach ($albums as $id => $n) {
+                $known[$id] = ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n];
+            }
+            $jobs = max(0, ($s['jobs'] ?? 1) - 1);
 
-        self::put($userId, [
-            'jobs' => $jobs, 'pending' => $jobs > 0, 'running' => true, 'total' => $total, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => now()->getTimestamp(),
-            'albums' => $known,
-        ]);
+            return [
+                'jobs' => $jobs, 'pending' => $jobs > 0, 'running' => true, 'total' => $total, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => now()->getTimestamp(),
+                'albums' => $known,
+            ];
+        });
     }
 
     /** One track of an album is being measured or has been: the album is running, and done with its last track. */
     public static function album(int $userId, int $albumId, int $done, int $failed, bool $finished): void
     {
-        $albums = Cache::get(self::key($userId), [])['albums'] ?? [];
-        if (! isset($albums[$albumId])) {
-            return;
-        }
-        $albums[$albumId] = [
-            'state' => $finished ? ($failed ? 'failed' : 'done') : 'running', 'done' => $done, 'failed' => $failed,
-        ] + $albums[$albumId];
-        self::put($userId, ['albums' => $albums]);
+        self::update($userId, function (array $s) use ($albumId, $done, $failed, $finished) {
+            $albums = $s['albums'] ?? [];
+            if (! isset($albums[$albumId])) {
+                return [];
+            }
+            $albums[$albumId] = [
+                'state' => $finished ? ($failed ? 'failed' : 'done') : 'running', 'done' => $done, 'failed' => $failed,
+            ] + $albums[$albumId];
+
+            return ['albums' => $albums];
+        });
     }
 
     /** Albums still marked as waiting that have nothing left to measure (another job did it) are done. `$stillMissing` lists the album ids that do. */
     public static function settle(int $userId, array $stillMissing): void
     {
-        $albums = Cache::get(self::key($userId), [])['albums'] ?? [];
-        foreach ($albums as $id => $a) {
-            if ($a['state'] === 'queued' && ! in_array($id, $stillMissing, true)) {
-                $albums[$id]['state'] = 'done';
+        self::update($userId, function (array $s) use ($stillMissing) {
+            $albums = $s['albums'] ?? [];
+            foreach ($albums as $id => $a) {
+                if ($a['state'] === 'queued' && ! in_array($id, $stillMissing, true)) {
+                    $albums[$id]['state'] = 'done';
+                }
             }
-        }
-        self::put($userId, ['albums' => $albums]);
+
+            return ['albums' => $albums];
+        });
     }
 
     /** `$current` is the file being measured now, so a long track shows that it is still working. */
@@ -112,12 +122,27 @@ class AnalysisStatus
     /** This job is over; the run is only done when no other job is waiting. */
     public static function finished(int $userId): void
     {
-        $waiting = self::pending($userId);
-        self::put($userId, ['running' => false, 'finished' => ! $waiting, 'current' => null]);
+        self::update($userId, fn () => ['running' => false, 'finished' => ! self::pending($userId), 'current' => null]);
     }
 
+    /** The web process and the queue worker both write this entry; one at a time, so neither undoes the other's update. */
     private static function put(int $userId, array $values): void
     {
-        Cache::forever(self::key($userId), $values + Cache::get(self::key($userId), []));
+        self::update($userId, fn () => $values);
+    }
+
+    /** Read, change and write the entry under a lock. `$change` gets the current entry and returns the values to overwrite. */
+    private static function update(int $userId, callable $change): void
+    {
+        $write = function () use ($userId, $change) {
+            $s = Cache::get(self::key($userId), []);
+            Cache::forever(self::key($userId), $change($s) + $s);
+        };
+
+        try {
+            Cache::lock(self::key($userId).'.lock', 5)->block(3, $write);
+        } catch (LockTimeoutException) {
+            $write();
+        }
     }
 }
