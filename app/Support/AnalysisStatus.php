@@ -51,7 +51,8 @@ class AnalysisStatus
     public static function queued(int $userId, array $albums = []): void
     {
         $s = Cache::get(self::key($userId), []);
-        $known = $s['albums'] ?? [];
+        // Nothing waiting or running: the albums of the last run are old news.
+        $known = self::pending($userId) || ($s['running'] ?? false) ? ($s['albums'] ?? []) : [];
         foreach ($albums as $id => $n) {
             if (! in_array($known[$id]['state'] ?? null, ['queued', 'running'], true)) {
                 $known[$id] = ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n];

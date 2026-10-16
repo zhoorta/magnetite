@@ -172,6 +172,17 @@
                 fetch('/analysis', { headers: { 'Accept': 'application/json' } }).then((r) => r.ok ? r.json() : null).then((a) => {
                     if (a && ['queued', 'running'].includes(a.state)) { this.analysis = a; this.followAnalysis(); }
                 }).catch(() => {});
+                // A scan still going (after an upload, say) is followed too: its new albums appear when it ends.
+                fetch('/scan', { headers: { 'Accept': 'application/json' } }).then((r) => r.ok ? r.json() : null).then(async (s) => {
+                    if (! s || ! ['queued', 'running'].includes(s.state)) return;
+                    while (['queued', 'running'].includes(s.state)) {
+                        await new Promise((res) => setTimeout(res, 2000));
+                        const p = await fetch('/scan', { headers: { 'Accept': 'application/json' } });
+                        if (! p.ok) return;
+                        s = await p.json();
+                    }
+                    await this.refresh();
+                }).catch(() => {});
             },
             // `scope` is { album_id } or { track_id }: measure just that.
             async analyse(scope) {
@@ -192,7 +203,35 @@
                     this.analysis = await p.json();
                 }
                 this.following = false;
-                Livewire.navigate(window.location.href);
+                // Only the albums of this run are fetched again, in the background: nothing jumps, and open albums stay open.
+                const ids = Object.keys(this.analysis.albums || {});
+                await this.refresh(ids);
+                this.analysis = { state: 'idle', done: 0, total: 0, failed: 0, albums: {} };
+            },
+            // Fetch the library page in the background and swap in the fresh album sections (`ids`), or the whole list when `ids` is empty or an album is new.
+            // An album the person had opened stays open.
+            async refresh(ids = []) {
+                const r = await fetch(window.location.href, { headers: { 'Accept': 'text/html' } }).catch(() => null);
+                if (! r || ! r.ok) return Livewire.navigate(window.location.href);
+                const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+                const list = document.getElementById('library-list');
+                const fresh = doc.getElementById('library-list');
+                if (! list || ! fresh) return Livewire.navigate(window.location.href);
+                const swap = (old, next) => {
+                    const open = old.matches('[data-album]') ? window.Alpine.$data(old).expanded : null;
+                    next = document.importNode(next, true);
+                    old.replaceWith(next);
+                    window.Alpine.initTree(next);
+                    if (open !== null && next.matches('[data-album]')) window.Alpine.$data(next).expanded = open;
+                };
+                const sections = ids.map((id) => [list.querySelector('[data-album=\'' + id + '\']'), fresh.querySelector('[data-album=\'' + id + '\']')]);
+                if (ids.length && sections.every(([a, b]) => a && b)) { sections.forEach(([a, b]) => swap(a, b)); return; }
+                // Albums came or went: swap the list, keeping which albums were open.
+                const opened = [...list.querySelectorAll('[data-album]')].filter((el) => window.Alpine.$data(el).expanded).map((el) => el.dataset.album);
+                const next = document.importNode(fresh, true);
+                list.replaceWith(next);
+                window.Alpine.initTree(next);
+                opened.forEach((id) => { const el = next.querySelector('[data-album=\'' + id + '\']'); if (el) window.Alpine.$data(el).expanded = true; });
             },
             drClass(c) { return { excellent: 'text-emerald-500 bg-emerald-500/15', good: 'text-lime-500 bg-lime-500/15', fair: 'text-amber-500 bg-amber-500/15', poor: 'text-red-500 bg-red-500/15' }[c]; },
             levelClass(l) { return { problem: 'text-red-500 bg-red-500/15', warn: 'text-amber-500 bg-amber-500/15', note: 'text-muted bg-white/5' }[l]; },
@@ -228,7 +267,7 @@
         @endif
         <p x-show="analysisError" x-cloak x-text="analysisError" class="mb-4 text-xs text-red-500"></p>
 
-        <div class="space-y-8">
+        <div id="library-list" class="space-y-8">
             @foreach ($childrenOf[0] ?? [] as $folder)
                 @include('pages.partials.folder', ['folder' => $folder])
             @endforeach

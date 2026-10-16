@@ -1,5 +1,5 @@
 {{-- One album of the library page: cover, details, ⋯ menu and the collapsible track list. Expects `$album` and the page's helpers. --}}
-<section x-data="{
+<section data-album="{{ $album->id }}" x-data="{
             tracks: @js($rows($album->tracks)), expanded: false,
             cover: @js((bool) $album->cover), web: @js($album->cover_source !== null), v: @js(substr((string) $album->cover, 0, 10)),
             searching: false, noMatch: false, note: '',
