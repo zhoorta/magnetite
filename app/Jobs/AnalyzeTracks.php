@@ -38,7 +38,7 @@ class AnalyzeTracks implements ShouldQueue
             return;
         }
 
-        AnalysisStatus::queued($user->id);
+        AnalysisStatus::queued($user->id, static::albumCounts(static::missing($user, $albumId, $trackId)->get()));
         static::dispatch($user->id, $albumId, $trackId);
     }
 
@@ -49,6 +49,12 @@ class AnalyzeTracks implements ShouldQueue
             ->when($albumId !== null, fn ($q) => $q->where('album_id', $albumId))
             ->when($trackId !== null, fn ($q) => $q->whereKey($trackId))
             ->where(fn ($q) => $q->whereNull('analysis_version')->orWhere('analysis_version', '<', TrackAnalyzer::VERSION));
+    }
+
+    /** @return array<int, int> tracks to measure per album (tracks outside an album are left out) */
+    private static function albumCounts($tracks): array
+    {
+        return $tracks->whereNotNull('album_id')->countBy('album_id')->all();
     }
 
     public function middleware(): array
@@ -69,11 +75,18 @@ class AnalyzeTracks implements ShouldQueue
             return;
         }
 
-        $tracks = static::missing($user, $this->albumId, $this->trackId)->with('user')->orderBy('id')->get();
-        AnalysisStatus::started($user->id, $tracks->count());
+        $tracks = static::missing($user, $this->albumId, $this->trackId)->with('user')->orderBy('album_id')->orderBy('id')->get();
+        $counts = static::albumCounts($tracks);
+        AnalysisStatus::started($user->id, $tracks->count(), $counts);
 
         $done = $failed = 0;
+        $albumDone = $albumFailed = [];
         foreach ($tracks as $track) {
+            $album = $track->album_id;
+            if ($album !== null) {
+                AnalysisStatus::album($user->id, $album, $albumDone[$album] ?? 0, $albumFailed[$album] ?? 0, false);
+            }
+
             AnalysisStatus::progress($user->id, $done + $failed, $failed, $track->title ?: basename($track->path));
 
             try {
@@ -83,8 +96,14 @@ class AnalyzeTracks implements ShouldQueue
                 // One broken file must not stop the rest.
                 Log::warning('Analysis failed for a file', ['path' => $track->path, 'error' => $e->getMessage()]);
                 $failed++;
+                $album !== null && $albumFailed[$album] = ($albumFailed[$album] ?? 0) + 1;
             }
 
+            if ($album !== null) {
+                $albumDone[$album] = ($albumDone[$album] ?? 0) + 1;
+                $finished = $albumDone[$album] >= $counts[$album];
+                AnalysisStatus::album($user->id, $album, $albumDone[$album], $albumFailed[$album] ?? 0, $finished);
+            }
         }
 
         AnalysisStatus::progress($user->id, $done + $failed, $failed);

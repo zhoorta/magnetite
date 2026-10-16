@@ -15,7 +15,7 @@ class AnalysisStatus
     /** @return array{state: string, total: int, done: int, failed: int} */
     public static function get(int $userId): array
     {
-        $s = Cache::get(self::key($userId), []) + ['pending' => false, 'queued_at' => 0, 'running' => false, 'total' => 0, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => 0];
+        $s = Cache::get(self::key($userId), []) + ['pending' => false, 'queued_at' => 0, 'running' => false, 'total' => 0, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => 0, 'albums' => []];
 
         return [
             'state' => match (true) {
@@ -24,7 +24,7 @@ class AnalysisStatus
                 $s['finished'] => 'done',
                 default => 'idle',
             },
-        ] + array_intersect_key($s, array_flip(['total', 'done', 'failed', 'current']));
+        ] + array_intersect_key($s, array_flip(['total', 'done', 'failed', 'current', 'albums']));
     }
 
     /** A running job that has said nothing for 40 minutes (longer than one track may take) was killed with the worker. */
@@ -41,14 +41,35 @@ class AnalysisStatus
         return ($s['pending'] ?? false) && now()->getTimestamp() - ($s['queued_at'] ?? 0) < 3600;
     }
 
-    public static function queued(int $userId): void
+    /** `$albums` maps an album id to its number of tracks waiting, so the library can mark every album as queued. */
+    public static function queued(int $userId, array $albums = []): void
     {
-        self::put($userId, ['pending' => true, 'queued_at' => now()->getTimestamp(), 'finished' => false]);
+        self::put($userId, [
+            'pending' => true, 'queued_at' => now()->getTimestamp(), 'finished' => false, 'running' => false,
+            'albums' => array_map(fn (int $n) => ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n], $albums),
+        ]);
     }
 
-    public static function started(int $userId, int $total): void
+    /** `$albums` maps an album id to its number of tracks in this run. */
+    public static function started(int $userId, int $total, array $albums = []): void
     {
-        self::put($userId, ['pending' => false, 'running' => true, 'total' => $total, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => now()->getTimestamp()]);
+        self::put($userId, [
+            'pending' => false, 'running' => true, 'total' => $total, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => now()->getTimestamp(),
+            'albums' => array_map(fn (int $n) => ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n], $albums),
+        ]);
+    }
+
+    /** One track of an album is being measured or has been: the album is running, and done with its last track. */
+    public static function album(int $userId, int $albumId, int $done, int $failed, bool $finished): void
+    {
+        $albums = Cache::get(self::key($userId), [])['albums'] ?? [];
+        if (! isset($albums[$albumId])) {
+            return;
+        }
+        $albums[$albumId] = [
+            'state' => $finished ? ($failed ? 'failed' : 'done') : 'running', 'done' => $done, 'failed' => $failed,
+        ] + $albums[$albumId];
+        self::put($userId, ['albums' => $albums]);
     }
 
     /** `$current` is the file being measured now, so a long track shows that it is still working. */
