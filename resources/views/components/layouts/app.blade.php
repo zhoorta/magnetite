@@ -32,7 +32,7 @@
         </nav>
     </header>
 
-    <main class="mx-auto {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} px-4 pb-72 pt-8">
+    <main x-data :class="$store.player.panels.length ? 'pb-72' : 'pb-44'" class="mx-auto {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} px-4 pt-8">
         {{ $slot }}
     </main>
 
@@ -48,20 +48,17 @@
                     :class="$store.player.expanded ? 'flex-1' : 'h-28'"
                     class="w-full"></canvas>
 
-            {{-- No meters: a row as tall as the meters (h-28), so the player is the same size either way; a big centred cover only in full screen. --}}
-            <div x-show="! $store.player.panels.length" x-cloak
-                 :class="$store.player.expanded ? 'min-h-0 flex-1 flex-col justify-center gap-6 px-6 text-center' : 'h-28 px-4'"
-                 class="mx-auto flex w-full max-w-3xl items-center gap-4 sm:gap-6">
-                <div :class="$store.player.expanded ? 'aspect-square max-h-[50vh] w-[min(80vw,28rem)]' : 'h-20 w-20'"
-                     class="shrink-0 overflow-hidden rounded-theme bg-surface shadow-lg shadow-black/30">
+            {{-- No meters: the player is just the small-cover row below, so the page keeps its space; the big centred cover only in full screen. --}}
+            <div x-show="! $store.player.panels.length && $store.player.expanded" x-cloak
+                 class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-6 px-6 text-center">
+                <div class="aspect-square max-h-[50vh] w-[min(80vw,28rem)] shrink-0 overflow-hidden rounded-theme bg-surface shadow-lg shadow-black/30">
                     <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
                 </div>
                 <div class="min-w-0">
                     <p x-text="$store.player.current?.title ?? 'Nothing playing'"
-                       :class="$store.player.expanded ? 'text-2xl sm:text-4xl' : 'text-base'"
-                       class="truncate font-semibold"></p>
+                       class="truncate text-2xl font-semibold sm:text-4xl"></p>
                     <p x-show="$store.player.current?.artist" x-text="$store.player.current?.artist"
-                       :class="$store.player.expanded ? 'text-lg' : 'text-sm'" class="truncate text-accent"></p>
+                       class="truncate text-lg text-accent"></p>
                     <p x-show="$store.player.current?.album" x-text="$store.player.current?.album" class="truncate text-sm text-muted"></p>
                 </div>
             </div>
@@ -115,7 +112,7 @@
 
             <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
                 <div class="flex min-h-10 items-center justify-between text-sm">
-                    <div x-show="$store.player.panels.length" class="flex min-w-0 items-center gap-3">
+                    <div x-show="$store.player.panels.length || ! $store.player.expanded" class="flex min-w-0 items-center gap-3">
                         <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt=""
                              class="h-10 w-10 shrink-0 rounded-theme object-cover">
                         <div class="min-w-0 truncate">
