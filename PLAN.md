@@ -92,7 +92,8 @@ Decided 2026-10-08: stay standalone, with its own thin library (scanner, covers,
   - [x] Separate token abilities for write and delete; Pest tests for every endpoint (owner, other user 404, shared item read-only, read-only token)
 - [ ] Fullscreen now-playing polish, add to queue / play next, Media Session (hardware keys, lock screen)
 - [ ] Flux UI for library, queue and settings screens
-- [ ] Licence (AGPL is consistent with the other projects), README, demo GIF
+- [x] Licence (AGPL-3.0-or-later, `LICENSE`) and README
+- [ ] Demo GIF
 
 ## Known risks
 
