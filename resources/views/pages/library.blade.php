@@ -32,7 +32,7 @@
                 const r = await fetch('/library/' + kind + '/' + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json' } });
                 const body = await r.json().catch(() => ({}));
                 if (! r.ok || body.error) await this.$store.dialog.notice(body.error || body.message || 'Could not remove it.', 'Could not delete');
-                if (r.ok || body.removed) Livewire.navigate(window.location.href);
+                if (r.ok || body.removed) await this.refresh();
             },
             csrf() { return document.querySelector('meta[name=csrf-token]').content; },
             // Details looked up online for an album that already has its real name:
@@ -67,7 +67,7 @@
                     body: JSON.stringify({ candidate: t.pick, parts: Object.keys(t.parts).filter((k) => t.parts[k]) }),
                 }).catch(() => null);
                 t.saving = false;
-                if (r && r.ok) { this.titles = null; Livewire.navigate(window.location.href); return; }
+                if (r && r.ok) { this.titles = null; await this.refresh(); return; }
                 t.error = (r && (await r.json().catch(() => ({}))).message) || 'Could not save.';
             },
             // The owner's folders (flat, with depth, for the pickers) and which are open, remembered in this browser.
@@ -148,7 +148,7 @@
                     body: JSON.stringify(e.fields),
                 }).catch(() => null);
                 e.saving = false;
-                if (r && r.ok) { this.edit = null; Livewire.navigate(window.location.href); return; }
+                if (r && r.ok) { this.edit = null; await this.refresh(); return; }
                 const body = r ? await r.json().catch(() => ({})) : {};
                 e.error = (body.errors && Object.values(body.errors)[0][0]) || body.message || 'Could not save.';
             },
@@ -163,7 +163,7 @@
                     if (! p.ok) return;
                     this.identify = await p.json();
                 }
-                Livewire.navigate(window.location.href);
+                await this.refresh();
             },
             async answer(id, accept, candidate) {
                 const r = await fetch('/identify/' + id + (accept ? '/accept' : ''), {
@@ -171,7 +171,7 @@
                     headers: { 'X-CSRF-TOKEN': this.csrf(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
                     body: accept ? JSON.stringify({ candidate }) : undefined,
                 });
-                if (r.ok) Livewire.navigate(window.location.href);
+                if (r.ok) await this.refresh();
             },
             analysis: { state: 'idle', done: 0, total: 0, failed: 0 },
             analysisError: null,
