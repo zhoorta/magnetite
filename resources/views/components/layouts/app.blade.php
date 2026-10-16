@@ -114,7 +114,7 @@
             </div>
 
             <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
-                <div class="flex items-center justify-between text-sm">
+                <div class="flex min-h-10 items-center justify-between text-sm">
                     <div x-show="$store.player.panels.length" class="flex min-w-0 items-center gap-3">
                         <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt=""
                              class="h-10 w-10 shrink-0 rounded-theme object-cover">
