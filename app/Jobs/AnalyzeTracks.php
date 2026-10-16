@@ -38,7 +38,14 @@ class AnalyzeTracks implements ShouldQueue
             return;
         }
 
-        AnalysisStatus::queued($user->id, static::albumCounts(static::missing($user, $albumId, $trackId)->get()));
+        $missing = static::missing($user, $albumId, $trackId)->get();
+
+        // Asked for one album or track that is already waiting (or being measured): nothing to add.
+        if (($albumId !== null || $trackId !== null) && $missing->isNotEmpty() && $missing->every(fn ($t) => $t->album_id !== null && AnalysisStatus::albumActive($user->id, $t->album_id))) {
+            return;
+        }
+
+        AnalysisStatus::queued($user->id, static::albumCounts($missing));
         static::dispatch($user->id, $albumId, $trackId);
     }
 
@@ -107,6 +114,7 @@ class AnalyzeTracks implements ShouldQueue
         }
 
         AnalysisStatus::progress($user->id, $done + $failed, $failed);
+        AnalysisStatus::settle($user->id, static::missing($user)->whereNotNull('album_id')->distinct()->pluck('album_id')->all());
 
         AnalysisStatus::finished($user->id);
     }

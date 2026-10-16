@@ -181,13 +181,17 @@
                 this.analysis = await r.json();
                 await this.followAnalysis();
             },
+            following: false,
             async followAnalysis() {
+                if (this.following) return; // a request made meanwhile is followed by the loop that is already running
+                this.following = true;
                 while (['queued', 'running'].includes(this.analysis.state)) {
                     await new Promise((res) => setTimeout(res, 2000));
                     const p = await fetch('/analysis', { headers: { 'Accept': 'application/json' } });
-                    if (! p.ok) return;
+                    if (! p.ok) { this.following = false; return; }
                     this.analysis = await p.json();
                 }
+                this.following = false;
                 Livewire.navigate(window.location.href);
             },
             drClass(c) { return { excellent: 'text-emerald-500 bg-emerald-500/15', good: 'text-lime-500 bg-lime-500/15', fair: 'text-amber-500 bg-amber-500/15', poor: 'text-red-500 bg-red-500/15' }[c]; },

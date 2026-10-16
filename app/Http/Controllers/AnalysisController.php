@@ -37,12 +37,7 @@ class AnalysisController extends Controller
         $albumId === null || Album::where('user_id', $request->user()->id)->findOrFail($albumId);
         $trackId === null || Track::where('user_id', $request->user()->id)->findOrFail($trackId);
 
-        // One run at a time per user; the page follows the one that is going.
-        $status = AnalysisStatus::get($request->user()->id);
-        if (($albumId !== null || $trackId !== null) && in_array($status['state'], ['queued', 'running'], true)) {
-            return response()->json(['message' => 'An analysis is already running. Try again when it is done.'] + $status, 409);
-        }
-
+        // Requests queue behind a run that is going; the jobs never overlap (see AnalyzeTracks::middleware).
         AnalyzeTracks::request($request->user(), $albumId, $trackId);
 
         return response()->json(AnalysisStatus::get($request->user()->id), 202);

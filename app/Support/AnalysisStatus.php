@@ -38,24 +38,42 @@ class AnalysisStatus
     {
         $s = Cache::get(self::key($userId), []);
 
-        return ($s['pending'] ?? false) && now()->getTimestamp() - ($s['queued_at'] ?? 0) < 3600;
+        return ($s['jobs'] ?? 0) > 0 && now()->getTimestamp() - ($s['queued_at'] ?? 0) < 3600;
     }
 
-    /** `$albums` maps an album id to its number of tracks waiting, so the library can mark every album as queued. */
+    /** An album that is waiting for the worker or being measured now. */
+    public static function albumActive(int $userId, int $albumId): bool
+    {
+        return in_array(Cache::get(self::key($userId), [])['albums'][$albumId]['state'] ?? null, ['queued', 'running'], true);
+    }
+
+    /** A job was put on the queue. `$albums` maps an album id to its number of tracks to measure; albums already waiting keep their place. */
     public static function queued(int $userId, array $albums = []): void
     {
-        self::put($userId, [
-            'pending' => true, 'queued_at' => now()->getTimestamp(), 'finished' => false, 'running' => false,
-            'albums' => array_map(fn (int $n) => ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n], $albums),
-        ]);
+        $s = Cache::get(self::key($userId), []);
+        $known = $s['albums'] ?? [];
+        foreach ($albums as $id => $n) {
+            if (! in_array($known[$id]['state'] ?? null, ['queued', 'running'], true)) {
+                $known[$id] = ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n];
+            }
+        }
+
+        self::put($userId, ['jobs' => (self::pending($userId) ? $s['jobs'] : 0) + 1, 'pending' => true, 'queued_at' => now()->getTimestamp(), 'finished' => false, 'albums' => $known]);
     }
 
-    /** `$albums` maps an album id to its number of tracks in this run. */
+    /** The worker took a job. Albums of other jobs still waiting keep their "queued"; `$albums` maps an album id to its tracks in this job. */
     public static function started(int $userId, int $total, array $albums = []): void
     {
+        $s = Cache::get(self::key($userId), []);
+        $known = $s['albums'] ?? [];
+        foreach ($albums as $id => $n) {
+            $known[$id] = ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n];
+        }
+        $jobs = max(0, ($s['jobs'] ?? 1) - 1);
+
         self::put($userId, [
-            'pending' => false, 'running' => true, 'total' => $total, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => now()->getTimestamp(),
-            'albums' => array_map(fn (int $n) => ['state' => 'queued', 'done' => 0, 'failed' => 0, 'total' => $n], $albums),
+            'jobs' => $jobs, 'pending' => $jobs > 0, 'running' => true, 'total' => $total, 'done' => 0, 'failed' => 0, 'finished' => false, 'current' => null, 'updated_at' => now()->getTimestamp(),
+            'albums' => $known,
         ]);
     }
 
@@ -72,15 +90,29 @@ class AnalysisStatus
         self::put($userId, ['albums' => $albums]);
     }
 
+    /** Albums still marked as waiting that have nothing left to measure (another job did it) are done. `$stillMissing` lists the album ids that do. */
+    public static function settle(int $userId, array $stillMissing): void
+    {
+        $albums = Cache::get(self::key($userId), [])['albums'] ?? [];
+        foreach ($albums as $id => $a) {
+            if ($a['state'] === 'queued' && ! in_array($id, $stillMissing, true)) {
+                $albums[$id]['state'] = 'done';
+            }
+        }
+        self::put($userId, ['albums' => $albums]);
+    }
+
     /** `$current` is the file being measured now, so a long track shows that it is still working. */
     public static function progress(int $userId, int $done, int $failed, ?string $current = null): void
     {
         self::put($userId, ['done' => $done, 'failed' => $failed, 'current' => $current, 'updated_at' => now()->getTimestamp()]);
     }
 
+    /** This job is over; the run is only done when no other job is waiting. */
     public static function finished(int $userId): void
     {
-        self::put($userId, ['running' => false, 'pending' => false, 'finished' => true, 'current' => null]);
+        $waiting = self::pending($userId);
+        self::put($userId, ['running' => false, 'finished' => ! $waiting, 'current' => null]);
     }
 
     private static function put(int $userId, array $values): void

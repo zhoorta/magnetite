@@ -152,7 +152,7 @@ describe('the Analyse entries', function () {
         Queue::assertPushed(AnalyzeTracks::class, fn ($job) => $job->albumId === $track->album_id && $job->trackId === null);
     });
 
-    it('answers 404 for the album or track of somebody else, and 409 while a run is going', function () {
+    it('answers 404 for the album or track of somebody else, and queues a request behind a run that is going', function () {
         Queue::fake();
         config(['queue.default' => 'database']);
         app(LibraryScanner::class)->scan($this->user);
@@ -165,8 +165,28 @@ describe('the Analyse entries', function () {
 
         $mine = Track::where('user_id', $this->user->id)->first();
         $this->postJson(route('analysis.store'), ['track_id' => $mine->id])->assertStatus(202);
-        $this->postJson(route('analysis.store'), ['track_id' => $mine->id])->assertStatus(409);
+        // The same album again adds nothing; another album waits its turn and shows as queued.
+        $this->postJson(route('analysis.store'), ['track_id' => $mine->id])->assertStatus(202);
         Queue::assertPushed(AnalyzeTracks::class, 1);
+    });
+
+    it('marks every requested album as queued, and one job per request waits for the worker', function () {
+        Queue::fake();
+        config(['queue.default' => 'database']);
+        app(LibraryScanner::class)->scan($this->user);
+        $albums = Track::where('user_id', $this->user->id)->whereNotNull('album_id')->pluck('album_id')->unique()->values();
+        $albums->count() > 1 || $this->markTestSkipped('the fixtures have one album');
+
+        foreach ($albums as $id) {
+            $this->postJson(route('analysis.store'), ['album_id' => $id])->assertStatus(202);
+        }
+
+        Queue::assertPushed(AnalyzeTracks::class, $albums->count());
+        $status = AnalysisStatus::get($this->user->id);
+        expect($status['state'])->toBe('queued');
+        foreach ($albums as $id) {
+            expect($status['albums'][$id]['state'])->toBe('queued');
+        }
     });
 
     it('measures only the track it was asked for', function () {
