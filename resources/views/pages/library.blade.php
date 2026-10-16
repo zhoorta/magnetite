@@ -204,7 +204,8 @@
             <h1 class="text-2xl font-semibold">Library</h1>
             <div class="flex min-w-0 items-center justify-end gap-4">
                 {{-- Progress of what the ⋯ menus started: measuring files, looking for albums. --}}
-                <p x-show="['queued', 'running'].includes(analysis.state)" x-cloak class="min-w-0 truncate text-xs text-muted">
+                {{-- Runs that touch albums show their status on the album's own line; this is only for loose tracks. --}}
+                <p x-show="['queued', 'running'].includes(analysis.state) && ! Object.keys(analysis.albums || {}).length" x-cloak class="min-w-0 truncate text-xs text-muted">
                     <span x-show="analysis.state === 'queued'">Analysis: waiting for the queue worker…</span>
                     <span x-show="analysis.state === 'running'" x-text="'Analysing ' + analysis.done + '/' + analysis.total + (analysis.current ? ' · ' + analysis.current : '') + (analysis.failed ? ' · ' + analysis.failed + ' failed' : '')"></span>
                 </p>

@@ -34,9 +34,9 @@
             <x-playing-icon x-show="$store.player.current?.album_id === {{ $album->id }}" x-cloak title="Playing from this album" />
             <svg x-show="isShared('albums', {{ $album->id }})" x-cloak viewBox="0 0 16 16" class="h-3.5 w-3.5 shrink-0 text-muted" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Shared"><title>Shared with everyone who has an account</title><circle cx="4" cy="8" r="1.8"/><circle cx="12" cy="3.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M5.6 7.1l4.8-2.7M5.6 8.9l4.8 2.7"/></svg>
             {{-- Where this album is in the analysis queue. --}}
-            <span x-show="analysis.albums?.[{{ $album->id }}]" x-cloak class="ml-auto shrink-0 pl-2 text-xs font-normal tabular-nums"
+            <span x-show="analysis.albums?.[{{ $album->id }}]" x-cloak class="ml-auto min-w-0 max-w-[60%] truncate pl-2 text-xs font-normal tabular-nums"
                   :class="{ 'text-muted': analysis.albums?.[{{ $album->id }}]?.state === 'queued', 'text-accent': analysis.albums?.[{{ $album->id }}]?.state === 'running', 'text-emerald-500': analysis.albums?.[{{ $album->id }}]?.state === 'done', 'text-red-500': analysis.albums?.[{{ $album->id }}]?.state === 'failed' }"
-                  x-text="(a => ! a ? '' : a.state === 'queued' ? 'Queued' : a.state === 'running' ? 'Analysing ' + a.done + '/' + a.total : a.state === 'done' ? 'Analysed' : 'Analysed · ' + a.failed + ' failed')(analysis.albums?.[{{ $album->id }}])"></span></h2>
+                  x-text="(a => ! a ? '' : a.state === 'queued' ? 'Queued' : a.state === 'running' ? 'Analysing ' + a.done + '/' + a.total + (analysis.current ? ' · ' + analysis.current : '') + (a.failed ? ' · ' + a.failed + ' failed' : '') : a.state === 'done' ? 'Analysed' : 'Analysed · ' + a.failed + ' failed')(analysis.albums?.[{{ $album->id }}])"></span></h2>
         <div class="mb-1 flex items-center gap-2 text-sm text-muted">
             <span x-show="note" x-text="note" x-cloak class="shrink-0 text-xs text-accent2"></span>
             <span class="min-w-0 truncate">{{ $album->displayArtist }}@if ($album->year) · {{ $album->year }}@endif @if ($album->label) · {{ $album->label }}@endif</span>
