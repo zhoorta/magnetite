@@ -110,7 +110,15 @@
                 d.saving = false;
                 if (r && r.ok) {
                     if (parent !== null && d.mode !== 'rename') this.reveal(parent);
-                    this.fd = null; Livewire.navigate(window.location.href); return;
+                    this.fd = null;
+                    // An album moved: only the list is fetched again, in the background (the folders and their counts change, the page does not).
+                    if (d.mode === 'album') {
+                        const { [d.id]: _, ...rest } = this.albumFolder;
+                        this.albumFolder = parent === null ? rest : { ...rest, [d.id]: parent };
+                        await this.refresh();
+                        return;
+                    }
+                    Livewire.navigate(window.location.href); return;
                 }
                 const body = r ? await r.json().catch(() => ({})) : {};
                 d.error = (body.errors && Object.values(body.errors)[0][0]) || body.message || 'Could not save.';
@@ -224,7 +232,10 @@
             // Fetch the library page in the background and swap in the fresh album sections (`ids`), or the whole list when `ids` is empty or an album is new.
             // An album the person had opened stays open.
             async refresh(ids = []) {
-                const r = await fetch(window.location.href, { headers: { 'Accept': 'text/html' } }).catch(() => null);
+                // Never from a cache: Safari reuses an earlier response for the same URL, which would hold the albums as they were before this run.
+                const url = new URL(window.location.href);
+                url.searchParams.set('_refresh', Date.now());
+                const r = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'text/html', 'Cache-Control': 'no-cache' } }).catch(() => null);
                 if (! r || ! r.ok) return Livewire.navigate(window.location.href);
                 const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
                 const list = document.getElementById('library-list');
