@@ -1,6 +1,7 @@
 //! The album cover in the terminal: fetched in the background through the same `/cover/{album}` the apps use (Bearer token),
-//! decoded with the `image` crate and drawn with half blocks (two pixels per cell, true colour or the 256-colour fallback).
-use crate::{api::Api, theme::{c, Rgb}};
+//! decoded with the `image` crate and drawn with block characters (`blocks.rs`: quadrants, or half blocks; true colour, or the
+//! 256-colour palette with the error spread so Terminal.app does not show flat bands).
+use crate::{api::Api, blocks::{self, Cell, Shape}, theme::{truecolor, Rgb}};
 use image::{imageops::FilterType, RgbImage};
 use ratatui::{layout::Rect, style::Style, text::{Line, Span}, widgets::Paragraph, Frame};
 use std::{io::Read, sync::mpsc, thread};
@@ -8,7 +9,7 @@ use std::{io::Read, sync::mpsc, thread};
 pub struct Cover {
     url: Option<String>,
     img: Option<RgbImage>,
-    scaled: Option<((u32, u32), RgbImage)>,
+    drawn: Option<((u16, u16, Shape, bool), Vec<Vec<Cell>>)>, // the cells for this size, kept until the area or the cover changes
     rx: Option<mpsc::Receiver<Option<RgbImage>>>,
     palette: Option<(Rgb, Rgb)>,
     artwork: Option<String>, // file:// url of the pixelated copy handed to the system's now-playing display
@@ -30,7 +31,7 @@ fn fetch(api: &Api, url: &str) -> Option<RgbImage> {
 
 impl Cover {
     pub fn new() -> Self {
-        Cover { url: None, img: None, scaled: None, rx: None, palette: None, artwork: None }
+        Cover { url: None, img: None, drawn: None, rx: None, palette: None, artwork: None }
     }
 
     /// The track changed: fetch its cover unless it is the one already held.
@@ -42,7 +43,7 @@ impl Cover {
         self.img = None;
         self.palette = None;
         self.artwork = None;
-        self.scaled = None;
+        self.drawn = None;
         self.rx = None;
         if let Some(u) = url {
             let (api, u, (tx, rx)) = (api.clone(), u.to_string(), mpsc::channel());
@@ -76,6 +77,15 @@ impl Cover {
         self.img.is_some()
     }
 
+    /// How the cover is drawn: quadrants (twice the detail across), or half blocks with `MAGNETITE_COVER=half` for a terminal or
+    /// font that cannot show the quadrant characters.
+    fn shape() -> Shape {
+        match std::env::var("MAGNETITE_COVER").as_deref() {
+            Ok("half") => Shape::Half,
+            _ => Shape::Quadrant,
+        }
+    }
+
     /// The largest square that fits `area` (a cell is twice as tall as wide), centred; nothing when there is no cover.
     pub fn draw(&mut self, f: &mut Frame, area: Rect) {
         let Some(img) = &self.img else { return };
@@ -83,25 +93,19 @@ impl Cover {
         if side < 4 {
             return;
         }
-        let (pw, ph) = (side as u32, side as u32);
-        if self.scaled.as_ref().map(|s| s.0) != Some((pw, ph)) {
-            self.scaled = Some(((pw, ph), image::imageops::resize(img, pw, ph, FilterType::Triangle)));
-        }
-        let px = &self.scaled.as_ref().unwrap().1;
         let (cols, rows) = (side, side / 2);
+        let (shape, indexed) = (Self::shape(), !truecolor());
+        let key = (cols, rows, shape, indexed);
+        if self.drawn.as_ref().map(|d| d.0) != Some(key) {
+            // a sharp resize, then a touch of sharpening: the picture has few pixels, so edges count
+            let (cw, ch) = shape.pixels();
+            let grid = image::imageops::resize(img, cols as u32 * cw as u32, rows as u32 * ch as u32, FilterType::Lanczos3);
+            let grid = image::imageops::unsharpen(&grid, 0.7, 2);
+            self.drawn = Some((key, blocks::render(&grid, shape, indexed)));
+        }
+        let cells = &self.drawn.as_ref().unwrap().1;
         let (x0, y0) = (area.x + (area.width - cols) / 2, area.y + (area.height - rows) / 2);
-        let lines: Vec<Line> = (0..rows as u32)
-            .map(|r| {
-                Line::from(
-                    (0..cols as u32)
-                        .map(|x| {
-                            let (t, b) = (px.get_pixel(x, r * 2).0, px.get_pixel(x, r * 2 + 1).0);
-                            Span::styled("▀", Style::new().fg(c((t[0], t[1], t[2]))).bg(c((b[0], b[1], b[2]))))
-                        })
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .collect();
+        let lines: Vec<Line> = cells.iter().map(|row| Line::from(row.iter().map(|k| Span::styled(k.ch.to_string(), Style::new().fg(k.fg).bg(k.bg))).collect::<Vec<_>>())).collect();
         f.render_widget(Paragraph::new(lines), Rect::new(x0, y0, cols, rows));
     }
 }
@@ -296,7 +300,7 @@ mod draw_tests {
         let mut t = Terminal::new(TestBackend::new(40, 12)).unwrap();
         t.draw(|f| cv.draw(f, Rect::new(2, 1, 30, 8))).unwrap();
         let b = t.backend().buffer();
-        let drawn = |x: u16, y: u16| b[(x, y)].symbol() == "▀";
+        let drawn = |x: u16, y: u16| b[(x, y)].symbol() != " ";
         // 8 rows x 2 = 16 pixels: a 16-column, 8-row square centred in 30 columns
         assert!(drawn(2 + 7, 1) && drawn(2 + 22, 8) && !drawn(2 + 6, 1) && !drawn(2 + 23, 1) && !drawn(0, 0));
         assert!(!Cover::new().has());

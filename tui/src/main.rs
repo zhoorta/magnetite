@@ -2,6 +2,7 @@ mod ab;
 mod analyze;
 mod api;
 mod audio;
+mod blocks;
 mod config;
 mod cover;
 mod help;

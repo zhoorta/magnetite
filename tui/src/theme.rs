@@ -19,7 +19,7 @@ pub struct Theme {
     pub accent2: Rgb,
 }
 
-fn truecolor() -> bool {
+pub fn truecolor() -> bool {
     static T: OnceLock<bool> = OnceLock::new();
     *T.get_or_init(|| std::env::var("COLORTERM").map(|v| v == "truecolor" || v == "24bit").unwrap_or(false))
 }
