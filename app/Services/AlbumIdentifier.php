@@ -47,7 +47,7 @@ class AlbumIdentifier
      */
     public function groups(User $user): Collection
     {
-        return Track::where('user_id', $user->id)->whereNull('album_id')->get()
+        return Track::looseOf($user)->get()
             ->groupBy(fn (Track $t) => PathGuess::groupKey($t->path)[0])
             ->reject(fn ($tracks, $key) => $key === '.')
             ->sortKeys();
@@ -111,7 +111,7 @@ class AlbumIdentifier
             $album = Album::firstOrCreate($identity, ['year' => $candidate['year'], 'release_date' => $candidate['date'] ?? null, 'label' => $candidate['label'] ?? null]);
 
             // Only tracks that are still the owner's and still without an album.
-            $tracks = Track::where('user_id', $suggestion->user_id)->whereNull('album_id')
+            $tracks = Track::looseOf($suggestion->user_id)
                 ->whereIn('id', array_column($candidate['tracks'], 'id'))->get()->keyBy('id');
 
             foreach ($candidate['tracks'] as $row) {

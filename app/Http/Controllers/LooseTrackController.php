@@ -17,7 +17,7 @@ class LooseTrackController extends Controller
     public function index(Request $request): JsonResponse
     {
         $since = $request->integer('since');
-        $tracks = Track::where('user_id', $request->user()->id)->whereNull('album_id')
+        $tracks = Track::looseOf($request->user())
             ->when($since > 0, fn ($q) => $q->where('created_at', '>=', Carbon::createFromTimestamp($since)))
             ->orderBy('path')->get();
 

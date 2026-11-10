@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -10,6 +11,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Playlist extends Model
 {
     protected $guarded = [];
+
+    /** Playlists in the shared area by name, with their owner and track count. */
+    public function scopeShared(Builder $query): void
+    {
+        $query->with('user')->withCount('tracks')->whereHas('share')->orderBy('name');
+    }
 
     public function user(): BelongsTo
     {

@@ -51,6 +51,23 @@ class Track extends Model
             ->orWhereHas('album', fn (Builder $a) => $a->whereHas('share')));
     }
 
+    /** The user's tracks that belong to no album (files without an album tag). */
+    public function scopeLooseOf(Builder $query, User|int $user): void
+    {
+        $query->where('tracks.user_id', $user instanceof User ? $user->id : $user)->whereNull('tracks.album_id');
+    }
+
+    /**
+     * Single tracks of the shared area: shared one by one, and not part of an album that is shared too (that album shows
+     * them). The listing of /shared and of `GET /api/v1/shared`.
+     */
+    public function scopeSharedSingles(Builder $query): void
+    {
+        $query->with(['user', 'album'])->whereHas('share')
+            ->whereDoesntHave('album', fn (Builder $a) => $a->whereHas('share'))
+            ->orderBy('artist')->orderBy('title');
+    }
+
     /** Playable in any browser: not ALAC, or ALAC that the stream endpoint converts to FLAC. */
     public function getPlayableAttribute(): bool
     {

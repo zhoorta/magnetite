@@ -112,6 +112,17 @@ fn err(e: ureq::Error) -> String {
     }
 }
 
+/// The answer of a request as JSON, with the server's error turned into a readable message.
+trait JsonBody {
+    fn json_body<T: serde::de::DeserializeOwned>(self) -> Result<T>;
+}
+
+impl JsonBody for std::result::Result<ureq::Response, ureq::Error> {
+    fn json_body<T: serde::de::DeserializeOwned>(self) -> Result<T> {
+        self.map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+}
+
 #[derive(Clone)]
 pub struct Api {
     pub base: String,
@@ -136,11 +147,13 @@ impl Api {
         self.get("/me").call().ok().and_then(|r| r.into_json::<Value>().ok()).and_then(|v| v["meters"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())).unwrap_or_default()
     }
 
-    pub fn albums(&self) -> Result<Vec<Album>> {
+    /// Every page of a list endpoint (`path` may carry a query; `page` is added).
+    fn all_pages<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
+        let sep = if path.contains('?') { '&' } else { '?' };
         let mut all = vec![];
         let mut page = 1;
         loop {
-            let p: Page<Album> = self.get(&format!("/albums?page={page}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+            let p: Page<T> = self.get(&format!("{path}{sep}page={page}")).call().json_body()?;
             all.extend(p.data);
             match p.meta {
                 Some(m) if m.current_page < m.last_page => page += 1,
@@ -149,16 +162,20 @@ impl Api {
         }
     }
 
+    pub fn albums(&self) -> Result<Vec<Album>> {
+        self.all_pages("/albums")
+    }
+
     /// One page of the library's tracks with their truth (`/tracks?truth=1`, only the analysed ones) and the last page number.
     /// A server without the endpoint answers with an error: the caller falls back to reading albums.
     pub fn analysed_tracks(&self, page: u32) -> Result<(Vec<Track>, u32)> {
-        let p: Page<Track> = self.get(&format!("/tracks?truth=1&per_page=300&page={page}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        let p: Page<Track> = self.get(&format!("/tracks?truth=1&per_page=300&page={page}")).call().json_body()?;
         Ok((p.data, p.meta.map_or(1, |m| m.last_page)))
     }
 
     /// The server's search: albums and tracks whose title or artist contains the text (yours and what is shared with you).
     pub fn search(&self, q: &str) -> Result<SearchResult> {
-        self.get("/search").query("q", q).call().map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.get("/search").query("q", q).call().json_body()
     }
 
     fn send(&self, method: &str, path: &str) -> ureq::Request {
@@ -167,76 +184,67 @@ impl Api {
 
     /// The scan of this account: `state` is idle, queued, running, done or failed.
     pub fn scan(&self) -> Result<Value> {
-        self.get("/scan").call().map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.get("/scan").call().json_body()
     }
 
     /// The albums that got tracks since a server time (`since` from the upload's answer), all pages.
     pub fn albums_since(&self, since: i64) -> Result<Vec<Album>> {
-        let mut all = vec![];
-        let mut page = 1;
-        loop {
-            let p: Page<Album> = self.get(&format!("/albums?since={since}&page={page}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
-            all.extend(p.data);
-            match p.meta {
-                Some(m) if m.current_page < m.last_page => page += 1,
-                _ => return Ok(all),
-            }
-        }
+        self.all_pages(&format!("/albums?since={since}"))
     }
 
     /// Queue the analysis of one album, one track, or (both None) everything that has none yet; answers with the status.
     pub fn start_analysis(&self, album: Option<u64>, track: Option<u64>) -> Result<Value> {
-        self.send("POST", "/analysis").send_json(json!({ "album_id": album, "track_id": track })).map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.send("POST", "/analysis").send_json(json!({ "album_id": album, "track_id": track })).json_body()
     }
 
     /// The analysis run of this account: `state` (idle, queued, running, done), `total`, `done`, `failed`, `current`.
     pub fn analysis(&self) -> Result<Value> {
-        self.get("/analysis").call().map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.get("/analysis").call().json_body()
     }
 
     pub fn track(&self, id: u64) -> Result<Track> {
-        let d: Data<Track> = self.get(&format!("/tracks/{id}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        let d: Data<Track> = self.get(&format!("/tracks/{id}")).call().json_body()?;
         Ok(d.data)
     }
 
     /// Tracks without an album that arrived since a server time, in groups by folder (`[{folder, tracks: [{id, title, artist, number}]}]`).
     pub fn loose_tracks(&self, since: i64) -> Result<Vec<Value>> {
-        let v: Value = self.get(&format!("/tracks/loose?since={since}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        let v: Value = self.get(&format!("/tracks/loose?since={since}")).call().json_body()?;
         Ok(v["groups"].as_array().cloned().unwrap_or_default())
     }
 
     /// Name an album for loose tracks (`title`, `artist`, `year`, `track_ids`).
     pub fn create_album(&self, fields: Value) -> Result<Album> {
-        let d: Data<Album> = self.send("POST", "/albums").send_json(fields).map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        let d: Data<Album> = self.send("POST", "/albums").send_json(fields).json_body()?;
         Ok(d.data)
     }
 
     /// Send a multipart body of known length (the upload streams it from disk) and read the JSON answer.
     pub fn upload(&self, content_type: &str, len: u64, body: impl std::io::Read) -> Result<Value> {
-        self.send("POST", "/uploads").set("Content-Type", content_type).set("Content-Length", &len.to_string()).send(body).map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.send("POST", "/uploads").set("Content-Type", content_type).set("Content-Length", &len.to_string()).send(body).json_body()
     }
 
     /// MusicBrainz releases that could name the album's tracks (candidates with their per-track proposals).
     pub fn find_titles(&self, id: u64) -> Result<Value> {
-        self.send("POST", &format!("/albums/{id}/titles/find")).send_json(json!({})).map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.send("POST", &format!("/albums/{id}/titles/find")).send_json(json!({})).json_body()
     }
 
     pub fn apply_titles(&self, id: u64, candidate: usize, parts: &[&str]) -> Result<Value> {
-        self.send("POST", &format!("/albums/{id}/titles")).send_json(json!({ "candidate": candidate, "parts": parts })).map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.send("POST", &format!("/albums/{id}/titles")).send_json(json!({ "candidate": candidate, "parts": parts })).json_body()
     }
 
     /// Look for a cover on the web and set it; the answer says where it came from (null: nothing found).
     pub fn find_cover(&self, id: u64) -> Result<Value> {
-        self.send("POST", &format!("/albums/{id}/cover/find")).send_json(json!({})).map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.send("POST", &format!("/albums/{id}/cover/find")).send_json(json!({})).json_body()
     }
 
     /// Change album fields (the server wants the title every time).
     pub fn edit_album(&self, id: u64, fields: Value) -> Result<Value> {
-        self.send("PATCH", &format!("/albums/{id}")).send_json(fields).map_err(err)?.into_json().map_err(|e| e.to_string())
+        self.send("PATCH", &format!("/albums/{id}")).send_json(fields).json_body()
     }
 
     pub fn album(&self, id: u64) -> Result<Album> {
-        let d: Data<Album> = self.get(&format!("/albums/{id}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        let d: Data<Album> = self.get(&format!("/albums/{id}")).call().json_body()?;
         Ok(d.data)
     }
 }

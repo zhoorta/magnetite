@@ -22,7 +22,7 @@ class AlbumGrouper
     public function group(User $user, array $trackIds, string $title, ?string $artist, ?int $year): Album
     {
         return DB::transaction(function () use ($user, $trackIds, $title, $artist, $year) {
-            $tracks = Track::where('user_id', $user->id)->whereNull('album_id')->whereIn('id', $trackIds)->orderBy('path')->get();
+            $tracks = Track::looseOf($user)->whereIn('id', $trackIds)->orderBy('path')->get();
 
             if ($tracks->isEmpty()) {
                 throw new RuntimeException('None of these tracks is yours and without an album.');

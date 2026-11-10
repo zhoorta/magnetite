@@ -42,7 +42,7 @@ class LibraryController extends Controller
         };
         $walk(0, 1);
 
-        $loose = Track::where('user_id', $me->id)->whereNull('album_id')->orderBy('title')->get();
+        $loose = Track::looseOf($me)->orderBy('title')->get();
 
         // Duplicates are found across the user's own library only, so a hash never reveals a file someone keeps privately.
         $copies = FileTruth::copies(Track::where('user_id', $me->id)->get(['id', 'title', 'artist', 'path', 'duration', 'pcm_sha1']));
@@ -64,14 +64,11 @@ class LibraryController extends Controller
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */
     public function shared(Request $request): View
     {
-        $albums = Album::with(['user', 'tracks'])->whereHas('share')->inLibraryOrder()->get()
+        $albums = Album::with('tracks')->shared()->get()
             ->each(fn (Album $a) => $a->tracks->each->setRelation('album', $a));
 
-        $singles = Track::with(['user', 'album'])->whereHas('share')
-            ->whereDoesntHave('album', fn ($q) => $q->whereHas('share'))
-            ->orderBy('artist')->orderBy('title')->get();
-
-        $playlists = Playlist::with('user')->withCount('tracks')->whereHas('share')->orderBy('name')->get();
+        $singles = Track::sharedSingles()->get();
+        $playlists = Playlist::shared()->get();
 
         return view('pages.shared', ['albums' => $albums, 'singles' => $singles, 'playlists' => $playlists, 'me' => $request->user()]);
     }

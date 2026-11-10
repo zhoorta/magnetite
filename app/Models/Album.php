@@ -43,6 +43,12 @@ class Album extends Model
             ->orderBy('albums.year')->orderByRaw('lower(albums.title)');
     }
 
+    /** Albums in the shared area, in library order, with who shares them. The listing of /shared and of `GET /api/v1/shared`. */
+    public function scopeShared(Builder $query): void
+    {
+        $query->with('user')->whereHas('share')->inLibraryOrder();
+    }
+
     /** What the pages show for when the album came out: the full date when known, else the year. */
     public function getReleasedAttribute(): ?string
     {

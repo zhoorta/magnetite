@@ -16,13 +16,9 @@ class SharedController extends Controller
     /** The shared area, as /shared shows it: albums, single tracks and playlists, with who shares them. */
     public function __invoke(Request $request): JsonResponse
     {
-        $albums = Album::withCount('tracks')->with('user')->whereHas('share')->inLibraryOrder()->get();
-
-        $singles = Track::with(['user', 'album'])->whereHas('share')
-            ->whereDoesntHave('album', fn ($q) => $q->whereHas('share'))
-            ->orderBy('artist')->orderBy('title')->get();
-
-        $playlists = Playlist::with('user')->withCount('tracks')->whereHas('share')->orderBy('name')->get();
+        $albums = Album::withCount('tracks')->shared()->get();
+        $singles = Track::sharedSingles()->get();
+        $playlists = Playlist::shared()->get();
 
         return response()->json([
             'albums' => AlbumResource::collection($albums)->map(fn ($r) => $r->resolve() + ['shared_by' => $r->user->username]),
