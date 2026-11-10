@@ -92,3 +92,86 @@ it('ignores words beyond six and finds nothing for a text made of spaces', funct
     expect(searchFor($this->alice, 'one two three four five six seven eight')['tracks'])->toHaveCount(1);
     $this->getJson('/api/v1/search?q=%20%20', ['Authorization' => 'Bearer '.$this->alice->createToken('t', ['*'])->plainTextToken])->assertUnprocessable();
 });
+
+it('filters by year, on albums and on the tracks of those albums', function () {
+    $old = Album::create(['user_id' => $this->alice->id, 'title' => 'Old Songs', 'artist' => 'Band', 'year' => 1969]);
+    $new = Album::create(['user_id' => $this->alice->id, 'title' => 'New Songs', 'artist' => 'Band', 'year' => 1983]);
+    searchTrack($this->alice, 'Songs Of Old', 'Band', $old);
+    searchTrack($this->alice, 'Songs Of New', 'Band', $new);
+
+    expect(collect(searchFor($this->alice, 'songs year:1983')['albums'])->pluck('title')->all())->toBe(['New Songs'])
+        ->and(collect(searchFor($this->alice, 'songs year:1983')['tracks'])->pluck('title')->all())->toBe(['Songs Of New'])
+        ->and(collect(searchFor($this->alice, 'songs year:1960..1969')['albums'])->pluck('title')->all())->toBe(['Old Songs'])
+        ->and(searchFor($this->alice, 'songs year:..1960')['albums'])->toHaveCount(0)
+        ->and(searchFor($this->alice, 'songs year:>1900')['albums'])->toHaveCount(2)
+        ->and(searchFor($this->alice, 'songs year:<=1969')['albums'])->toHaveCount(1);
+});
+
+it('filters tracks by codec and by dynamic range, and then answers with tracks only', function () {
+    searchTrack($this->alice, 'Loud One', 'X')->update(['codec' => 'flac', 'dr' => 5]);
+    searchTrack($this->alice, 'Quiet One', 'X')->update(['codec' => 'FLAC', 'dr' => 14]);
+    searchTrack($this->alice, 'Lossy One', 'X')->update(['codec' => 'mp3']);
+    Album::create(['user_id' => $this->alice->id, 'title' => 'One Album', 'artist' => 'X']);
+
+    $titles = fn (string $q) => collect(searchFor($this->alice, $q)['tracks'])->pluck('title')->sort()->values()->all();
+
+    expect($titles('one codec:flac'))->toBe(['Loud One', 'Quiet One'])
+        ->and($titles('one codec:mp3,alac'))->toBe(['Lossy One'])
+        ->and($titles('one dr:<8'))->toBe(['Loud One'])
+        ->and($titles('one dr:>=12'))->toBe(['Quiet One'])
+        ->and($titles('one dr:5..14 codec:flac'))->toBe(['Loud One', 'Quiet One'])
+        ->and(searchFor($this->alice, 'one codec:flac')['albums'])->toHaveCount(0)
+        ->and(searchFor($this->alice, 'one')['albums'])->toHaveCount(1);
+});
+
+it('does not let a dr filter see other people\'s measurements', function () {
+    $theirs = searchTrack($this->bob, 'Shared One', 'X');
+    $theirs->update(['dr' => 5]);
+    SharedItem::create(['user_id' => $this->bob->id, 'track_id' => $theirs->id]);
+
+    expect(searchFor($this->alice, 'one dr:<8')['tracks'])->toHaveCount(0)
+        ->and(searchFor($this->alice, 'one')['tracks'])->toHaveCount(1);
+});
+
+it('filters by artist and by album, in words and in quotes', function () {
+    $album = Album::create(['user_id' => $this->alice->id, 'title' => 'Heroes', 'artist' => 'David Bowie']);
+    searchTrack($this->alice, 'Heroes', 'David Bowie', $album);
+    searchTrack($this->alice, 'Heroes', 'Wallflowers');
+    searchTrack($this->alice, 'Bowie Tribute', 'Someone');
+
+    $titles = fn (string $q) => collect(searchFor($this->alice, $q)['tracks'])->map(fn ($t) => $t['title'].'|'.$t['artist'])->all();
+
+    expect($titles('heroes artist:bowie'))->toBe(['Heroes|David Bowie'])
+        ->and($titles('artist:"david bowie"'))->toBe(['Heroes|David Bowie'])
+        ->and($titles('bowie'))->toHaveCount(2)
+        ->and($titles('album:heroes'))->toBe(['Heroes|David Bowie'])
+        ->and(collect(searchFor($this->alice, 'artist:bowie')['albums'])->pluck('title')->all())->toBe(['Heroes']);
+});
+
+it('keeps a token that is not a filter as a plain word', function () {
+    searchTrack($this->alice, 'Highway', 'AC:DC');
+    searchTrack($this->alice, 'Other', 'Soon');
+
+    expect(searchFor($this->alice, 'ac:dc')['tracks'])->toHaveCount(1)
+        ->and(searchFor($this->alice, 'other year:soon')['tracks'])->toHaveCount(0); // "year:soon" is a word nothing contains
+});
+
+it('pages the results and says when there are more', function () {
+    foreach (range(1, 60) as $i) {
+        searchTrack($this->alice, sprintf('Page Song %02d', $i), 'Pager');
+    }
+
+    $one = searchFor($this->alice, 'page song');
+    $two = test()->getJson('/api/v1/search?q=page+song&page=2', ['Authorization' => 'Bearer '.$this->alice->createToken('t', ['*'])->plainTextToken])->assertOk()->json();
+
+    expect($one['tracks'])->toHaveCount(50)->and($one['more'])->toBe(['albums' => false, 'tracks' => true])->and($one['page'])->toBe(1)
+        ->and($two['tracks'])->toHaveCount(10)->and($two['more']['tracks'])->toBeFalse()->and($two['page'])->toBe(2)
+        ->and(collect($one['tracks'])->pluck('id')->intersect(collect($two['tracks'])->pluck('id')))->toHaveCount(0);
+});
+
+it('takes a search made only of filters', function () {
+    $album = Album::create(['user_id' => $this->alice->id, 'title' => 'Only Year', 'artist' => 'Band', 'year' => 1977]);
+    searchTrack($this->alice, 'Something', 'Band', $album);
+
+    expect(searchFor($this->alice, 'year:1977')['albums'])->toHaveCount(1);
+});
