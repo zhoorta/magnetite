@@ -82,9 +82,12 @@ fn mean(px: &[[f32; 3]], mask: usize, want: bool) -> ([f32; 3], usize) {
 }
 
 /// The two colours and the glyph that come closest to a cell's pixels.
-fn best(px: &[[f32; 3]]) -> (usize, [f32; 3], [f32; 3]) {
+fn best(px: &[[f32; 3]], split_gain: f32, split_min: f32) -> (usize, [f32; 3], [f32; 3]) {
     let last = 1 << (px.len() - 1);
-    let mut top = (f32::MAX, 0, [0.0; 3], [0.0; 3]);
+    let (all, _) = mean(px, (1 << px.len()) - 1, true);
+    let one: f32 = px.iter().map(|p| (0..3).map(|k| (p[k] - all[k]).powi(2)).sum::<f32>()).sum();
+    // the one-colour cell: the whole cell takes the foreground (the full block)
+    let mut top = ((one * split_gain).min(one - split_min), (1 << px.len()) - 1, all, all);
     // the last pixel always belongs to the background, so every split is tried once
     for mask in 1..last {
         let ((a, _), (b, _)) = (mean(px, mask, true), mean(px, mask, false));
@@ -96,8 +99,48 @@ fn best(px: &[[f32; 3]]) -> (usize, [f32; 3], [f32; 3]) {
     (top.1, top.2, top.3)
 }
 
+/// How the cells are chosen and, in the 256-colour mode, how the colour error is passed on; `Tuning::for_mode` is what the player uses.
+#[derive(Clone, Copy, Debug)]
+pub struct Tuning {
+    /// Share of a pixel's colour error passed to its neighbours (0: none, the nearest palette colour only).
+    pub spread: f32,
+    /// A cell is split in two colours only when that cuts its error to less than this share of the one-colour error (1: always
+    /// split when it helps at all). Keeps flat areas flat: a cell whose pixels differ only by grain stays one colour.
+    pub split_gain: f32,
+    /// ...and the split must also remove at least this much squared colour error (summed over the cell's pixels and channels),
+    /// so grain a few levels deep is not mistaken for an edge.
+    pub split_min: f32,
+    /// Choose the split from the picture's own pixels, not from the ones the spread has moved, so the glyphs follow the real
+    /// edges and not the dither.
+    pub split_from_source: bool,
+}
+
+impl Tuning {
+    /// What the player uses. True colour needs no help: every cell takes its best two colours. The 256-colour palette is coarse,
+    /// and spreading the error freely turns a flat red with paper grain into a field of dots and blurs the lettering on it, so
+    /// there a cell stays one colour unless splitting it clearly helps (`split_gain`), the glyphs follow the picture's own
+    /// edges, and only a little error is passed on (enough to break up the steps of a gradient).
+    pub fn for_mode(indexed: bool) -> Self {
+        if indexed {
+            Tuning { spread: 0.3, split_gain: 0.6, split_min: 500.0, split_from_source: true }
+        } else {
+            Tuning { spread: 0.0, split_gain: 1.0, split_min: 0.0, split_from_source: false }
+        }
+    }
+
+    /// Free error spreading with every split allowed: the strongest dithering, for the tests of the algorithm.
+    #[cfg(test)]
+    fn strong() -> Self {
+        Tuning { spread: SPREAD, split_gain: 1.0, split_min: 0.0, split_from_source: false }
+    }
+}
+
 /// Draws `img` (its width and height must be multiples of the cell's) as rows of cells.
 pub fn render(img: &RgbImage, shape: Shape, indexed: bool) -> Vec<Vec<Cell>> {
+    render_with(img, shape, indexed, Tuning::for_mode(indexed))
+}
+
+pub fn render_with(img: &RgbImage, shape: Shape, indexed: bool, tune: Tuning) -> Vec<Vec<Cell>> {
     let (cw, ch) = shape.pixels();
     let (w, h) = (img.width() as usize, img.height() as usize);
     let (cols, rows) = (w / cw, h / ch);
@@ -115,7 +158,15 @@ pub fn render(img: &RgbImage, shape: Shape, indexed: bool) -> Vec<Vec<Cell>> {
                     [0, 1, 2].map(|k| (p[k] as f32 + err[y * w + x][k]).clamp(0.0, 255.0))
                 })
                 .collect();
-            let (mask, fg, bg) = best(&px);
+            let (mask, fg, bg) = if tune.split_from_source {
+                let src: Vec<[f32; 3]> = (0..cw * ch).map(|i| { let (x, y) = at(i); img.get_pixel(x as u32, y as u32).0.map(f32::from) }).collect();
+                let (m, _, _) = best(&src, tune.split_gain, tune.split_min);
+                let full = (1 << px.len()) - 1;
+                let (a, _) = mean(&px, m, true);
+                (m, a, if m == full { a } else { mean(&px, m, false).0 })
+            } else {
+                best(&px, tune.split_gain, tune.split_min)
+            };
             let (fgc, bgc, shown) = if indexed {
                 let ((fi, fr), (bi, br)) = (nearest(fg), nearest(bg));
                 (Color::Indexed(fi), Color::Indexed(bi), Some((fr, br)))
@@ -135,7 +186,7 @@ pub fn render(img: &RgbImage, shape: Shape, indexed: bool) -> Vec<Vec<Cell>> {
                     // brightness error travels on; colour error only in part, or a grey picture fills with tints
                     let sat = p.iter().cloned().fold(f32::MIN, f32::max) - p.iter().cloned().fold(f32::MAX, f32::min);
                     let chroma = ((sat - 20.0) / 60.0).clamp(MIN_CHROMA, MAX_CHROMA);
-                    let e = raw.map(|x| ((lum + (x - lum) * chroma) * SPREAD).clamp(-MAX_ERROR, MAX_ERROR));
+                    let e = raw.map(|x| ((lum + (x - lum) * chroma) * tune.spread).clamp(-MAX_ERROR, MAX_ERROR));
                     for (dx, dy, wt) in [(1i32, 0i32, 7.0f32), (-1, 1, 3.0), (0, 1, 5.0), (1, 1, 1.0)] {
                         let (nx, ny) = (x as i32 + dx, y as i32 + dy);
                         if nx < 0 || ny < 0 || nx as usize >= w || ny as usize >= h {
@@ -227,10 +278,30 @@ mod tests {
     /// A colour that is not in the 256-colour palette: the average of what is drawn must be at least as near as the single
     /// nearest colour. The spreading is kept mild (a flat colour stays calm), so on a flat colour it may do no more than that;
     /// on gradients it is what keeps the bands apart.
+    /// The case that looked bad in Terminal.app: a flat red with paper grain and white lettering. The grain must not turn into
+    /// dots (few different cells in the flat part), and the lettering must stay a clean white-on-red edge.
+    #[test]
+    fn grain_on_a_flat_colour_stays_calm_in_256_colours_and_the_lettering_stays_sharp() {
+        let mut img = RgbImage::new(80, 40);
+        let mut seed = 12345u32;
+        for (x, y, p) in img.enumerate_pixels_mut() {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            let grain = ((seed >> 24) % 13) as i32 - 6; // +-6 levels of paper grain
+            let lettering = (20..60).contains(&x) && (14..26).contains(&y);
+            *p = if lettering { Rgb([250, 250, 250]) } else { Rgb([(190 + grain) as u8, (57 + grain) as u8, (42 + grain) as u8]) };
+        }
+        let rows = render(&img, Shape::Quadrant, true);
+        let flat: Vec<&Cell> = rows[..6].iter().flatten().collect(); // the rows above the lettering
+        let distinct: std::collections::HashSet<_> = flat.iter().map(|c| (c.ch, c.fg, c.bg)).collect();
+        assert!(distinct.len() <= 3, "{} different cells in a flat area", distinct.len());
+        let white = rows[10..13].iter().flatten().filter(|c| rgb_of(c.fg).0 > 200 && rgb_of(c.fg).1 > 200 && rgb_of(c.bg).1 > 200).count();
+        assert_eq!(white, 3 * 20, "the lettering lost its edges"); // three rows of twenty cells, all white
+    }
+
     #[test]
     fn a_flat_dark_red_stays_red_in_256_colours() {
         // the old renderer turned this maroon into a flat grey; every cell must keep a red or magenta-red hue, not grey
-        let rows = render(&solid(40, 40, [110, 20, 35]), Shape::Quadrant, true);
+        let rows = render_with(&solid(40, 40, [110, 20, 35]), Shape::Quadrant, true, Tuning::strong());
         let red = rows.iter().flatten().filter(|c| { let (r, g, b) = rgb_of(c.fg); r > g + 40 && r + 20 > b }).count();
         assert!(red * 10 >= rows.iter().flatten().count() * 9, "{red} of {} cells have a red foreground", rows.iter().flatten().count());
     }
@@ -244,7 +315,7 @@ mod tests {
                 img.put_pixel(x, y, Rgb([(90 + x) as u8, (x / 3) as u8, 0]));
             }
         }
-        let rows = render(&img, Shape::Quadrant, true);
+        let rows = render_with(&img, Shape::Quadrant, true, Tuning::strong());
         let width_of_runs = |cells: &[Cell]| { let mut runs = 1; for w in cells.windows(2) { if w[0].fg != w[1].fg || w[0].bg != w[1].bg { runs += 1; } } runs };
         // flat bands would change colour about once per palette step (a few times across the picture); a dithered one keeps changing
         assert!(width_of_runs(&rows[0]) > 8, "{} colour changes", width_of_runs(&rows[0]));
@@ -254,7 +325,7 @@ mod tests {
     fn the_256_colour_mode_keeps_the_average_colour() {
         let target = [110.0f32, 62.0, 140.0];
         let img = solid(40, 40, [110, 62, 140]);
-        let rows = render(&img, Shape::Quadrant, true);
+        let rows = render_with(&img, Shape::Quadrant, true, Tuning::strong());
         let mut sum = [0.0f32; 3];
         let mut n = 0.0;
         for c in rows.iter().flatten() {
@@ -309,12 +380,19 @@ mod tests {
             }
             image::imageops::resize(&shown, 800, 800, image::imageops::FilterType::Nearest).save(format!("{out}/old-256.png")).unwrap();
         }
-        for (name, shape, indexed) in [("half-256", Shape::Half, true), ("quad-256", Shape::Quadrant, true), ("quad-true", Shape::Quadrant, false)] {
-            let (cols, rows) = (50u32, 25u32);
+        let variants: [(&str, Shape, bool, Tuning); 5] = [
+            ("a-strong", Shape::Quadrant, true, Tuning::strong()),
+            ("b-nearest", Shape::Quadrant, true, Tuning { spread: 0.0, split_gain: 1.0, split_min: 0.0, split_from_source: false }),
+            ("c-calm", Shape::Quadrant, true, Tuning { spread: 0.3, split_gain: 0.6, split_min: 500.0, split_from_source: true }),
+            ("d-nearest-calm-split", Shape::Quadrant, true, Tuning { spread: 0.0, split_gain: 0.6, split_min: 500.0, split_from_source: true }),
+            ("e-true", Shape::Quadrant, false, Tuning::for_mode(false)),
+        ];
+        for (name, shape, indexed, tune) in variants {
+            let (cols, rows) = (100u32, 50u32);
             let (cw, ch) = shape.pixels();
             let grid = image::imageops::resize(&img, cols * cw as u32, rows * ch as u32, image::imageops::FilterType::Lanczos3);
             let grid = image::imageops::unsharpen(&grid, 0.7, 2);
-            let cells = render(&grid, shape, indexed);
+            let cells = render_with(&grid, shape, indexed, tune);
             // the same on screen size: a pixel of the half-block picture is twice as wide as a quadrant's
             let mean = |im: &RgbImage| { let n = (im.width() * im.height()) as f64; (0..3).map(|k| (im.pixels().map(|p| p.0[k] as f64).sum::<f64>() / n).round()).collect::<Vec<_>>() };
             println!("{name}: source mean {:?}, drawn mean {:?}", mean(&grid), mean(&unrender(&cells, shape, 1)));

@@ -6,6 +6,37 @@ use image::{imageops::FilterType, RgbImage};
 use ratatui::{layout::Rect, style::Style, text::{Line, Span}, widgets::Paragraph, Frame};
 use std::{io::Read, sync::mpsc, thread};
 
+static CONFIGURED_ASPECT: std::sync::Mutex<Option<f32>> = std::sync::Mutex::new(None);
+
+/// The aspect from `tui.json` (`cell_aspect`), if there is one.
+pub fn set_cell_aspect(v: Option<f32>) {
+    *CONFIGURED_ASPECT.lock().unwrap() = v;
+}
+
+/// Plausible cell shapes: fonts run from about 1.7 to 2.5 times as tall as wide; anything else is a bad reading.
+fn sane(v: f32) -> Option<f32> {
+    (1.5..=3.0).contains(&v).then_some(v)
+}
+
+/// How many times taller than wide a cell is: `MAGNETITE_CELL_ASPECT`, else `cell_aspect` in `tui.json`, else what the
+/// terminal says about its size in pixels (not every terminal does: Terminal.app reports none), else 2.
+pub fn cell_aspect() -> f32 {
+    std::env::var("MAGNETITE_CELL_ASPECT").ok().and_then(|v| v.parse().ok()).and_then(sane)
+        .or_else(|| CONFIGURED_ASPECT.lock().unwrap().and_then(sane))
+        .or_else(|| {
+            let w = crossterm::terminal::window_size().ok()?;
+            (w.columns > 0 && w.rows > 0 && w.width > 0 && w.height > 0).then(|| (w.height as f32 / w.rows as f32) / (w.width as f32 / w.columns as f32)).and_then(sane)
+        })
+        .unwrap_or(2.0)
+}
+
+/// The cells of the largest square that fits `area` for a cell `aspect` times as tall as wide: columns, rows.
+fn square_in(area: (u16, u16), aspect: f32) -> (u16, u16) {
+    let cols = (area.0 as f32).min(area.1 as f32 * aspect).floor() as u16;
+    let rows = ((cols as f32 / aspect).round() as u16).min(area.1);
+    (cols, rows)
+}
+
 pub struct Cover {
     url: Option<String>,
     img: Option<RgbImage>,
@@ -89,11 +120,10 @@ impl Cover {
     /// The largest square that fits `area` (a cell is twice as tall as wide), centred; nothing when there is no cover.
     pub fn draw(&mut self, f: &mut Frame, area: Rect) {
         let Some(img) = &self.img else { return };
-        let side = area.width.min(area.height * 2); // in columns and in pixel rows
-        if side < 4 {
+        let (cols, rows) = square_in((area.width, area.height), cell_aspect());
+        if cols < 4 || rows < 2 {
             return;
         }
-        let (cols, rows) = (side, side / 2);
         let (shape, indexed) = (Self::shape(), !truecolor());
         let key = (cols, rows, shape, indexed);
         if self.drawn.as_ref().map(|d| d.0) != Some(key) {
@@ -285,6 +315,31 @@ mod tests {
     fn only_the_path_of_a_cover_url_is_used() {
         assert_eq!(path_of("http://magnetite.test/cover/12?v=abcdef0123"), "/cover/12?v=abcdef0123");
         assert_eq!(path_of("/cover/3"), "/cover/3");
+    }
+}
+
+#[cfg(test)]
+mod shape_tests {
+    use super::*;
+
+    #[test]
+    fn the_cover_is_square_on_the_screen_for_the_font_in_use() {
+        // a cell twice as tall as wide: 30 columns need 15 rows
+        assert_eq!(square_in((60, 15), 2.0), (30, 15));
+        // the area is the limit in columns, the other way round: 20 columns wide, plenty of rows
+        assert_eq!(square_in((20, 40), 2.0), (20, 10));
+        // the screenshot's font: cells 2.14 times as tall as wide; 70 columns are 32.7 rows of that height
+        let (c, r) = square_in((100, 33), 2.14);
+        assert!((c as f32 / (r as f32 * 2.14) - 1.0).abs() < 0.02, "{c} x {r} cells is not square"); // whole cells: square to 2%
+        // with the default 2.0 the same area was 7% too tall, as in the screenshot
+        let (c, r) = square_in((100, 33), 2.0);
+        assert!((r as f32 * 2.14 / c as f32 - 1.0).abs() > 0.05);
+        assert_eq!(square_in((100, 10), 2.14), (21, 10));
+    }
+
+    #[test]
+    fn only_plausible_cell_shapes_are_believed() {
+        assert_eq!((sane(2.14), sane(1.0), sane(5.0), sane(2.0)), (Some(2.14), None, None, Some(2.0)));
     }
 }
 

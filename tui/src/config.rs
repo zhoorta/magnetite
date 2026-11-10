@@ -17,6 +17,10 @@ pub struct Config {
     /// Meter colours taken from the album cover; absent means on.
     #[serde(default)]
     pub tint: Option<bool>,
+    /// How many times taller than wide one cell of the terminal is (about 2; fonts differ), so that the cover is a true square.
+    /// Absent: what the terminal reports, else 2. `MAGNETITE_CELL_ASPECT` overrides it.
+    #[serde(default)]
+    pub cell_aspect: Option<f32>,
     /// Loudness matching: "off", "album" or "track" (absent: off).
     #[serde(default)]
     pub loudness: Option<String>,
