@@ -101,6 +101,7 @@ pub type Result<T> = std::result::Result<T, String>;
 fn err(e: ureq::Error) -> String {
     match e {
         ureq::Error::Status(401, _) => "not signed in (run `magnetite login`)".into(),
+        ureq::Error::Status(413, _) => "server answered 413: the upload is larger than the web server accepts (nginx `client_max_body_size` for /api/v1/uploads, see docs/bare-metal.md)".into(),
         ureq::Error::Status(c, r) => {
             let body = r.into_string().unwrap_or_default();
             // Laravel's JSON errors carry a readable `message`; show that instead of the whole body.
@@ -181,6 +182,18 @@ impl Api {
                 _ => return Ok(all),
             }
         }
+    }
+
+    /// Tracks without an album that arrived since a server time, in groups by folder (`[{folder, tracks: [{id, title, artist, number}]}]`).
+    pub fn loose_tracks(&self, since: i64) -> Result<Vec<Value>> {
+        let v: Value = self.get(&format!("/tracks/loose?since={since}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        Ok(v["groups"].as_array().cloned().unwrap_or_default())
+    }
+
+    /// Name an album for loose tracks (`title`, `artist`, `year`, `track_ids`).
+    pub fn create_album(&self, fields: Value) -> Result<Album> {
+        let d: Data<Album> = self.send("POST", "/albums").send_json(fields).map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        Ok(d.data)
     }
 
     /// Send a multipart body of known length (the upload streams it from disk) and read the JSON answer.

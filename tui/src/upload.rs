@@ -245,17 +245,20 @@ pub fn run(api: &Api, args: &[String]) -> i32 {
         Ok(a) => a,
         Err(e) => return fail(&e),
     };
-    if albums.is_empty() {
-        println!("The scan found no new albums (files without an album tag are kept as single tracks).");
+    let interactive = opts.review && io::IsTerminal::is_terminal(&io::stdin());
+    let made = name_loose(api, since, &opts, interactive);
+    if albums.is_empty() && made.is_empty() {
+        println!("The scan found no new albums.");
         return 0;
     }
-    println!("\n{} album{} from this upload:", albums.len(), if albums.len() == 1 { "" } else { "s" });
-    for a in &albums {
+    println!("\n{} album{} from this upload:", albums.len() + made.len(), if albums.len() + made.len() == 1 { "" } else { "s" });
+    for a in albums.iter().chain(&made) {
         println!("  #{:<5} {} · {} ({} tracks)", a.id, a.shown_artist(), a.title, a.track_count.unwrap_or(0));
     }
-    let interactive = opts.review && io::IsTerminal::is_terminal(&io::stdin());
-    for a in albums {
-        let a = edit_fields(api, a, &opts);
+    // the named ones already carry what the flags said
+    let todo: Vec<(Album, bool)> = albums.into_iter().map(|a| (a, true)).chain(made.into_iter().map(|a| (a, false))).collect();
+    for (a, edit) in todo {
+        let a = if edit { edit_fields(api, a, &opts) } else { a };
         println!("\n{} · {}", a.shown_artist(), a.title);
         if opts.identify && !identify(api, &a, true) && interactive {
             println!("  no confident match");
@@ -268,6 +271,54 @@ pub fn run(api: &Api, args: &[String]) -> i32 {
         }
     }
     0
+}
+
+/// Files without an album tag stay loose after the scan. For each folder of them the person names an album (the flags
+/// answer for every folder; at a terminal it asks, with the folder's name as the suggestion); without either, they are
+/// only reported. Returns the albums made.
+fn name_loose(api: &Api, since: i64, o: &Options, interactive: bool) -> Vec<Album> {
+    let groups = match api.loose_tracks(since) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("  loose tracks: {e}");
+            return vec![];
+        }
+    };
+    let mut made = vec![];
+    for g in groups {
+        let ids: Vec<u64> = g["tracks"].as_array().into_iter().flatten().filter_map(|t| t["id"].as_u64()).collect();
+        let folder = g["folder"].as_str().unwrap_or("").to_string();
+        let label = if folder.is_empty() { "the top folder".to_string() } else { format!("\"{folder}\"") };
+        println!("\n{} track{} in {label} have no album tag.", ids.len(), if ids.len() == 1 { "" } else { "s" });
+        let (mut title, mut artist, mut year) = (o.album.clone(), o.artist.clone(), o.year);
+        if title.is_none() && interactive {
+            let t = ask(&format!("  album name [{}] (- to leave them loose): ", if folder.is_empty() { "none" } else { &folder }));
+            title = match t.as_str() {
+                "-" => None,
+                "" if !folder.is_empty() => Some(folder.clone()),
+                "" => None,
+                _ => Some(t),
+            };
+            if title.is_some() && artist.is_none() {
+                artist = Some(ask("  artist (empty for none): ")).filter(|s| !s.is_empty());
+            }
+            if title.is_some() && year.is_none() {
+                year = ask("  year (empty for none): ").parse().ok();
+            }
+        }
+        let Some(title) = title else {
+            println!("  left loose (name them with --album, or in the web library)");
+            continue;
+        };
+        match api.create_album(json!({ "title": title, "artist": artist, "year": year, "track_ids": ids })) {
+            Ok(a) => {
+                println!("  album \"{}\" made from {} tracks", a.title, a.track_count.unwrap_or(0));
+                made.push(a);
+            }
+            Err(e) => eprintln!("  {e}"),
+        }
+    }
+    made
 }
 
 fn fail(msg: &str) -> i32 {
