@@ -107,15 +107,19 @@ describe('with ffmpeg and node', function () {
     });
 });
 
-it('shows the scores on the library page, or offers the menu entries to get them', function () {
+it('hands the scores to the library page, and says which albums still need measuring', function () {
     app(LibraryScanner::class)->scan($this->user);
 
-    $this->get(route('library'))->assertOk()->assertSee('Analyse album')->assertSee('Analyse file');
+    $this->get(route('library'))->assertOk()->assertSee('Analyse');
+    $before = $this->getJson(route('library'))->assertOk()->json('albums');
+    expect(collect($before)->pluck('needs_analysis')->unique()->all())->toBe([true])->and(collect($before)->pluck('dr')->filter()->all())->toBe([]);
 
     $track = Track::where('title', 'First Song')->sole();
     $track->forceFill(['dr' => 9, 'analysis' => ['sample_rate' => 44100, 'source' => ['codec' => 'mp3'], 'loudness' => ['integrated' => -12.3], 'spectrum' => ['db' => []]]])->save();
 
-    $this->get(route('library'))->assertOk()->assertSee('DR9')->assertDontSee('Use <strong>Analyse</strong> in the', false);
+    $album = collect($this->getJson(route('library'))->json('albums'))->firstWhere('id', $track->album_id);
+    expect($album['dr'])->toBe(9)->and($album['dr_class'])->not->toBeNull()
+        ->and(collect($album['tracks'])->firstWhere('id', $track->id)['truth']['dr'])->toBe(9);
 });
 
 describe('the Analyse entries', function () {
@@ -131,15 +135,16 @@ describe('the Analyse entries', function () {
         $this->getJson(route('analysis.show'))->assertOk()->assertJson(['state' => 'queued']);
     });
 
-    it('is offered only while some file of the album has no current analysis', function () {
+    it('is flagged only while some file of the album has no current analysis', function () {
         app(LibraryScanner::class)->scan($this->user);
-        $this->get(route('library'))->assertSee('Analyse album');
+        $needs = fn () => collect($this->getJson(route('library'))->json('albums'))->pluck('needs_analysis')->all();
+        expect($needs())->each->toBeTrue();
 
         Track::query()->update(['analysis_version' => TrackAnalyzer::VERSION]);
-        $this->get(route('library'))->assertDontSee('Analyse album');
+        expect($needs())->each->toBeFalse();
 
         Track::query()->whereNotNull('album_id')->first()->update(['analysis_version' => TrackAnalyzer::VERSION - 1]);
-        $this->get(route('library'))->assertSee('Analyse album');
+        expect($needs())->toContain(true);
     });
 
     it('queues a run limited to one album or one track of the signed-in user', function () {

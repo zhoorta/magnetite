@@ -16,9 +16,13 @@
         }
     } catch {}
 </script>
-{{-- What the player needs to know about the person: the meters they chose (null: they never did). Read once, when the player starts. --}}
+@php
+    $user = auth()->user();
+    $boot = ['signedIn' => auth()->check(), 'userId' => auth()->id(), 'meters' => $user?->meters, 'ui' => $user?->ui];
+@endphp
+{{-- What the player needs to know about the person: the meters they chose and their interface choices (null: they never did). Read once, when the player starts. --}}
 <script data-navigate-once>
-    window.magnetite = @json(['signedIn' => auth()->check(), 'userId' => auth()->id(), 'meters' => auth()->user()?->meters]);
+    window.magnetite = @json($boot);
 </script>
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 @livewireScriptConfig

@@ -22,6 +22,7 @@ use App\Http\Controllers\ScanController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StreamController;
+use App\Http\Controllers\UiSettingController;
 use App\Http\Controllers\UploadController;
 use Illuminate\Support\Facades\Route;
 
@@ -51,6 +52,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/copy/{kind}/{id}', [CopyController::class, 'store'])->whereIn('kind', ['albums', 'tracks'])->whereNumber('id')->name('copy.store');
 
     Route::put('/settings/meters', [MeterSettingController::class, 'update'])->name('settings.meters');
+    Route::put('/settings/ui', [UiSettingController::class, 'update'])->name('settings.ui');
 
     Route::get('/device', [DeviceController::class, 'create'])->name('device');
     Route::post('/device', [DeviceController::class, 'store'])->middleware('throttle:10,1')->name('device.store');
@@ -73,6 +75,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/cover/{album}/find', [CoverSearchController::class, 'album'])->whereNumber('album')->name('cover.find');
 
     Route::patch('/library/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('library.albums.update');
+    Route::patch('/library/albums/{album}/details', [LibraryEditController::class, 'details'])->whereNumber('album')->name('library.albums.details');
     Route::patch('/library/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('library.tracks.update');
     Route::post('/library/folders', [FolderController::class, 'store'])->name('library.folders.store');
     Route::patch('/library/folders/{folder}', [FolderController::class, 'update'])->whereNumber('folder')->name('library.folders.update');

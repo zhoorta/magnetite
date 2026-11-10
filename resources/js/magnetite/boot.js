@@ -7,6 +7,9 @@ import uploader from './upload';
 import storage from './storage';
 import { send } from './http';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
+import dense from './dense/component';
+import { uiStore } from './dense/ui';
+import { dockInfo, trackPosition } from './dense/info';
 import { playlistCreate, playlistPicker, playlistStore, playlistView, sharedPlaylistView } from './playlists';
 
 const STORAGE_KEY = 'magnetite.theme';
@@ -53,6 +56,7 @@ function readColors() {
 }
 
 Alpine.data('uploader', uploader);
+Alpine.data('dense', dense);
 Alpine.data('storage', storage);
 Alpine.store('playlists', playlistStore);
 Alpine.data('playlistPicker', playlistPicker);
@@ -99,6 +103,13 @@ Alpine.store('dialog', {
     },
 });
 
+/** The user's interface choices (info level, pixelated covers); the theme decides the cover when they have not chosen. */
+Alpine.store('ui', uiStore(
+    window.magnetite?.ui,
+    () => !!themes.find((t) => t.id === Alpine.store('player').themeId)?.pixel,
+    !!window.magnetite?.signedIn,
+));
+
 Alpine.store('player', {
     // state
     queue: [],
@@ -118,6 +129,8 @@ Alpine.store('player', {
     signingOut: false,
     prefetched: null, // id of the track the server was last asked to fetch ahead (Ferrite libraries), so it is asked once
     savedAt: 0, // performance.now() of the last save of the playback state
+    activePanel: 0, // the meter the m keys change
+    note: '', // a few words about what a key just did, shown in the bar
     lastMeters: null, // what was showing before the meters were switched off, for the M key and the Meters button
 
     // internals
@@ -224,12 +237,68 @@ Alpine.store('player', {
         // With no meters, bring back the last ones, or the default.
         if (this.panels.length === 0) {
             this.setMeters(this.lastMeters ?? DEFAULT_METERS);
+            this.activePanel = 0;
 
             return;
         }
 
         const free = this.visualizerList.find((v) => !this.meterIds.includes(v.id));
-        if (free && this.panels.length < MAX_PANELS) this.setMeters([...this.meterIds, free.id]);
+        if (free && this.panels.length < MAX_PANELS) {
+            this.setMeters([...this.meterIds, free.id]);
+            this.activePanel = this.panels.length - 1;
+            this.say(`meter ${this.panels.length}: ${free.label}`);
+        } else if (this.panels.length >= MAX_PANELS) this.say(`up to ${MAX_PANELS} meters`);
+    },
+
+    /** A few words in the bar, gone after a moment. */
+    say(text) {
+        this.note = text;
+        clearTimeout(this.noteTimer);
+        this.noteTimer = setTimeout(() => (this.note = ''), 2500);
+    },
+
+    label(id) {
+        return this.visualizerList.find((v) => v.id === id)?.label ?? id;
+    },
+
+    /** m / M: the active panel shows the next (or previous) meter that is not on another panel; with no meters, m brings one back. */
+    cycleMeter(d) {
+        if (this.panels.length === 0) return this.addPanel();
+
+        const others = this.meterIds.filter((_, i) => i !== this.activePanel);
+        const free = this.visualizerList.map((v) => v.id).filter((id) => !others.includes(id));
+        const at = free.indexOf(this.meterIds[this.activePanel]);
+        const next = free[(at + d + free.length) % free.length];
+        const list = [...this.meterIds];
+        list[this.activePanel] = next;
+        this.setMeters(list);
+        this.say(`meter ${this.activePanel + 1}: ${this.label(next)}`);
+    },
+
+    /** - removes the active meter; the last one goes and the cover takes the room. */
+    removePanel() {
+        if (this.panels.length === 0) return this.say('no meters to remove');
+
+        const gone = this.meterIds[this.activePanel];
+        if (this.meterIds.length === 1) this.lastMeters = this.meterIds;
+        this.setMeters(this.meterIds.filter((_, i) => i !== this.activePanel));
+        this.activePanel = Math.max(0, Math.min(this.activePanel, this.panels.length - 1));
+        this.say(this.panels.length ? `removed ${this.label(gone)}` : 'no meters: m brings one back');
+    },
+
+    /** [ and ] (Tab in full screen): choose which meter the m keys change. */
+    pickPanel(i) {
+        if (this.panels.length < 2) return;
+        this.activePanel = (i + this.panels.length) % this.panels.length;
+        this.say(`meter ${this.activePanel + 1}: ${this.label(this.meterIds[this.activePanel])}`);
+    },
+
+    /** t / T: the next or previous theme. */
+    cycleTheme(d) {
+        const i = themes.findIndex((t) => t.id === this.themeId);
+        const next = themes[(i + d + themes.length) % themes.length];
+        this.setTheme(next.id);
+        this.say(`theme: ${next.name}`);
     },
 
     hasMeter(id) {
@@ -412,11 +481,24 @@ Alpine.store('player', {
         } else if (key === ' ' && !onControl) act(() => this.toggle());
         else if (key === 'ArrowRight') act(() => this.seekBy(e.shiftKey ? 30 : 5));
         else if (key === 'ArrowLeft') act(() => this.seekBy(e.shiftKey ? -30 : -5));
+        else if (key === ',') act(() => this.seekBy(-10)); // as in the terminal client
+        else if (key === '.') act(() => this.seekBy(10));
         else if (/^[0-9]$/.test(key) && this.duration) act(() => this.seek(Number(key) / 10));
-        else if (key === 'n' || key === 'N') act(() => this.next());
-        else if (key === 'p' || key === 'P') act(() => this.prev());
+        else if (key === 'n') act(() => this.next());
+        else if (key === 'p') act(() => this.prev());
+        else if (key === 'P') act(() => Alpine.store('ui').togglePixel()); // covers: real or pixelated
+        else if (key === 'I') act(() => Alpine.store('ui').cycleInfo()); // how much the lists and the player say about the files
         else if (key === 'f' || key === 'F') act(() => (this.expanded = !this.expanded));
-        else if (key === 'm' || key === 'M') act(() => this.toggleMeters());
+        else if (key === 'm') act(() => this.cycleMeter(1)); // the terminal client's keys: m / M change the meter, + and - the number of meters
+        else if (key === 'M') act(() => this.cycleMeter(-1));
+        else if (key === '+' || key === '=') act(() => this.addPanel());
+        else if (key === '-') act(() => this.removePanel());
+        else if (key === '[') act(() => this.pickPanel(this.activePanel - 1));
+        else if (key === ']') act(() => this.pickPanel(this.activePanel + 1));
+        else if (key === 'Tab' && this.expanded && this.panels.length > 1) act(() => this.pickPanel(this.activePanel + 1));
+        else if (key === 'c') act(() => Alpine.store('ui').toggleTint());
+        else if (key === 't') act(() => this.cycleTheme(1));
+        else if (key === 'T') act(() => this.cycleTheme(-1));
         else if (key === '?') act(() => (this.helpOpen = !this.helpOpen));
     },
 
@@ -460,6 +542,7 @@ Alpine.store('player', {
 
             // Each panel draws into its own clipped cell, so a visualizer only ever sees its own w and h.
             const panels = this.panels;
+            const colors = Alpine.store('ui').shade(this.colors, this.current?.cover ?? null, dt); // the theme's, or the cover's with the tint on
             const cells = layout(panels.length, w, h);
             for (let i = 0; i < panels.length; i++) {
                 const { x, y, w: cw, h: ch } = cells[i];
@@ -468,8 +551,14 @@ Alpine.store('player', {
                 g.rect(x, y, cw, ch);
                 g.clip();
                 g.translate(x, y);
-                visualizers[panels[i].id].draw(g, sample, { w: cw, h: ch, colors: this.colors, params: panels[i].params, dt });
+                visualizers[panels[i].id].draw(g, sample, { w: cw, h: ch, colors, params: panels[i].params, dt });
                 g.restore();
+                // with several meters, the one the m keys change has a frame
+                if (panels.length > 1 && i === this.activePanel) {
+                    g.strokeStyle = colors.accent2;
+                    g.lineWidth = 2;
+                    g.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
+                }
             }
 
             // Dev probe for the frame budget: set `window.__magnetitePerf = []` in the console to collect timings (ms).
@@ -477,6 +566,15 @@ Alpine.store('player', {
         };
 
         frame();
+    },
+
+    /** What the bar says under the title about the playing file, at the user's info level (see dense/info.js). */
+    get dock() {
+        return dockInfo(this.current, Alpine.store('ui').info);
+    },
+
+    get position() {
+        return trackPosition(this.current, this.queue, this.index);
     },
 
     fmt(s) {

@@ -5,6 +5,7 @@ use App\Models\SharedItem;
 use App\Models\Track;
 use App\Models\User;
 use App\Services\LibraryScanner;
+use App\Support\FileTruth;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
@@ -186,9 +187,14 @@ describe('sharing', function () {
         }
         Track::where('user_id', $this->bob->id)->where('title', 'First Song')->update(['pcm_sha1' => str_repeat('b', 40)]);
 
-        $response = $this->actingAs($this->bob)->get(route('library'))->assertOk();
+        Track::query()->update(['analysis' => ['loudness' => ['integrated' => -9.0]]]); // findings only exist for analysed tracks
 
-        expect($response->viewData('copies'))->each->not->toContain($this->aliceTrack->id);
+        $page = $this->actingAs($this->bob)->getJson(route('library'))->assertOk()->json();
+        $flags = collect($page['albums'])->flatMap(fn ($a) => $a['tracks'])->merge($page['loose'])->flatMap(fn ($t) => $t['truth']['flags'])->where('code', 'duplicate');
+        $own = collect(FileTruth::copies(Track::where('user_id', $this->bob->id)->get()))->flatten(1)->where('exact', true);
+
+        // exactly the duplicates inside bob's own library: alice's identical files add none
+        expect($flags->count())->toBe($own->count());
     });
 });
 

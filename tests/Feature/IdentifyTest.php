@@ -159,7 +159,9 @@ it('runs as a job and shows the suggestion in the library', function () {
 
     expect(AlbumSuggestion::count())->toBe(1);
     $this->actingAs($this->alice)->getJson(route('identify.show'))->assertJson(['state' => 'done', 'found' => 1]);
-    $this->actingAs($this->alice)->get(route('library'))->assertOk()->assertSee('Discovery')->assertSee('3/3 track(s) fit', false);
+    $this->actingAs($this->alice)->getJson(route('library'))->assertOk()
+        ->assertJsonPath('suggestions.0.candidates.0.title', 'Discovery')->assertJsonPath('suggestions.0.candidates.0.matched', 3);
+    $this->actingAs($this->bob)->getJson(route('library'))->assertOk()->assertJsonCount(0, 'suggestions');
     $this->actingAs($this->bob)->get(route('library'))->assertOk()->assertDontSee('Discovery');
 });
 

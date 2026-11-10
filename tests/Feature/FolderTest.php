@@ -84,5 +84,9 @@ it('shows the folders and their albums in the library, and only the owner\'s', f
     Folder::create(['user_id' => $this->bob->id, 'name' => 'Bobs Secret Folder']);
     $this->album->update(['folder_id' => $jazz->id]);
 
-    $this->actingAs($this->alice)->get(route('library'))->assertOk()->assertSee('Jazz')->assertSee('1 album')->assertSee('Kind of Blue')->assertDontSee('Bobs Secret Folder');
+    $this->actingAs($this->alice)->get(route('library'))->assertOk()->assertSee('Jazz')->assertSee('Kind of Blue')->assertDontSee('Bobs Secret Folder');
+
+    $data = $this->getJson(route('library'))->assertOk()->json();
+    expect(collect($data['folders'])->pluck('name')->all())->toBe(['Jazz'])
+        ->and(collect($data['albums'])->firstWhere('id', $this->album->id)['folder_id'])->toBe($jazz->id);
 });

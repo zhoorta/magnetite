@@ -136,3 +136,44 @@ it('reads the record label from the tags when a file has one', function () {
 
     expect(Album::where('title', 'Labelled Album')->sole()->label)->toBe('Warp Records');
 });
+
+describe('the edit table', function () {
+    it('saves the album and the changed tracks together, and marks them so a rescan keeps them', function () {
+        $second = $this->album->tracks()->where('id', '!=', $this->track->id)->first();
+
+        $this->actingAs($this->alice)->patchJson(route('library.albums.details', $this->album), [
+            'title' => ' Table Title ', 'artist' => 'The Fixers', 'release_date' => '1999-05', 'label' => 'Warp',
+            'tracks' => [
+                ['id' => $this->track->id, 'title' => 'Opening', 'artist' => 'Guest', 'track_number' => 1],
+                ['id' => $second->id, 'title' => 'Closing', 'artist' => '', 'track_number' => 2],
+            ],
+        ])->assertOk()->assertJsonPath('album.title', 'Table Title')->assertJsonPath('album.year', 1999);
+
+        $album = $this->album->fresh();
+        expect($album->title)->toBe('Table Title')->and($album->release_date)->toBe('1999-05')->and($album->label)->toBe('Warp')
+            ->and($this->track->fresh()->only(['title', 'artist', 'track_number']))->toBe(['title' => 'Opening', 'artist' => 'Guest', 'track_number' => 1])
+            ->and($second->fresh()->artist)->toBeNull()
+            ->and($album->tracks()->where('identified', false)->count())->toBe(0);
+    });
+
+    it('changes nothing when one part is refused', function () {
+        Album::create(['user_id' => $this->alice->id, 'title' => 'Other', 'artist' => 'Someone']);
+        $this->actingAs($this->alice);
+
+        // a title and artist that another album of yours has
+        $this->patchJson(route('library.albums.details', $this->album), ['title' => 'Other', 'artist' => 'Someone', 'tracks' => [['id' => $this->track->id, 'title' => 'Changed']]])->assertStatus(422);
+        // a track that is not on this album
+        $this->patchJson(route('library.albums.details', $this->album), ['title' => 'Fine', 'tracks' => [['id' => $this->track->id, 'title' => 'Changed'], ['id' => 999999, 'title' => 'x']]])->assertStatus(422);
+        // an empty track title
+        $this->patchJson(route('library.albums.details', $this->album), ['title' => 'Fine', 'tracks' => [['id' => $this->track->id, 'title' => '']]])->assertStatus(422);
+
+        expect($this->album->fresh()->title)->toBe('Test Album')->and($this->track->fresh()->title)->not->toBe('Changed');
+    });
+
+    it('is the owner\'s alone, and needs a table (it may be empty)', function () {
+        $this->actingAs($this->bob)->patchJson(route('library.albums.details', $this->album), ['title' => 'Mine', 'tracks' => []])->assertNotFound();
+        $this->actingAs($this->alice)->patchJson(route('library.albums.details', $this->album), ['title' => 'Mine'])->assertStatus(422);
+        $this->patchJson(route('library.albums.details', $this->album), ['title' => 'Mine', 'tracks' => []])->assertOk();
+        expect($this->album->fresh()->title)->toBe('Mine');
+    });
+});

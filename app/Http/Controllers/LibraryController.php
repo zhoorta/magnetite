@@ -10,15 +10,17 @@ use App\Models\SharedItem;
 use App\Models\Track;
 use App\Services\AlbumIdentifier;
 use App\Services\FerriteStore;
+use App\Services\TrackAnalyzer;
 use App\Support\FileTruth;
 use App\Support\FolderTree;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class LibraryController extends Controller
 {
     /** The signed-in user's own albums and tracks, and nobody else's; shared music from others is on /shared. */
-    public function library(Request $request, AlbumIdentifier $identifier): View
+    public function library(Request $request, AlbumIdentifier $identifier): View|JsonResponse
     {
         $me = $request->user();
 
@@ -43,7 +45,34 @@ class LibraryController extends Controller
             'tracks' => SharedItem::where('user_id', $me->id)->whereNotNull('track_id')->pluck('track_id')->all(),
         ];
 
-        return view('pages.library', ['childrenOf' => $tree->childrenOf, 'albumsIn' => $tree->albumsIn, 'folderList' => $tree->list, 'albumFolder' => $albums->whereNotNull('folder_id')->pluck('folder_id', 'id'), 'albumCount' => $tree->albumCount, 'albums' => $albums, 'loose' => $loose, 'copies' => $copies, 'shared' => $shared, 'suggestions' => $suggestions, 'toIdentify' => $toIdentify, 'trashOnly' => $me->store() instanceof FerriteStore]);
+        $rows = fn ($tracks) => $tracks->map(fn (Track $t) => $t->toLibrary($copies[$t->id] ?? []))->values();
+
+        // Everything the page draws, as plain data: the dense library renders it in the browser, and the same JSON answers a background refresh.
+        $data = [
+            'folders' => $tree->list,
+            'albums' => $albums->map(fn (Album $a) => [
+                'id' => $a->id,
+                'title' => $a->title,
+                'artist' => $a->displayArtist,
+                'year' => $a->year,
+                'label' => $a->label,
+                'dr' => $a->dr,
+                'dr_class' => FileTruth::drClass($a->dr),
+                'cover' => $a->cover ? route('cover', $a).'?v='.substr((string) $a->cover, 0, 10) : null,
+                'cover_source' => $a->cover_source !== null,
+                'folder_id' => $a->folder_id,
+                'needs_analysis' => $a->tracks->contains(fn (Track $t) => $t->analysis_version === null || $t->analysis_version < TrackAnalyzer::VERSION),
+                'edit' => ['title' => $a->title, 'artist' => $a->artist, 'release_date' => $a->released, 'label' => $a->label],
+                'tracks' => $rows($a->tracks),
+            ])->values(),
+            'loose' => $rows($loose),
+            'shared' => $shared,
+            'suggestions' => $suggestions->map(fn (AlbumSuggestion $s) => ['id' => $s->id, 'folder' => $s->folder, 'candidates' => $s->candidates])->values(),
+            'to_identify' => $toIdentify,
+            'trash_only' => $me->store() instanceof FerriteStore,
+        ];
+
+        return $request->wantsJson() ? response()->json($data) : view('pages.library', ['data' => $data]);
     }
 
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */

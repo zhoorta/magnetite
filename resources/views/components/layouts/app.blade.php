@@ -3,9 +3,12 @@
 <head>
     <x-layouts.head :title="$title ?? 'Magnetite'" />
 </head>
+@php
+    $maxWidth = ($wide ?? false) === 'full' ? 'max-w-7xl' : (($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl');
+@endphp
 <body class="min-h-screen bg-bg text-text antialiased">
     <header class="border-b border-white/10" x-data="{ menu: false }" @keydown.escape.window="menu = false">
-        <nav class="mx-auto flex {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 text-sm sm:flex-nowrap">
+        <nav class="mx-auto flex {{ $maxWidth }} flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 text-sm sm:flex-nowrap">
             <a href="{{ route('welcome') }}" wire:navigate class="font-semibold tracking-wide text-accent">Magnetite</a>
             <button type="button" class="-mr-1 ml-auto rounded-theme p-1.5 text-muted hover:text-accent sm:hidden" aria-label="Menu" :aria-expanded="menu" @click="menu = ! menu">
                 <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
@@ -32,7 +35,7 @@
         </nav>
     </header>
 
-    <main x-data :class="$store.player.panels.length ? 'pb-72' : 'pb-44'" class="mx-auto {{ ($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl' }} px-4 pt-8">
+    <main x-data :class="$store.player.panels.length ? 'pb-80' : 'pb-52'" class="mx-auto {{ $maxWidth }} px-4 pt-8">
         {{ $slot }}
     </main>
 
@@ -52,14 +55,16 @@
             <div x-show="! $store.player.panels.length && $store.player.expanded" x-cloak
                  class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-6 px-6 text-center">
                 <div class="aspect-square max-h-[50vh] w-[min(80vw,28rem)] shrink-0 overflow-hidden rounded-theme bg-surface shadow-lg shadow-black/30">
-                    <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
+                    <img x-show="$store.player.current?.cover && ! $store.ui.pixelated" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
+                    <canvas x-show="$store.player.current?.cover && $store.ui.pixelated" x-effect="$store.ui.paint($el, $store.player.current?.cover)" class="h-full w-full [image-rendering:pixelated]" aria-hidden="true"></canvas>
                 </div>
                 <div class="min-w-0">
                     <p x-text="$store.player.current?.title ?? 'Nothing playing'"
                        class="truncate text-2xl font-semibold sm:text-4xl"></p>
                     <p x-show="$store.player.current?.artist" x-text="$store.player.current?.artist"
                        class="truncate text-lg text-accent"></p>
-                    <p x-show="$store.player.current?.album" x-text="$store.player.current?.album" class="truncate text-sm text-muted"></p>
+                    <p x-show="$store.player.current?.album" x-text="[$store.player.current?.album, $store.player.position].filter(Boolean).join(' · ')" class="truncate text-sm text-muted"></p>
+                    <p x-show="$store.player.dock.line" x-text="$store.player.dock.line" class="truncate text-sm"></p>
                 </div>
             </div>
 
@@ -96,8 +101,15 @@
                             '← →' => 'Back or forward 5 s',
                             'Shift + ← →' => 'Back or forward 30 s',
                             '0 – 9' => 'Jump to 0 – 90 % of the track',
-                            'N / P' => 'Next track / previous (or restart)',
-                            'M' => 'Hide or show the meters',
+                            'n / p' => 'Next track / previous (or restart)',
+                            ', .' => 'Back or forward 10 s',
+                            'Shift + P' => 'Pixelate the covers, or show them as they are',
+                            'Shift + I' => 'How much the lists and the player say about the files: all, DR only, nothing',
+                            'm / M' => 'Next / previous meter on the active panel (none shown: bring one back)',
+                            '+ / -' => 'Add / remove a meter panel (0 to 4)',
+                            '[ / ]' => 'Choose the panel m changes (Tab in full screen)',
+                            'c' => 'Meter colours from the playing cover',
+                            't / T' => 'Next / previous theme',
                             'F' => 'Full screen',
                             'Esc' => 'Close full screen or this list',
                             '?' => 'This list',
@@ -113,18 +125,32 @@
             <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
                 <div class="flex min-h-10 items-center justify-between text-sm">
                     <div x-show="$store.player.panels.length || ! $store.player.expanded" class="flex min-w-0 items-center gap-3">
-                        <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt=""
-                             class="h-10 w-10 shrink-0 rounded-theme object-cover">
-                        <div class="min-w-0 truncate">
-                            <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-medium"></span>
-                            <span x-show="$store.player.current?.artist" x-text="' · ' + $store.player.current?.artist" class="text-muted"></span>
+                        <div class="h-16 w-16 shrink-0 overflow-hidden rounded-theme bg-surface">
+                            <img x-show="$store.player.current?.cover && ! $store.ui.pixelated" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
+                            {{-- The mosaic view of the same cover (P, or the theme's choice) --}}
+                            <canvas x-show="$store.player.current?.cover && $store.ui.pixelated" x-effect="$store.ui.paint($el, $store.player.current?.cover)" class="h-full w-full [image-rendering:pixelated]" aria-hidden="true"></canvas>
+                        </div>
+                        <div class="min-w-0 leading-snug">
+                            <p class="truncate">
+                                <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-medium"></span>
+                                <span x-show="$store.player.current?.artist" x-text="' · ' + $store.player.current?.artist" class="text-muted"></span>
+                            </p>
+                            <p x-show="$store.player.current?.album" class="truncate text-xs text-muted" x-text="[$store.player.current?.album, $store.player.position].filter(Boolean).join(' · ')"></p>
+                            {{-- Format, DR and loudness (info level 1 and up), then the findings (level 2): see dense/info.js --}}
+                            <p x-show="$store.player.dock.line" class="truncate text-xs" x-text="$store.player.dock.line"></p>
+                            <p x-show="$store.player.dock.findings.length" class="truncate text-xs">
+                                <template x-for="f in $store.player.dock.findings" :key="f.code">
+                                    <span class="mr-3" :title="f.detail"><span :class="f.level === 'problem' ? 'text-red-500' : 'text-amber-500'">!</span> <span x-text="f.label"></span></span>
+                                </template>
+                            </p>
                         </div>
                     </div>
                     <div class="ml-auto flex items-center gap-2">
+                        <span x-show="$store.player.note" x-cloak x-text="$store.player.note" class="truncate text-xs text-accent2" aria-live="polite"></span>
                         <x-menu up label="Meters" width="w-56">
                             <x-slot:trigger>
                                 <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu"
-                                        title="Choose the meters (M hides or shows them)" aria-label="Meters"
+                                        title="Choose the meters (m changes the active one, + and - add and remove)" aria-label="Meters"
                                         class="flex items-center gap-1.5 rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
                                         :class="$store.player.panels.length && 'text-accent'">
                                     <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">

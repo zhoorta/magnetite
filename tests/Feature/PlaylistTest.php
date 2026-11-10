@@ -299,8 +299,8 @@ describe('adding a whole album', function () {
         SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->album->id]);
 
         $this->actingAs($this->alice);
-        foreach ([route('library'), route('shared')] as $url) {
-            $this->get($url)->assertOk()->assertSee('Add every track of this album to a playlist');
-        }
+        // the library's toolbar adds the selected album; the shared page has a button on every album
+        $this->get(route('library'))->assertOk()->assertSee('Add to a playlist');
+        $this->get(route('shared'))->assertOk()->assertSee('Add every track of this album to a playlist');
     });
 });
