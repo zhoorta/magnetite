@@ -286,6 +286,15 @@ impl Browser {
         self.reselect(keep);
     }
 
+    /// The text a find looks in for each row shown, in the order shown.
+    pub fn find_rows(&self) -> Vec<String> {
+        self.view().iter().map(|r| format!("{} {} {}", r.track.title, r.track.artist.clone().unwrap_or_default(), r.track.album.clone().unwrap_or_default())).collect()
+    }
+
+    pub fn select_index(&mut self, i: usize) {
+        self.table.select(Some(i));
+    }
+
     pub fn mv(&mut self, d: i32) {
         let len = self.view().len() as i32;
         if len > 0 {

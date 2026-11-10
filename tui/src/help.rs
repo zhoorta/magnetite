@@ -40,6 +40,7 @@ const LIBRARY: Section = ("Library", &[
     ("enter", "open an album / play from a track"),
     ("h", "back to the albums"),
     ("/", "search"),
+    ("\\", "find in the list in front of you: type words, the selection jumps"),
     ("A", "analyse the selected album / track (server side)"),
     ("i", "file-truth table"),
     ("f", "full screen"),
@@ -54,6 +55,7 @@ const TRUTH: Section = ("File-truth table", &[
     ("d", "only tracks with copies, copies side by side"),
     ("a", "A/B compare with another copy"),
     ("/", "search"),
+    ("\\", "find in the table: type words, ↓/↑ next/previous, enter stays, esc back"),
     ("i / esc", "back"),
 ]);
 

@@ -187,6 +187,12 @@ fn terms(query: &str) -> Vec<Vec<char>> {
     query.split_whitespace().map(fold).filter(|t| !t.is_empty()).collect()
 }
 
+/// Does `text` have every word of `query`, ignoring case and accents? A query with no word matches everything.
+pub fn contains_all(text: &str, query: &str) -> bool {
+    let folded = fold(text);
+    terms(query).iter().all(|w| w.len() <= folded.len() && (0..=folded.len() - w.len()).any(|i| folded[i..i + w.len()] == w[..]))
+}
+
 /// Which characters of `text` are part of a match of one of the words.
 fn marks(text: &str, words: &[Vec<char>]) -> Vec<bool> {
     let folded = fold(text);
