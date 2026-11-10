@@ -184,6 +184,21 @@ impl Api {
         }
     }
 
+    /// Queue the analysis of one album, one track, or (both None) everything that has none yet; answers with the status.
+    pub fn start_analysis(&self, album: Option<u64>, track: Option<u64>) -> Result<Value> {
+        self.send("POST", "/analysis").send_json(json!({ "album_id": album, "track_id": track })).map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    /// The analysis run of this account: `state` (idle, queued, running, done), `total`, `done`, `failed`, `current`.
+    pub fn analysis(&self) -> Result<Value> {
+        self.get("/analysis").call().map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    pub fn track(&self, id: u64) -> Result<Track> {
+        let d: Data<Track> = self.get(&format!("/tracks/{id}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        Ok(d.data)
+    }
+
     /// Tracks without an album that arrived since a server time, in groups by folder (`[{folder, tracks: [{id, title, artist, number}]}]`).
     pub fn loose_tracks(&self, since: i64) -> Result<Vec<Value>> {
         let v: Value = self.get(&format!("/tracks/loose?since={since}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;

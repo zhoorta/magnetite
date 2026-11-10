@@ -40,6 +40,7 @@ const LIBRARY: Section = ("Library", &[
     ("enter", "open an album / play from a track"),
     ("h", "back to the albums"),
     ("/", "search"),
+    ("A", "analyse the selected album / track (server side)"),
     ("i", "file-truth table"),
     ("f", "full screen"),
     ("q", "quit"),

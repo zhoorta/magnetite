@@ -154,6 +154,11 @@ impl Browser {
         Browser { rows: vec![], total: 0, loaded: 0, sort: Sort::Severity, filter: Filter::All, peers: Default::default(), keys: Default::default(), table: TableState::default(), rx: None }
     }
 
+    /// Forget what was loaded, so the next `start` reads the library again (after new analyses).
+    pub fn reset(&mut self) {
+        *self = Browser::new();
+    }
+
     /// Load the library's analysed tracks, once, in the background.
     pub fn start(&mut self, api: &Api, albums: &[Album]) {
         if self.rx.is_some() {

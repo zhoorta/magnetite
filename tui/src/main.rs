@@ -1,4 +1,5 @@
 mod ab;
+mod analyze;
 mod api;
 mod audio;
 mod config;
@@ -39,17 +40,23 @@ fn main() {
         }
         Some("theme") => theme_cmd(args.get(1)),
         Some("upload") => std::process::exit(upload_cmd(&args[1..])),
-        Some("-h") | Some("--help") => println!("magnetite            open the player\nmagnetite login URL  sign in (shows a code to approve in the browser)\nmagnetite logout     forget the token\nmagnetite theme [ID] list themes or choose one (t cycles them in the player)\nmagnetite upload PATH… send zips, folders or audio files, then look at the new albums (--identify, --cover, --no-review, --artist, --album, --year)\n\nIn the player, ? shows every key."),
+        Some("analyze") => std::process::exit(signed_in(|api| analyze::run(api, &args[1..]))),
+        Some("-h") | Some("--help") => println!("magnetite            open the player\nmagnetite login URL  sign in (shows a code to approve in the browser)\nmagnetite logout     forget the token\nmagnetite theme [ID] list themes or choose one (t cycles them in the player)\nmagnetite upload PATH… send zips, folders or audio files, then look at the new albums (--identify, --cover, --analyze, --no-review, --artist, --album, --year)\nmagnetite analyze … measure an album, a track or everything not yet analysed: --all, --album ID, --track ID or a search text; --status, --no-wait\n\nIn the player, ? shows every key."),
         _ => run(),
     }
 }
 
 fn upload_cmd(args: &[String]) -> i32 {
+    signed_in(|api| upload::run(api, args))
+}
+
+/// Runs a command that needs the server, with the saved token.
+fn signed_in(f: impl FnOnce(&api::Api) -> i32) -> i32 {
     let Some(cfg) = config::load() else {
         eprintln!("not signed in (run `magnetite login https://your.server`)");
         return 1;
     };
-    upload::run(&api::Api::new(&cfg.server, &cfg.token), args)
+    f(&api::Api::new(&cfg.server, &cfg.token))
 }
 
 fn config_path_hint() -> std::path::PathBuf {
@@ -211,6 +218,7 @@ struct App {
     resume: Option<f64>, // a track opened from the last session, not started: space plays it from here
     saved_at: Instant,
     help: bool,    // the ? overlay
+    analysing: Option<analyze::Job>, // an analysis started with A, followed in the background
     full: bool,    // meters fill the terminal, like the web's full screen
     status: String,
     quit: bool,
@@ -236,7 +244,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -274,6 +282,7 @@ impl App {
         }
         self.cover.poll();
         self.truth.poll();
+        self.poll_analysis();
         if self.view == View::Search {
             self.search.tick(&self.api, false);
         }
@@ -322,6 +331,7 @@ impl App {
                 self.view = View::Search;
                 self.search.typing = true;
             }
+            (KeyCode::Char('A'), _) if !self.full && self.ab.is_none() && self.view == View::Library => self.analyse_selected(),
             (KeyCode::Char('i'), _) if !self.full => {
                 self.view = View::Truth;
                 self.truth.start(&self.api, &self.albums);
@@ -854,6 +864,58 @@ impl App {
         }
     }
 
+    /// `A`: the server measures the selected album (album list) or track (track list); progress shows in the footer.
+    fn analyse_selected(&mut self) {
+        if self.analysing.is_some() {
+            self.status = "an analysis is already running".into();
+            return;
+        }
+        let (album, track, owner, what) = match self.focus {
+            Focus::Albums => {
+                let Some(a) = self.album_sel.selected().and_then(|i| self.albums.get(i)) else { return };
+                (Some(a.id), None, Some(a.id), a.title.clone())
+            }
+            Focus::Tracks => {
+                let Some(t) = self.track_sel.selected().and_then(|i| self.open.as_ref().and_then(|a| a.tracks.get(i))) else { return };
+                (None, Some(t.id), self.open.as_ref().map(|a| a.id), t.title.clone())
+            }
+        };
+        self.status = format!("analysing {what}: asking the server");
+        self.analysing = Some(analyze::Job::start(&self.api, album, track, owner));
+    }
+
+    fn poll_analysis(&mut self) {
+        let Some(job) = &self.analysing else { return };
+        let mut finished = false;
+        while let Ok(msg) = job.rx.try_recv() {
+            match msg {
+                analyze::Msg::Progress(s) => self.status = format!("analysing: {s}"),
+                analyze::Msg::Done(s) => {
+                    self.status = s;
+                    finished = true;
+                }
+                analyze::Msg::Failed(e) => {
+                    self.status = format!("analysis: {e}");
+                    finished = true;
+                }
+            }
+        }
+        if !finished {
+            return;
+        }
+        let album = job.album;
+        self.analysing = None;
+        self.truth.reset(); // the table reads the library again at the next `i`
+        // the open album shows its tracks' numbers: read it again when it is the one that was measured
+        if let (Some(id), Some(open)) = (album, &self.open) {
+            if open.id == id {
+                if let Ok(full) = self.api.album(id) {
+                    self.open = Some(full);
+                }
+            }
+        }
+    }
+
     /// Keys of the truth table; true when it used the key.
     fn truth_key(&mut self, code: KeyCode) -> bool {
         match code {
@@ -1160,7 +1222,7 @@ impl App {
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Tracks, title)).highlight_style(sel), right, &mut self.track_sel);
 
         self.draw_now(f, now, &th);
-        let hint = if self.status.is_empty() { "? all keys · enter open/play · / search · i file truth · space pause · n/p · ,/. seek · m meter · f full screen · t theme · q quit".to_string() } else { self.status.clone() };
+        let hint = if self.status.is_empty() { "? all keys · enter open/play · / search · A analyse · i file truth · space pause · n/p · ,/. seek · m meter · f full screen · t theme · q quit".to_string() } else { self.status.clone() };
         f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
     }
 

@@ -12,6 +12,7 @@ pub struct Options {
     pub paths: Vec<PathBuf>,
     pub identify: bool,
     pub cover: bool,
+    pub analyze: bool,
     pub review: bool, // ask about every album (off with --no-review)
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -27,6 +28,7 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
         match a.as_str() {
             "--identify" => o.identify = true,
             "--cover" => o.cover = true,
+            "--analyze" => o.analyze = true,
             "--no-review" => o.review = false,
             "--artist" => o.artist = Some(value("--artist")?),
             "--album" => o.album = Some(value("--album")?),
@@ -36,7 +38,7 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
         }
     }
     if o.paths.is_empty() {
-        return Err("usage: magnetite upload <zip|folder|audio files…> [--identify] [--cover] [--no-review] [--artist X] [--album X] [--year N]".into());
+        return Err("usage: magnetite upload <zip|folder|audio files…> [--identify] [--cover] [--analyze] [--no-review] [--artist X] [--album X] [--year N]".into());
     }
     Ok(o)
 }
@@ -257,6 +259,19 @@ pub fn run(api: &Api, args: &[String]) -> i32 {
     }
     // the named ones already carry what the flags said
     let todo: Vec<(Album, bool)> = albums.into_iter().map(|a| (a, true)).chain(made.into_iter().map(|a| (a, false))).collect();
+    // The analysis runs on the server while the albums are reviewed; the report comes last.
+    let mut queued = vec![];
+    if opts.analyze {
+        for (a, _) in &todo {
+            match api.start_analysis(Some(a.id), None) {
+                Ok(_) => queued.push(a.id),
+                Err(e) => eprintln!("  analysis of #{}: {e}", a.id),
+            }
+        }
+        if !queued.is_empty() {
+            println!("\nanalysis queued for {} album{}", queued.len(), if queued.len() == 1 { "" } else { "s" });
+        }
+    }
     for (a, edit) in todo {
         let a = if edit { edit_fields(api, a, &opts) } else { a };
         println!("\n{} · {}", a.shown_artist(), a.title);
@@ -268,6 +283,17 @@ pub fn run(api: &Api, args: &[String]) -> i32 {
         }
         if interactive && !review(api, &a) {
             break;
+        }
+    }
+    if !queued.is_empty() {
+        println!();
+        if let Err(e) = crate::analyze::wait(api, &queued) {
+            return fail(&e);
+        }
+        for id in queued.clone() {
+            if let Err(e) = crate::analyze::report_album(api, id) {
+                eprintln!("  #{id}: {e}");
+            }
         }
     }
     0
