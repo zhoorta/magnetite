@@ -127,6 +127,15 @@ A separate pool (own socket), so other sites on the same FPM are untouched: do n
             fastcgi_pass unix:/run/php/php8.5-fpm-magnetite.sock;
             fastcgi_read_timeout 600s;
         }
+        # The same for the API upload (`magnetite upload` in the terminal client, the mobile apps): without it nginx answers 413 above 4m
+        location = /api/v1/uploads {
+            client_max_body_size 16g;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $realpath_root/index.php;
+            fastcgi_param SCRIPT_NAME /index.php;
+            fastcgi_pass unix:/run/php/php8.5-fpm-magnetite.sock;
+            fastcgi_read_timeout 600s;
+        }
         location / { try_files $uri $uri/ /index.php?$query_string; }
         location ~ ^/index\.php(/|$) {
             include fastcgi_params;
