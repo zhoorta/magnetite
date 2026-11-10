@@ -10,14 +10,12 @@ class UiSettingController extends Controller
 {
     /**
      * `info`: how much the lists and the player show about the files (0 none, 1 DR, 2 DR and findings).
-     * `pixel`: pixelated covers (true), real covers (false), or null to follow the theme. `tint`: meter colours from the playing
-     * cover. Only the keys sent change.
+     * `tint`: meter colours from the playing cover. Only the keys sent change.
      */
     public function update(Request $request): JsonResponse
     {
         $data = $request->validate([
             'info' => ['sometimes', 'integer', 'between:0,2'],
-            'pixel' => ['sometimes', 'nullable', 'boolean'],
             'tint' => ['sometimes', 'boolean'],
         ]);
 

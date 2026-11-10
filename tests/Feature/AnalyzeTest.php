@@ -252,3 +252,18 @@ it('keeps retrying while another run holds the lock', function (string $job) {
     // A released job counts as an attempt; without retryUntil() the second one failed with "attempted too many times".
     expect(method_exists($job, 'retryUntil'))->toBeTrue();
 })->with([AnalyzeTracks::class, ScanLibrary::class, FindCovers::class]);
+
+it('keeps the long spectrum out of the library data and hands it over for one track on request', function () {
+    app(LibraryScanner::class)->scan($this->user);
+    $track = Track::where('title', 'First Song')->sole();
+    $track->forceFill(['dr' => 9, 'analysis' => ['sample_rate' => 44100, 'spectrum' => ['db' => [-40, -50, -60], 'step_hz' => 250]]])->save();
+
+    $row = collect($this->getJson(route('library'))->json('albums'))->flatMap(fn ($a) => $a['tracks'])->firstWhere('id', $track->id);
+    expect($row['truth'])->not->toHaveKey('spectrum')->and($row['truth']['spectrum_points'])->toBe(3);
+
+    $this->getJson(route('library.tracks.spectrum', $track))->assertOk()->assertJson(['spectrum' => [-40, -50, -60], 'step_hz' => 250]);
+
+    // somebody else's track is a 404
+    $other = User::factory()->create(['username' => 'other']);
+    $this->actingAs($other)->getJson(route('library.tracks.spectrum', $track))->assertNotFound();
+});

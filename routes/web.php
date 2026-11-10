@@ -47,6 +47,7 @@ Route::middleware('auth:web,sanctum')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/library', [LibraryController::class, 'library'])->name('library');
     Route::get('/shared', [LibraryController::class, 'shared'])->name('shared');
+    Route::get('/library/tracks/{track}/spectrum', [LibraryController::class, 'spectrum'])->whereNumber('track')->name('library.tracks.spectrum');
     Route::get('/search', SearchController::class)->middleware('throttle:120,1')->name('search');
 
     Route::post('/share/{kind}/{id}', [ShareController::class, 'store'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('share.store');

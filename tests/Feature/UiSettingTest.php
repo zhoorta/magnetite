@@ -11,16 +11,15 @@ it('needs a signed-in user', function () {
     $this->putJson(route('settings.ui'), ['info' => 1])->assertUnauthorized();
 });
 
-it('saves the info level and the cover choice, and only the keys that are sent change', function () {
+it('saves the info level, and only the keys that are sent change', function () {
     $this->actingAs($this->alice);
 
-    $this->putJson(route('settings.ui'), ['info' => 1, 'pixel' => true])->assertOk()->assertJson(['ui' => ['info' => 1, 'pixel' => true]]);
-    $this->putJson(route('settings.ui'), ['info' => 0])->assertOk();
-    expect($this->alice->fresh()->ui)->toBe(['info' => 0, 'pixel' => true]);
+    $this->putJson(route('settings.ui'), ['info' => 1])->assertOk()->assertJson(['ui' => ['info' => 1]]);
+    $this->putJson(route('settings.ui'), ['tint' => true])->assertOk();
+    expect($this->alice->fresh()->ui)->toBe(['info' => 1, 'tint' => true]);
 
-    // null means "follow the theme"
-    $this->putJson(route('settings.ui'), ['pixel' => null])->assertOk();
-    expect($this->alice->fresh()->ui)->toBe(['info' => 0, 'pixel' => null]);
+    $this->putJson(route('settings.ui'), ['info' => 0])->assertOk();
+    expect($this->alice->fresh()->ui)->toBe(['info' => 0, 'tint' => true]);
 });
 
 it('refuses levels and values that make no sense', function () {
@@ -29,7 +28,6 @@ it('refuses levels and values that make no sense', function () {
     $this->putJson(route('settings.ui'), ['info' => 3])->assertUnprocessable();
     $this->putJson(route('settings.ui'), ['info' => -1])->assertUnprocessable();
     $this->putJson(route('settings.ui'), ['info' => 'lots'])->assertUnprocessable();
-    $this->putJson(route('settings.ui'), ['pixel' => 'maybe'])->assertUnprocessable();
     $this->putJson(route('settings.ui'), ['tint' => 'sometimes'])->assertUnprocessable();
 
     expect($this->alice->fresh()->ui)->toBeNull();

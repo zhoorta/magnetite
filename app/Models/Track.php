@@ -86,16 +86,16 @@ class Track extends Model
      * What the library page shows about the file: the measurements in plain units, and the findings from
      * FileTruth. `$copies` comes from FileTruth::copies() for the whole library.
      */
-    public function toTruth(array $copies = []): array
+    public function toTruth(array $copies = [], bool $spectrum = true): array
     {
         $a = $this->analysis;
         if (! is_array($a)) {
             return ['analyzed' => false, 'flags' => []];
         }
 
-        $spectrum = $a['spectrum'] ?? [];
+        $curve = $a['spectrum'] ?? [];
 
-        return [
+        $truth = [
             'analyzed' => true,
             'dr' => $this->dr,
             'dr_class' => FileTruth::drClass($this->dr),
@@ -107,19 +107,22 @@ class Track extends Model
             'sample_rate' => $a['sample_rate'] ?? null,
             'bits' => $a['effective_bits'] ?? null,
             'declared_bits' => $a['source']['declared_bits'] ?? null,
-            'cutoff_hz' => $spectrum['cutoff_hz'] ?? null,
-            'content_hz' => $spectrum['content_hz'] ?? null,
-            'spectrum' => $spectrum['db'] ?? [],
-            'step_hz' => $spectrum['step_hz'] ?? 500,
+            'cutoff_hz' => $curve['cutoff_hz'] ?? null,
+            'content_hz' => $curve['content_hz'] ?? null,
+            'step_hz' => $curve['step_hz'] ?? 500,
             'flags' => FileTruth::flags($this, $copies),
         ];
+
+        // The curve itself is long. The library page leaves it out and asks for it when a track's measurements are opened
+        // (LibraryController::spectrum); the API sends it on request.
+        return $spectrum ? $truth + ['spectrum' => $curve['db'] ?? []] : $truth + ['spectrum_points' => count($curve['db'] ?? [])];
     }
 
     /** Player shape plus the file-truth findings, for the library page. */
     public function toLibrary(array $copies = []): array
     {
         // `edit`: what the owner may correct, as stored (the track's own artist, not the album's).
-        return $this->toPlayer() + ['edit' => ['title' => $this->title, 'artist' => $this->artist, 'track_number' => $this->track_number], 'truth' => $this->toTruth($copies)];
+        return $this->toPlayer() + ['edit' => ['title' => $this->title, 'artist' => $this->artist, 'track_number' => $this->track_number], 'truth' => $this->toTruth($copies, spectrum: false)];
     }
 
     /** Shape sent to the player. */
@@ -130,6 +133,7 @@ class Track extends Model
             'title' => $this->title,
             'artist' => $this->artist ?? $this->album?->artist,
             'album' => $this->album?->title,
+            'year' => $this->album?->year,
             'album_id' => $this->album_id,
             'cover' => $this->album?->cover ? $this->album->coverUrl() : null,
             'duration' => $this->duration,

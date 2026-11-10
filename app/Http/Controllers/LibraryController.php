@@ -75,6 +75,15 @@ class LibraryController extends Controller
         return $request->wantsJson() ? response()->json($data) : view('pages.library', ['data' => $data]);
     }
 
+    /** The average spectrum of one of the user's own tracks (the library sends the rest of its measurements, but not this long curve). */
+    public function spectrum(Request $request, Track $track): JsonResponse
+    {
+        abort_unless($request->user()->can('update', $track), 404);
+        $s = $track->analysis['spectrum'] ?? [];
+
+        return response()->json(['spectrum' => $s['db'] ?? [], 'step_hz' => $s['step_hz'] ?? 500]);
+    }
+
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */
     public function shared(Request $request): View
     {

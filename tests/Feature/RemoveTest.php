@@ -180,6 +180,10 @@ it('renders the library page with its Alpine component intact', function () {
 
     // The component's data is an attribute in double quotes: it must not contain one, or the page prints code.
     preg_match('/<div x-data="(dense\(.*?\))" tabindex/s', $html, $m);
-    expect($m[1] ?? '')->toStartWith('dense(JSON.parse(')->toContain('Record')->not->toContain('"');
+    expect($m[1] ?? '')->toStartWith('dense(JSON.parse(')->not->toContain('Record');
+
+    // The data is JSON in a script block, safe inside HTML: no raw tag can end it early.
+    preg_match('#<script type="application/json" id="library-data">(.*?)</script>#s', $html, $d);
+    expect(json_decode($d[1] ?? '', true)['albums'][0]['title'] ?? null)->toBe('Record')->and($d[1])->not->toContain('<');
     File::deleteDirectory(config('magnetite.music_path'));
 });
