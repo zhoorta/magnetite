@@ -7,6 +7,7 @@ mod loudness;
 mod media;
 mod meters;
 mod panels;
+mod search;
 mod stream;
 mod theme;
 mod truth;
@@ -123,13 +124,20 @@ fn theme_cmd(id: Option<&String>) {
     }
 }
 
+/// Library order: the artist that is shown (the server's `display_artist`, so an album without an album-artist tag sorts under its
+/// tracks' artist and not first), then year, then title. The server sorts the same way once it is updated; this keeps an older one right.
+fn sort_albums(albums: &mut [Album]) {
+    albums.sort_by_cached_key(|a| (a.shown_artist().to_lowercase(), a.year.unwrap_or(0), a.title.to_lowercase()));
+}
+
 fn run() {
     let Some(cfg) = config::load() else { return eprintln!("Not signed in. Run: magnetite login https://your.server") };
     let api = Api::new(&cfg.server, &cfg.token);
-    let albums = match api.albums() {
+    let mut albums = match api.albums() {
         Ok(a) => a,
         Err(e) => return eprintln!("{e}"),
     };
+    sort_albums(&mut albums);
     let player = match Player::new() {
         Ok(p) => p,
         Err(e) => return eprintln!("audio: {e}"),
@@ -148,6 +156,7 @@ fn run() {
 enum View {
     Library,
     Truth, // the file-truth table instead of the two lists
+    Search,
 }
 
 #[derive(PartialEq)]
@@ -187,6 +196,7 @@ struct App {
     queue_albums: Vec<u64>, // the album of each queued track (a queue from the truth table mixes albums)
     view: View,
     truth: truth::Browser,
+    search: search::Search,
     resume: Option<f64>, // a track opened from the last session, not started: space plays it from here
     saved_at: Instant,
     full: bool,    // meters fill the terminal, like the web's full screen
@@ -214,7 +224,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), resume: None, saved_at: Instant::now(), full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -252,6 +262,9 @@ impl App {
         }
         self.cover.poll();
         self.truth.poll();
+        if self.view == View::Search {
+            self.search.tick(&self.api, false);
+        }
         self.media_commands();
         if self.ab.is_some() {
             return self.ab_tick(dt);
@@ -279,10 +292,17 @@ impl App {
         if self.ab.is_some() && mods != KeyModifiers::CONTROL && self.ab_key(code) {
             return;
         }
+        if self.view == View::Search && self.ab.is_none() && !self.full && mods != KeyModifiers::CONTROL && self.search_key(code) {
+            return;
+        }
         if self.view == View::Truth && !self.full && mods != KeyModifiers::CONTROL && self.truth_key(code) {
             return;
         }
         match (code, mods) {
+            (KeyCode::Char('/'), _) if !self.full && self.ab.is_none() => {
+                self.view = View::Search;
+                self.search.typing = true;
+            }
             (KeyCode::Char('i'), _) if !self.full => {
                 self.view = View::Truth;
                 self.truth.start(&self.api, &self.albums);
@@ -759,6 +779,62 @@ impl App {
         self.now.and_then(|i| self.queue_albums.get(i)).copied()
     }
 
+    /// Keys of the search. Typing, every key is text (so `q` and the player keys do not fire); in the results the movement keys
+    /// work, `enter` plays a track or opens an album, `/` or `esc` goes back to typing, and the player keys still work.
+    fn search_key(&mut self, code: KeyCode) -> bool {
+        if self.search.typing {
+            match code {
+                KeyCode::Esc => self.view = View::Library,
+                KeyCode::Enter | KeyCode::Down => {
+                    self.search.tick(&self.api, true);
+                    if !self.search.hits.is_empty() {
+                        self.search.typing = false;
+                    }
+                }
+                KeyCode::Backspace => self.search.pop(),
+                KeyCode::Delete => self.search.clear(),
+                KeyCode::Char(ch) => self.search.push(ch),
+                _ => {}
+            }
+            return true;
+        }
+        match code {
+            KeyCode::Down | KeyCode::Char('j') => self.search.mv(1),
+            KeyCode::Up | KeyCode::Char('k') => self.search.mv(-1),
+            KeyCode::PageDown => self.search.mv(10),
+            KeyCode::PageUp => self.search.mv(-10),
+            KeyCode::Char('/') | KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => self.search.typing = true,
+            KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => self.search_activate(),
+            KeyCode::Char('i') | KeyCode::Char('s') | KeyCode::Char('o') | KeyCode::Char('d') | KeyCode::Char('a') => {}
+            _ => return false,
+        }
+        true
+    }
+
+    fn search_activate(&mut self) {
+        if let Some((tracks, at)) = self.search.tracks_from_selected() {
+            self.queue_albums = tracks.iter().map(|t| t.album_id.unwrap_or(0)).collect();
+            self.queue = tracks;
+            self.start(at);
+            return;
+        }
+        let Some(search::Hit::Album(a)) = self.search.selected() else { return };
+        let id = a.id;
+        match self.api.album(id) {
+            Ok(full) => {
+                if let Some(i) = self.albums.iter().position(|x| x.id == id) {
+                    self.album_sel.select(Some(i));
+                }
+                self.track_sel.select(if full.tracks.is_empty() { None } else { Some(0) });
+                self.open = Some(full);
+                self.focus = Focus::Tracks;
+                self.view = View::Library;
+                self.status.clear();
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// Keys of the truth table; true when it used the key.
     fn truth_key(&mut self, code: KeyCode) -> bool {
         match code {
@@ -993,6 +1069,19 @@ impl App {
             head,
         );
 
+        if self.view == View::Search {
+            let playing = self.now.and_then(|i| self.queue.get(i)).map(|t| t.id);
+            let icon = self.play_icon();
+            search::draw(f, body, &mut self.search, playing, icon, &th);
+            self.draw_now(f, now, &th);
+            let hint = if self.status.is_empty() {
+                if self.search.typing { "type to search (2+ letters) · enter results · delete clear · esc close".to_string() } else { "enter play the track / open the album · j/k move · / or esc type again · space pause · n/p · q quit".to_string() }
+            } else {
+                self.status.clone()
+            };
+            f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
+            return;
+        }
         if self.view == View::Truth {
             let playing = self.now.and_then(|i| self.queue.get(i)).map(|t| t.id);
             let icon = self.play_icon();
@@ -1044,7 +1133,7 @@ impl App {
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Tracks, title)).highlight_style(sel), right, &mut self.track_sel);
 
         self.draw_now(f, now, &th);
-        let hint = if self.status.is_empty() { "enter open/play · i file truth · space pause · n next · p previous (restarts after 3 s) · ,/. seek 10s · tab/m meter · c cover colours · L loudness · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
+        let hint = if self.status.is_empty() { "enter open/play · / search · i file truth · space pause · n next · p previous (restarts after 3 s) · ,/. seek 10s · tab/m meter · c cover colours · L loudness · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
         f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
     }
 
@@ -1161,6 +1250,22 @@ fn spark(bands: &[f32], n: usize, lo: ratatui::style::Color, hi: ratatui::style:
 fn mmss(s: f64) -> String {
     let s = s.max(0.0) as u64;
     format!("{}:{:02}", s / 60, s % 60)
+}
+
+#[cfg(test)]
+mod sort_tests {
+    use super::*;
+
+    fn album(title: &str, artist: Option<&str>, display: Option<&str>, year: i64) -> Album {
+        serde_json::from_value(serde_json::json!({"id": 1, "title": title, "artist": artist, "display_artist": display, "year": year})).unwrap()
+    }
+
+    #[test]
+    fn albums_without_an_album_artist_sort_under_their_shown_artist() {
+        let mut v = vec![album("Happy Trails", None, Some("Quicksilver Messenger Service"), 1969), album("Paranoid", None, Some("Black Sabbath"), 1970), album("Zed", Some("Talking Heads"), Some("Talking Heads"), 1980), album("Early", Some("quicksilver messenger service"), None, 1968)];
+        sort_albums(&mut v);
+        assert_eq!(v.iter().map(|a| a.title.as_str()).collect::<Vec<_>>(), vec!["Paranoid", "Early", "Happy Trails", "Zed"]);
+    }
 }
 
 #[cfg(test)]
@@ -1338,5 +1443,57 @@ mod live_ab {
         app.player.set_gain(0.0);
         app.player.stop();
         assert!((pa - pb).abs() < 0.25, "sides drifted apart");
+    }
+}
+
+#[cfg(test)]
+mod live_search {
+    use super::*;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    /// `cargo test live_search -- --ignored --nocapture`: types "bow" into the search and shows the screen.
+    #[test]
+    #[ignore]
+    fn live_search() {
+        let cfg = config::load().expect("sign in first");
+        let api = Api::new(&cfg.server, &cfg.token);
+        let albums = api.albums().unwrap();
+        let mut app = App::new(api, albums, Player::new().unwrap(), cfg);
+        app.key(KeyCode::Char('/'), KeyModifiers::NONE);
+        for ch in "bow".chars() {
+            app.key(KeyCode::Char(ch), KeyModifiers::NONE); // `q`, `n`, `p`... would be text here, not commands
+        }
+        std::thread::sleep(Duration::from_millis(350));
+        for _ in 0..50 {
+            app.tick(0.033);
+            if !app.search.hits.is_empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        let mut t = Terminal::new(TestBackend::new(110, 30)).unwrap();
+        t.draw(|f| app.draw(f)).unwrap();
+        let b = t.backend().buffer();
+        for y in 0..30 {
+            println!("{}", (0..110).map(|x| b[(x, y)].symbol().to_string()).collect::<String>());
+        }
+    }
+}
+
+#[cfg(test)]
+mod live_sort {
+    use super::*;
+    /// `cargo test live_sort -- --ignored --nocapture`: the album order around Quicksilver Messenger Service.
+    #[test]
+    #[ignore]
+    fn live_sort() {
+        let cfg = config::load().expect("sign in first");
+        let mut albums = Api::new(&cfg.server, &cfg.token).albums().unwrap();
+        sort_albums(&mut albums);
+        let i = albums.iter().position(|a| a.title.contains("Happy Trails")).unwrap();
+        for a in &albums[i.saturating_sub(3)..(i + 5).min(albums.len())] {
+            println!("{:<34} {:<30} {:?}", a.shown_artist(), a.title, a.year);
+        }
     }
 }

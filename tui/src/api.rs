@@ -71,6 +71,14 @@ pub struct Truth {
     pub flags: Vec<Value>,
 }
 
+#[derive(Deserialize, Default, Clone, Debug)]
+pub struct SearchResult {
+    #[serde(default)]
+    pub albums: Vec<Album>,
+    #[serde(default)]
+    pub tracks: Vec<Track>,
+}
+
 #[derive(Deserialize)]
 struct Data<T> {
     data: T,
@@ -140,6 +148,11 @@ impl Api {
     pub fn analysed_tracks(&self, page: u32) -> Result<(Vec<Track>, u32)> {
         let p: Page<Track> = self.get(&format!("/tracks?truth=1&per_page=300&page={page}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
         Ok((p.data, p.meta.map_or(1, |m| m.last_page)))
+    }
+
+    /// The server's search: albums and tracks whose title or artist contains the text (yours and what is shared with you).
+    pub fn search(&self, q: &str) -> Result<SearchResult> {
+        self.get("/search").query("q", q).call().map_err(err)?.into_json().map_err(|e| e.to_string())
     }
 
     pub fn album(&self, id: u64) -> Result<Album> {
@@ -221,6 +234,22 @@ mod live_artists {
             artists.dedup();
             println!("{:<45} tracks={} track artists={:?}", a.title, full.tracks.len(), artists);
         }
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    #[test]
+    fn a_search_answer_parses_with_its_albums_and_tracks() {
+        let r: SearchResult = serde_json::from_value(serde_json::json!({
+            "albums": [{"id": 1, "title": "Heroes", "artist": "Bowie", "track_count": 10, "cover_url": "http://x/cover/1"}],
+            "tracks": [{"id": 5, "title": "Heroes", "artist": "Bowie", "album": "Heroes", "album_id": 1, "duration": 370.2, "open": true, "stream_url": "http://x/stream/5"}]
+        }))
+        .unwrap();
+        assert_eq!((r.albums.len(), r.tracks.len(), r.tracks[0].album_id), (1, 1, Some(1)));
+        assert!(serde_json::from_str::<SearchResult>("{}").unwrap().tracks.is_empty());
     }
 }
 
