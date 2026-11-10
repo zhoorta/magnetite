@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Album;
 use App\Models\Track;
 use App\Models\User;
+use App\Support\PathGuess;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -35,6 +37,7 @@ class AlbumGrouper
             $year !== null && $album->year === null && $album->update(['year' => $year]);
 
             Track::whereIn('id', $tracks->pluck('id'))->update(['album_id' => $album->id, 'identified' => true]);
+            $this->number($tracks);
 
             // A cover in the folder: the owner's own file wins over anything fetched later.
             if ($album->cover === null && ($image = $user->store()->folderCover($tracks->first()->path)) !== null) {
@@ -44,5 +47,31 @@ class AlbumGrouper
 
             return $album;
         });
+    }
+
+    /**
+     * Untagged files have no track numbers, and an album plays in disc, number, then title order: without numbers it would be
+     * alphabetical. The numbers (and discs) come from the file names, "03 - Title" or "1-03 Title", like the web's identify
+     * does; a title that is still the file name loses its number and "Artist - " prefix the same way. Tags that exist stay.
+     *
+     * @param  Collection<int, Track>  $tracks
+     */
+    public function number(Collection $tracks): void
+    {
+        foreach ($tracks->groupBy(fn (Track $t) => PathGuess::groupKey($t->path)[0]) as $key => $folder) {
+            $guess = collect(PathGuess::group((string) $key, $folder)['tracks'])->keyBy('id');
+
+            foreach ($folder as $track) {
+                $row = $guess[$track->id];
+                $stem = pathinfo($track->path, PATHINFO_FILENAME);
+                $untitled = $track->title === '' || $track->title === $stem || $track->title === str_replace('_', ' ', $stem);
+
+                $track->update(array_filter([
+                    'track_number' => $track->track_number === null ? $row['number'] : null,
+                    'disc_number' => $track->disc_number === null ? $row['disc'] : null,
+                    'title' => $untitled && $row['title'] !== '' ? $row['title'] : null,
+                ], fn ($v) => $v !== null));
+            }
+        }
     }
 }

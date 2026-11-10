@@ -298,6 +298,29 @@ describe('naming an album for loose tracks', function () {
         $this->loose->each(fn ($t) => expect($t->fresh())->album_id->toBe($r->json('data.id'))->identified->toBeTrue());
     });
 
+    it('numbers the tracks from their file names, so the album plays in order and not alphabetically', function () {
+        $files = ['03 - Alpha.mp3', '01 - Zulu.mp3', '02 - Mike.mp3'];
+        $tracks = collect($files)->map(fn ($n) => Track::create(['user_id' => $this->alice->id, 'album_id' => null, 'path' => 'Order Test/'.$n, 'title' => pathinfo($n, PATHINFO_FILENAME), 'mime' => 'audio/mpeg', 'size' => 1, 'mtime' => 1]));
+        $tagged = Track::create(['user_id' => $this->alice->id, 'album_id' => null, 'path' => 'Order Test/09 - Tagged.mp3', 'title' => 'Real Title', 'track_number' => 4, 'mime' => 'audio/mpeg', 'size' => 1, 'mtime' => 1]);
+
+        $id = $this->postJson('/api/v1/albums', ['title' => 'Order', 'track_ids' => $tracks->pluck('id')->push($tagged->id)->all()], writer($this->alice))->assertCreated()->json('data.id');
+
+        expect(Album::find($id)->tracks->map(fn ($t) => $t->track_number.':'.$t->title)->all())->toBe(['1:Zulu', '2:Mike', '3:Alpha', '4:Real Title']);
+    });
+
+    it('numbers the tracks of an existing album with magnetite:albums:number, only with --fix', function () {
+        $album = Album::create(['user_id' => $this->alice->id, 'title' => 'Old', 'artist' => 'Band']);
+        $mk = fn ($n) => Track::create(['user_id' => $this->alice->id, 'album_id' => $album->id, 'path' => 'Old/'.$n.'.mp3', 'title' => $n, 'mime' => 'audio/mpeg', 'size' => 1, 'mtime' => 1]);
+        $mk('02 Beta');
+        $mk('01 Alpha');
+
+        $this->artisan('magnetite:albums:number', ['username' => 'alice', '--album' => $album->id])->assertSuccessful();
+        expect($album->tracks()->whereNull('track_number')->count())->toBe(2);
+
+        $this->artisan('magnetite:albums:number', ['username' => 'alice', '--album' => $album->id, '--fix' => true])->assertSuccessful();
+        expect($album->fresh()->tracks->pluck('title')->all())->toBe(['Alpha', 'Beta']);
+    });
+
     it('does not take tracks that are another user\'s or already in an album', function () {
         $theirs = Track::where('user_id', $this->bob->id)->first();
         $this->postJson('/api/v1/albums', ['title' => 'Nope', 'track_ids' => [$theirs->id]], writer($this->alice))->assertUnprocessable();
