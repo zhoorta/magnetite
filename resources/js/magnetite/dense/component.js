@@ -42,7 +42,7 @@ export default function dense(data) {
         tsel: 0, // selected track of the shown album
         pane: 'tree',
         sort: 'library',
-        onlyProblems: false, // show only albums and tracks with a finding
+        onlyProblems: false, // the truth view lists only the files with a finding (the Findings view); off: every file (the Truth view)
         detail: false, // the measurements of the selected track, under the list
         msg: '',
         dropOn: null, // the folder row an album is being dragged over
@@ -136,9 +136,7 @@ export default function dense(data) {
         // ---- what is shown ----
 
         rebuild() {
-            const only = this.onlyProblems ? (a) => a.tracks.some(hasProblem) : null;
-            const loose = this.onlyProblems ? this.loose.filter(hasProblem) : this.loose;
-            this.rows = buildRows({ folders: this.folders, albums: this.albums, loose }, new Set(this.openIds), this.sort, only);
+            this.rows = buildRows({ folders: this.folders, albums: this.albums, loose: this.loose }, new Set(this.openIds), this.sort);
             this.cur = clamp(this.rows, this.cur);
         },
 
@@ -163,9 +161,7 @@ export default function dense(data) {
         },
 
         get tracks() {
-            const all = this.shown?.tracks ?? [];
-
-            return this.onlyProblems ? all.filter(hasProblem) : all;
+            return this.shown?.tracks ?? [];
         },
 
         /** The track whose measurements the detail panel shows, when it is measured. */
@@ -348,16 +344,14 @@ export default function dense(data) {
             this.detail = !this.detail;
         },
 
+        /** o and :problems: the Findings view. From anywhere else it opens it; inside the truth view it switches between every file and the ones with findings. */
         toggleProblems() {
+            if (this.mode !== 'truth') return this.openTruth(true);
             this.onlyProblems = !this.onlyProblems;
-            const key = this.row?.key;
-            this.rebuild();
-            this.cur = Math.max(0, this.rows.findIndex((r) => r.key === key));
-            this.tsel = 0;
-            this.detail = false;
-            if (!this.tracks.length) this.pane = 'tree';
-            if (this.mode === 'truth') this.rebuildTruth();
-            this.say(this.onlyProblems ? 'Only albums and tracks with findings' : 'All albums and tracks');
+            this.tcur = 0;
+            this.truthLimit = 300;
+            this.rebuildTruth();
+            this.say(this.onlyProblems ? 'Findings: only the files with a finding' : 'Truth: every file');
         },
 
         toTracks() {
@@ -894,7 +888,7 @@ export default function dense(data) {
                 }
                 case 'problems': return this.toggleProblems();
                 case 'search': return this.openSearch(arg);
-                case 'truth': return this.mode === 'truth' ? this.closeView() : this.openTruth();
+                case 'truth': return this.mode === 'truth' && !this.onlyProblems ? this.closeView() : this.openTruth(false);
                 case 'tree': return this.closeView();
                 case 'info': {
                     const level = Number(arg);
@@ -1345,7 +1339,6 @@ export default function dense(data) {
         goToAlbum(id) {
             const album = this.albums.find((a) => a.id === id);
             if (!album) return this.say('That album is not in your library');
-            this.onlyProblems = false;
             this.mode = 'tree';
             this.search = emptySearch();
             this.reveal(album.folder_id, false);
@@ -1359,13 +1352,16 @@ export default function dense(data) {
 
         // ---- the truth view ----
 
-        openTruth() {
+        /** The Truth view (every file) or, with `only`, the Findings view (the files with a finding): two views of the same list. */
+        openTruth(only = false) {
             this.mode = 'truth';
+            this.onlyProblems = only;
+            this.detail = false;
             this.tcur = 0;
             this.truthLimit = 300;
             this.rebuildTruth();
             this.focusRoot();
-            this.say(`every file, ${TRUTH_SORT_NAMES[this.truthSort]}`);
+            this.say(`${only ? 'files with findings' : 'every file'}, ${TRUTH_SORT_NAMES[this.truthSort]}`);
         },
 
         get truthShown() {

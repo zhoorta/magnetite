@@ -40,8 +40,8 @@
             {{-- The views and filters, as icons (the name and the key are in the tooltip). --}}
             <div class="ml-auto flex flex-wrap items-center gap-1.5">
                 <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'search' && '!border-accent !text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" aria-label="Search" @click="mode === 'search' ? closeView() : openSearch()"><x-icon name="search" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && '!border-accent !text-accent'" :aria-pressed="mode === 'truth'" title="Every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' ? closeView() : openTruth(); focusRoot()"><x-icon name="truth" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="onlyProblems && '!border-accent !text-accent'" :aria-pressed="onlyProblems" title="Only albums and tracks with findings (o)" aria-label="Only findings" @click="toggleProblems(); focusRoot()"><x-icon name="warn" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && ! onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && ! onlyProblems" title="Truth view: every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' && ! onlyProblems ? closeView() : openTruth(false); focusRoot()"><x-icon name="truth" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && onlyProblems" title="Findings view: only the files with a finding (o)" aria-label="Findings view" @click="mode === 'truth' && onlyProblems ? closeView() : openTruth(true); focusRoot()"><x-icon name="warn" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center gap-1.5" :class="$store.ui.info > 0 && 'text-accent'" title="How much to show about the files: all, DR only, nothing (I)" :aria-label="$store.ui.label()" @click="$store.ui.cycleInfo(); focusRoot()"><x-icon name="info" /><span class="hidden text-xs sm:inline" x-text="['off', 'DR', 'all'][$store.ui.info]"></span></button>
                 <x-menu label="Meters" width="w-56">
                     <x-slot:trigger>
@@ -66,7 +66,7 @@
             {{-- Folders and albums --}}
             <div class="relative rounded-theme border pt-3" :class="mode !== 'tree' || pane === 'tree' ? 'border-accent' : 'border-white/15'">
                 <span class="absolute -top-2.5 left-3 max-w-[90%] truncate bg-bg px-1.5" :class="mode !== 'tree' || pane === 'tree' ? 'text-accent' : 'text-muted'"
-                      x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? 'Truth · ' + truth.length + ' files · ' + truthSort : 'Library · ' + albums.length + (albums.length === 1 ? ' album' : ' albums')"></span>
+                      x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? (onlyProblems ? 'Findings · ' : 'Truth · ') + truth.length + ' files · ' + truthSort : 'Library · ' + albums.length + (albums.length === 1 ? ' album' : ' albums')"></span>
 
                 {{-- Search results: the albums, then the tracks. A track plays, an album of yours opens in the tree. --}}
                 <ul x-show="mode === 'search'" x-cloak data-list="search" aria-label="Search results" class="h-[34dvh] min-h-48 overflow-y-auto pb-1 md:h-[calc(100dvh_-_var(--panes-top,10rem)_-_var(--dock-h,13rem)_-_var(--status-h,2rem)_-_1.25rem)] md:min-h-56">
@@ -273,7 +273,7 @@
             <span><kbd class="text-accent2">j k</kbd> move</span>
             <span><kbd class="text-accent2">Enter</kbd> play from here</span>
             <span><kbd class="text-accent2">s</kbd> order</span>
-            <span><kbd class="text-accent2">o</kbd> only findings</span>
+            <span><kbd class="text-accent2">o</kbd> <span x-text="onlyProblems ? 'every file' : 'only findings'"></span></span>
             <span><kbd class="text-accent2">A</kbd> analyse</span>
             <span><kbd class="text-accent2">/</kbd> search</span>
             <span><kbd class="text-accent2">Esc</kbd> back</span>
