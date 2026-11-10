@@ -19,6 +19,7 @@ use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\PrefetchController;
 use App\Http\Controllers\ScanController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StreamController;
@@ -46,6 +47,7 @@ Route::middleware('auth:web,sanctum')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/library', [LibraryController::class, 'library'])->name('library');
     Route::get('/shared', [LibraryController::class, 'shared'])->name('shared');
+    Route::get('/search', SearchController::class)->middleware('throttle:120,1')->name('search');
 
     Route::post('/share/{kind}/{id}', [ShareController::class, 'store'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('share.store');
     Route::delete('/share/{kind}/{id}', [ShareController::class, 'destroy'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('share.destroy');

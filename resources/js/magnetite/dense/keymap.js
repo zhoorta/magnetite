@@ -26,6 +26,7 @@ export const TREE = {
     i: 'details',
     C: 'cover',
     ':': 'command',
+    '/': 'search',
     Escape: 'clear',
 };
 
@@ -48,13 +49,43 @@ export const TRACKS = {
     C: 'cover',
     x: 'mark-track',
     ':': 'command',
+    '/': 'search',
 };
 
-/** The action for a key event in a pane ('tree' | 'tracks'), or null when the key is not ours (or has a modifier of the browser's). */
+/** The search results (after Enter in the box): move, play or open, back to the box, close. */
+export const SEARCH = {
+    j: 'down', ArrowDown: 'down',
+    k: 'up', ArrowUp: 'up',
+    g: 'top', Home: 'top',
+    G: 'bottom', End: 'bottom',
+    PageDown: 'pagedown', PageUp: 'pageup',
+    Enter: 'enter',
+    '/': 'query',
+    ':': 'command',
+    Escape: 'close',
+};
+
+/** The truth view: every file, worst first. */
+export const TRUTH = {
+    j: 'down', ArrowDown: 'down',
+    k: 'up', ArrowUp: 'up',
+    g: 'top', Home: 'top',
+    G: 'bottom', End: 'bottom',
+    PageDown: 'pagedown', PageUp: 'pageup',
+    Enter: 'play',
+    s: 'sort',
+    o: 'problems',
+    A: 'analyse',
+    '/': 'search',
+    ':': 'command',
+    Escape: 'close',
+};
+
+/** The action for a key event in a pane ('tree' | 'tracks' | 'search' | 'truth'), or null when the key is not ours (or has a modifier of the browser's). */
 export function actionFor(pane, e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return null;
     if (e.key === 'Tab' && e.shiftKey) return null; // Shift+Tab leaves the library, to the toolbar above it
-    const table = pane === 'tracks' ? TRACKS : TREE;
+    const table = { tree: TREE, tracks: TRACKS, search: SEARCH, truth: TRUTH }[pane] ?? TREE;
 
     return Object.hasOwn(table, e.key) ? table[e.key] : null;
 }

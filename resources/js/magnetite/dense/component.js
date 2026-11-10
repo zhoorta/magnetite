@@ -3,6 +3,8 @@ import { send } from '../http';
 import { actionFor, isTextTarget } from './keymap';
 import { complete, parse, pick } from './commands';
 import { findings, hasProblem } from './info';
+import { appendPage, emptySearch, queueFrom, searchItems, wantsMore } from './search';
+import { TRUTH_SORT_NAMES, nextTruthSort, truthRows } from './truth';
 import { titleCase } from './text';
 import { ancestorIds, buildRows, clamp, closeAction, folderAndBelow, folderChoices, nextSort, openAction, parentIndex, rowOfAlbum, targetAlbums } from './rows';
 
@@ -47,6 +49,13 @@ export default function dense(data) {
         dragIds: null,
         lpFlag: false,
 
+        mode: 'tree', // what the left pane shows: 'tree', 'search' (results) or 'truth' (every file, worst first)
+        search: emptySearch(),
+        scur: 0, // selected search result
+        typing: false, // the cursor is in the search box
+        truthSort: 'findings',
+        truth: [],
+        tcur: 0, // selected row of the truth view
         cmd: null, // the command line: { text, list, index }
         table: null, // the edit table
         titles: null, // details found online for an album
@@ -105,6 +114,13 @@ export default function dense(data) {
 
         /** The album, or the loose tracks, whose tracks the right pane shows (null for a folder). */
         get shown() {
+            if (this.mode === 'truth') return null;
+            if (this.mode === 'search') {
+                const h = this.hit;
+                const id = h?.kind === 'album' ? h.album.id : h?.track?.album_id;
+
+                return (id && this.albums.find((a) => a.id === id)) || null;
+            }
             const r = this.row;
             if (r?.kind === 'album') return r.album;
             if (r?.kind === 'loose') return { id: null, title: 'Without album tag', artist: null, tracks: this.loose, loose: true };
@@ -120,12 +136,19 @@ export default function dense(data) {
 
         /** The track whose measurements the detail panel shows, when it is measured. */
         get detailTrack() {
+            if (this.mode === 'truth') {
+                const t = this.truth[this.tcur]?.track;
+
+                return t?.truth?.analyzed ? t : null;
+            }
             const t = this.detail && this.pane === 'tracks' ? this.tracks[this.tsel] : null;
 
             return t?.truth?.analyzed ? t : null;
         },
 
         get paneTitle() {
+            if (this.mode === 'truth') return this.truth[this.tcur]?.track.title ?? 'Nothing to show';
+            if (this.mode === 'search') return this.hit ? (this.hit.kind === 'album' ? this.hit.album.title : this.hit.track.title) : 'Search';
             const r = this.row;
             if (!r) return 'Tracks';
             if (r.kind === 'folder') return r.folder.name;
@@ -163,6 +186,16 @@ export default function dense(data) {
             this.sayTimer = setTimeout(() => (this.msg = ''), ms);
         },
 
+        /**
+         * Run `fn(root)` after the next update, and again after `delay` ms when given. `$root` and `$refs` belong to the element that
+         * is running the handler: one inside a template that has gone by then (the command line) would find nothing, so the root is taken now.
+         */
+        afterUpdate(fn, delay = 0) {
+            const root = this.$root;
+            this.$nextTick(() => fn(root));
+            if (delay) setTimeout(() => fn(root), delay);
+        },
+
         focusRoot() {
             this.$root.focus({ preventScroll: true });
         },
@@ -177,14 +210,17 @@ export default function dense(data) {
             // A control that has focus keeps its own keys (Enter on a button presses it); fields keep every key; a dialog has the keyboard.
             if (e.defaultPrevented || e.target !== this.$root || isTextTarget(e.target) || this.$store.dialog.open || this.$store.player.expanded) return; // full screen has the keyboard
             if (this.mover) return this.moverKey(e);
-            if (this.fd || this.edit || this.table || this.titles || this.gd || this.cmd) return;
-            const action = actionFor(this.pane, e);
+            if (this.fd || this.edit || this.table || this.titles || this.gd || this.cmd || this.typing) return;
+            const action = actionFor(this.mode === 'tree' ? this.pane : this.mode, e);
             if (!action) return;
             e.preventDefault();
             this.run(action);
         },
 
         run(action) {
+            if (this.mode === 'search') return this.runSearch(action);
+            if (this.mode === 'truth') return this.runTruth(action);
+            if (action === 'search') return this.openSearch();
             const tree = this.pane === 'tree';
             const move = (to) => {
                 if (tree) {
@@ -248,7 +284,7 @@ export default function dense(data) {
         },
 
         scrollToSelection() {
-            this.$nextTick(() => this.$root.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' }));
+            this.afterUpdate((root) => root.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' }));
         },
 
         toggleDetail() {
@@ -265,6 +301,7 @@ export default function dense(data) {
             this.tsel = 0;
             this.detail = false;
             if (!this.tracks.length) this.pane = 'tree';
+            if (this.mode === 'truth') this.rebuildTruth();
             this.say(this.onlyProblems ? 'Only albums and tracks with findings' : 'All albums and tracks');
         },
 
@@ -402,7 +439,7 @@ export default function dense(data) {
                 if (!ids.length) return this.say('Select an album, or mark some with x, first');
                 this.mover = { kind: 'albums', ids, title: ids.length === 1 ? 'Move the album to' : `Move ${ids.length} albums to`, choices: folderChoices(this.folders), index: 0 };
             }
-            this.$nextTick(() => this.$root.querySelector('[data-mover]')?.scrollIntoView({ block: 'nearest' }));
+            this.afterUpdate((root) => root.querySelector('[data-mover="true"]')?.scrollIntoView({ block: 'nearest' }));
         },
 
         moverKey(e) {
@@ -467,7 +504,7 @@ export default function dense(data) {
 
         openFd(mode, fields = {}) {
             this.fd = { mode, id: null, name: '', parent_id: null, ...fields, error: '', saving: false };
-            this.$nextTick(() => this.$refs.folderName?.focus());
+            this.afterUpdate((root) => root.querySelector('[x-ref="folderName"]')?.focus());
         },
 
         async saveFd() {
@@ -570,7 +607,7 @@ export default function dense(data) {
 
         openEdit(kind, id, fields) {
             this.edit = { kind, id, fields: { ...fields }, error: '', saving: false };
-            this.$nextTick(() => this.$refs.editFirst?.focus());
+            this.afterUpdate((root) => root.querySelector('[x-ref="editFirst"]')?.focus());
         },
 
         async saveEdit() {
@@ -693,6 +730,7 @@ export default function dense(data) {
             if (at >= 0) this.cur = at;
             this.tsel = clamp(this.tracks, this.tsel);
             if (!this.tracks.length) this.pane = 'tree';
+            if (this.mode === 'truth') this.rebuildTruth();
         },
 
         // ---- command line ----
@@ -703,7 +741,7 @@ export default function dense(data) {
 
         openCmd(text = '') {
             this.cmd = { text, list: complete(text, this.cmdContext), index: 0 };
-            this.$nextTick(() => this.$refs.cmdInput?.focus());
+            this.afterUpdate((root) => root.querySelector('[x-ref="cmdInput"]')?.focus());
         },
 
         closeCmd() {
@@ -786,6 +824,9 @@ export default function dense(data) {
                     return this.say(`order: ${want}`);
                 }
                 case 'problems': return this.toggleProblems();
+                case 'search': return this.openSearch(arg);
+                case 'truth': return this.mode === 'truth' ? this.closeView() : this.openTruth();
+                case 'tree': return this.closeView();
                 case 'info': {
                     const level = Number(arg);
                     if (!['0', '1', '2'].includes(arg.trim())) return this.say('info 0, 1 or 2');
@@ -863,8 +904,8 @@ export default function dense(data) {
                 error: '',
                 saving: false,
             };
-            this.$nextTick(() => {
-                const at = track === null ? this.$root.querySelector('[data-table] [data-r="-1"][data-c="1"]') : this.$root.querySelector(`[data-table] [data-r="${track}"][data-c="1"]`);
+            this.afterUpdate((root) => {
+                const at = root.querySelector(track === null ? '[data-table] [data-r="-1"][data-c="1"]' : `[data-table] [data-r="${track}"][data-c="1"]`);
                 at?.focus();
                 at?.select();
             });
@@ -1061,7 +1102,7 @@ export default function dense(data) {
             if (!this.loose.length) return this.say('No tracks without an album');
             const ids = this.trackMarks.length ? this.trackMarks : this.loose.map((t) => t.id);
             this.gd = { ids, title: '', artist: '', year: '', error: '', saving: false };
-            this.$nextTick(() => this.$refs.groupTitle?.focus());
+            this.afterUpdate((root) => root.querySelector('[x-ref="groupTitle"]')?.focus());
         },
 
         async saveGroup() {
@@ -1118,6 +1159,187 @@ export default function dense(data) {
             this.selectMode = false;
             await this.reload();
             this.say(`merged ${done} ${done === 1 ? 'album' : 'albums'}`);
+        },
+
+        // ---- search ----
+
+        get hit() {
+            return searchItems(this.search)[this.scur] ?? null;
+        },
+
+        get searchList() {
+            return searchItems(this.search);
+        },
+
+        openSearch(text = '') {
+            this.mode = 'search';
+            this.typing = true;
+            if (text) this.search.q = text;
+            this.focusSearch();
+            if (text) this.afterUpdate(() => this.searchTyped());
+        },
+
+        /** The box is shown by x-show in the same update that changes the mode: ask again a moment later if it was not there yet. */
+        focusSearch() {
+            this.afterUpdate((root) => {
+                const input = root.querySelector('[x-ref="searchInput"]');
+                if (input && document.activeElement !== input) input.focus();
+            }, 60);
+        },
+
+        closeView() {
+            this.mode = 'tree';
+            this.typing = false;
+            this.search = emptySearch();
+            this.scur = 0;
+            this.focusRoot();
+        },
+
+        /** The box changed: ask the server (two letters or more; the answer for an older text is dropped). */
+        async searchTyped() {
+            const q = this.search.q.trim();
+            const stamp = (this.searchStamp = (this.searchStamp ?? 0) + 1);
+            if (q.length < 2) {
+                this.search = { ...emptySearch(), q: this.search.q };
+                this.scur = 0;
+
+                return;
+            }
+            this.search.loading = true;
+            this.search.error = '';
+            const data = await this.fetchSearch(q, 1);
+            if (stamp !== this.searchStamp) return;
+            this.search = data ? { ...appendPage(emptySearch(), data), q: this.search.q } : { ...emptySearch(), q: this.search.q, error: 'Search failed' };
+            this.scur = 0;
+        },
+
+        async fetchSearch(q, page) {
+            const r = await fetch(`/search?${new URLSearchParams({ q, page })}`, { headers: { Accept: 'application/json' } }).catch(() => null);
+
+            return r && r.ok ? r.json() : null;
+        },
+
+        /** Near the end of the list: the next page is added. */
+        async moreSearch() {
+            const s = this.search;
+            if (!wantsMore(s, this.scur, this.searchList.length)) return;
+            s.loading = true;
+            const data = await this.fetchSearch(s.q.trim(), s.page + 1);
+            this.search.loading = false;
+            if (data) this.search = { ...appendPage(this.search, data), q: this.search.q };
+        },
+
+        /** Keys in the box: Enter or the down arrow go to the results, Esc closes the search. */
+        searchKey(e) {
+            if (e.key === 'Escape') this.closeView();
+            else if ((e.key === 'Enter' || e.key === 'ArrowDown') && this.searchList.length) {
+                this.typing = false;
+                this.focusRoot();
+            } else return;
+            e.preventDefault();
+        },
+
+        runSearch(action) {
+            const n = this.searchList.length;
+            const move = (to) => {
+                this.scur = clamp(this.searchList, to);
+                this.scrollToSelection();
+                this.moreSearch();
+            };
+            switch (action) {
+                case 'down': return move(this.scur + 1);
+                case 'up': return move(this.scur - 1);
+                case 'pagedown': return move(this.scur + 10);
+                case 'pageup': return move(this.scur - 10);
+                case 'top': return move(0);
+                case 'bottom': return move(n - 1);
+                case 'enter': return this.enterHit();
+                case 'query': this.typing = true; this.focusSearch(); return;
+                case 'command': return this.openCmd();
+                case 'close': return this.closeView();
+            }
+        },
+
+        /** A track hit plays (the track hits are the queue); an album hit of yours opens in the tree, one that is shared goes to the shared page. */
+        enterHit() {
+            const h = this.hit;
+            if (!h) return;
+            if (h.kind === 'track') {
+                const [queue, index] = queueFrom(this.search, h.track.id);
+                this.$store.player.setQueue([...queue], index);
+
+                return;
+            }
+            if (h.album.mine) return this.goToAlbum(h.album.id);
+            Livewire.navigate('/shared');
+        },
+
+        goToAlbum(id) {
+            const album = this.albums.find((a) => a.id === id);
+            if (!album) return this.say('That album is not in your library');
+            this.onlyProblems = false;
+            this.mode = 'tree';
+            this.search = emptySearch();
+            this.reveal(album.folder_id, false);
+            this.rebuild();
+            this.cur = Math.max(0, rowOfAlbum(this.rows, id));
+            this.tsel = 0;
+            this.pane = 'tree';
+            this.focusRoot();
+            this.scrollToSelection();
+        },
+
+        // ---- the truth view ----
+
+        openTruth() {
+            this.mode = 'truth';
+            this.tcur = 0;
+            this.rebuildTruth();
+            this.focusRoot();
+            this.say(`every file, ${TRUTH_SORT_NAMES[this.truthSort]}`);
+        },
+
+        rebuildTruth() {
+            this.truth = truthRows(this.albums, this.loose, { sort: this.truthSort, only: this.onlyProblems });
+            this.tcur = clamp(this.truth, this.tcur);
+        },
+
+        runTruth(action) {
+            const move = (to) => {
+                this.tcur = clamp(this.truth, to);
+                this.scrollToSelection();
+            };
+            switch (action) {
+                case 'down': return move(this.tcur + 1);
+                case 'up': return move(this.tcur - 1);
+                case 'pagedown': return move(this.tcur + 10);
+                case 'pageup': return move(this.tcur - 10);
+                case 'top': return move(0);
+                case 'bottom': return move(this.truth.length - 1);
+                case 'play': return this.playTruth(this.tcur);
+                case 'sort': this.truthSort = nextTruthSort(this.truthSort); this.rebuildTruth(); return this.say(`order: ${TRUTH_SORT_NAMES[this.truthSort]}`);
+                case 'problems': return this.toggleProblems();
+                case 'analyse': {
+                    const t = this.truth[this.tcur]?.track;
+                    if (t) this.analyse({ track_id: t.id });
+
+                    return;
+                }
+                case 'search': return this.openSearch();
+                case 'command': return this.openCmd();
+                case 'close': return this.closeView();
+            }
+        },
+
+        /** Play from this file: the list as shown is the queue. */
+        playTruth(i) {
+            if (!this.truth[i]) return;
+            this.tcur = i;
+            this.$store.player.setQueue(this.truth.map((r) => r.track), i);
+        },
+
+        flagCount(t) {
+            return findings(t, 99).length;
         },
 
         // ---- looks ----

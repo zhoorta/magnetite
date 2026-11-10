@@ -7,33 +7,73 @@
          class="text-sm outline-none focus-visible:[&>.panes]:outline-none">
 
         <div class="mb-3 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Actions on the selection">
-            <button type="button" class="{{ $btn }}" title="Play (Enter)" :disabled="! tracks.length" @click="pane === 'tracks' ? playTrack(tsel) : playTrack(0, false); focusRoot()">▶ Play</button>
-            <button type="button" class="{{ $btn }}" :class="selectMode && 'border-accent text-accent'" :aria-pressed="selectMode" title="Mark several albums (x)" @click="toggleSelectMode()">
+            <button type="button" class="{{ $btn }}" title="Play (Enter)" :disabled="mode !== 'tree' || ! tracks.length" @click="pane === 'tracks' ? playTrack(tsel) : playTrack(0, false); focusRoot()">▶ Play</button>
+            <button type="button" class="{{ $btn }}" :class="selectMode && 'border-accent text-accent'" :aria-pressed="selectMode" title="Mark several albums (x)" :disabled="mode !== 'tree'" @click="toggleSelectMode()">
                 <span x-text="selectMode ? '✓ Done' : '☐ Select'"></span><span x-show="marks.length" x-text="' · ' + marks.length"></span>
             </button>
-            <button type="button" class="{{ $btn }}" title="Move to a folder (v)" :disabled="! row || row.kind === 'loose'" @click="openMover()">Move…</button>
-            <button type="button" class="{{ $btn }}" title="New folder (N)" @click="newFolder()">New folder</button>
-            <div x-show="playlistItem" x-cloak class="flex items-center rounded-theme border border-white/15 px-1 pointer-coarse:min-h-11"><x-playlist-menu item="playlistItem" label="Add to a playlist" /></div>
-            <button type="button" class="{{ $btn }}" title="Measure dynamic range, clipping and loudness (A)" :disabled="! row || row.kind === 'loose'" @click="analyseSelected(); focusRoot()">Analyse</button>
-            <button type="button" class="{{ $btn }}" title="Correct titles, artist, date or label (e)" :disabled="! (pane === 'tracks' ? tracks[tsel] : row?.kind === 'album')" @click="editSelected()">Edit</button>
-            <button type="button" class="{{ $btn }}" title="Look the album up online: release date, label, track titles (i)" :disabled="! (row?.kind === 'album' || row?.kind === 'loose')" @click="openDetails()">Details…</button>
-            <button type="button" class="{{ $btn }}" title="Find a cover (C)" :disabled="row?.kind !== 'album'" @click="findCover(); focusRoot()">Cover</button>
+            <button type="button" class="{{ $btn }}" title="Move to a folder (v)" :disabled="mode !== 'tree' || ! row || row.kind === 'loose'" @click="openMover()">Move…</button>
+            <button type="button" class="{{ $btn }}" title="New folder (N)" :disabled="mode !== 'tree'" @click="newFolder()">New folder</button>
+            <div x-show="mode === 'tree' && playlistItem" x-cloak class="flex items-center rounded-theme border border-white/15 px-1 pointer-coarse:min-h-11"><x-playlist-menu item="playlistItem" label="Add to a playlist" /></div>
+            <button type="button" class="{{ $btn }}" title="Measure dynamic range, clipping and loudness (A)" :disabled="mode !== 'tree' || ! row || row.kind === 'loose'" @click="analyseSelected(); focusRoot()">Analyse</button>
+            <button type="button" class="{{ $btn }}" title="Correct titles, artist, date or label (e)" :disabled="mode !== 'tree' || ! (pane === 'tracks' ? tracks[tsel] : row?.kind === 'album')" @click="editSelected()">Edit</button>
+            <button type="button" class="{{ $btn }}" title="Look the album up online: release date, label, track titles (i)" :disabled="mode !== 'tree' || ! (row?.kind === 'album' || row?.kind === 'loose')" @click="openDetails()">Details…</button>
+            <button type="button" class="{{ $btn }}" title="Find a cover (C)" :disabled="mode !== 'tree' || row?.kind !== 'album'" @click="findCover(); focusRoot()">Cover</button>
+            <button type="button" class="{{ $btn }}" :class="mode === 'search' && 'border-accent text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" @click="mode === 'search' ? closeView() : openSearch()">Search</button>
+            <button type="button" class="{{ $btn }}" :class="mode === 'truth' && 'border-accent text-accent'" :aria-pressed="mode === 'truth'" title="Every file, the worst first (:truth)" @click="mode === 'truth' ? closeView() : openTruth(); focusRoot()">Truth</button>
             <button type="button" class="{{ $btn }}" title="Command line (:)" @click="openCmd()">› Command</button>
-            <button type="button" class="{{ $btn }}" title="Share with everyone who has an account (S)" :disabled="! (pane === 'tracks' ? tracks[tsel] : row?.kind === 'album')"
+            <button type="button" class="{{ $btn }}" title="Share with everyone who has an account (S)" :disabled="mode !== 'tree' || ! (pane === 'tracks' ? tracks[tsel] : row?.kind === 'album')"
                     @click="shareSelected(); focusRoot()"
                     x-text="(pane === 'tracks' ? tracks[tsel] && isShared('tracks', tracks[tsel].id) : row?.kind === 'album' && isShared('albums', row.id)) ? 'Stop sharing' : 'Share'"></button>
             <button type="button" class="{{ $btn }}" :class="onlyProblems && 'border-accent text-accent'" :aria-pressed="onlyProblems" title="Only albums and tracks with findings (o)" @click="toggleProblems(); focusRoot()">Problems</button>
             <button type="button" class="{{ $btn }}" title="How much to show about the files: all, DR only, nothing (I)" @click="$store.ui.cycleInfo(); focusRoot()" x-text="$store.ui.label()"></button>
-            <button type="button" class="{{ $btn }} hover:!border-red-500 hover:!text-red-500" title="Delete (d)" :disabled="! row || row.kind === 'loose' && pane !== 'tracks'" @click="deleteSelected()">Delete</button>
+            <button type="button" class="{{ $btn }} hover:!border-red-500 hover:!text-red-500" title="Delete (d)" :disabled="mode !== 'tree' || ! row || row.kind === 'loose' && pane !== 'tracks'" @click="deleteSelected()">Delete</button>
         </div>
 
         <p x-show="! hasAnything" x-cloak class="text-muted">Nothing here yet. <a href="{{ route('upload') }}" wire:navigate class="text-accent">Upload a zip</a> of your music, or ask the person who runs this server to put it in your folder and scan it.</p>
 
         <div x-show="hasAnything" class="panes grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
             {{-- Folders and albums --}}
-            <div class="relative rounded-theme border pt-3" :class="pane === 'tree' ? 'border-accent' : 'border-white/15'">
-                <span class="absolute -top-2.5 left-3 bg-bg px-1.5" :class="pane === 'tree' ? 'text-accent' : 'text-muted'" x-text="'Library · ' + albums.length + (albums.length === 1 ? ' album' : ' albums')"></span>
-                <ul role="tree" aria-label="Folders and albums" class="h-[34dvh] min-h-48 md:h-[calc(100dvh-30rem)] md:min-h-56 overflow-y-auto pb-1">
+            <div class="relative rounded-theme border pt-3" :class="mode !== 'tree' || pane === 'tree' ? 'border-accent' : 'border-white/15'">
+                <span class="absolute -top-2.5 left-3 max-w-[90%] truncate bg-bg px-1.5" :class="mode !== 'tree' || pane === 'tree' ? 'text-accent' : 'text-muted'"
+                      x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? 'Truth · ' + truth.length + ' files · ' + truthSort : 'Library · ' + albums.length + (albums.length === 1 ? ' album' : ' albums')"></span>
+
+                {{-- Search results: the albums, then the tracks. A track plays, an album of yours opens in the tree. --}}
+                <ul x-show="mode === 'search'" x-cloak aria-label="Search results" class="h-[34dvh] min-h-48 overflow-y-auto pb-1 md:h-[calc(100dvh-30rem)] md:min-h-56">
+                    <li x-show="! searchList.length" class="px-2 py-1 text-muted" x-text="search.loading ? 'Searching…' : search.error || (search.q.trim().length < 2 ? 'Type two letters or more. Filters: year:1983  year:1960..1969  dr:<8  codec:flac  artist:bowie  album:heroes' : 'Nothing found')"></li>
+                    <template x-for="(it, i) in searchList" :key="it.key">
+                        <li :data-selected="i === scur && ! typing" class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
+                            :class="i === scur && ! typing ? 'bg-accent text-bg' : 'hover:bg-white/5'" @click="scur = i; typing = false; focusRoot()" @dblclick="enterHit()">
+                            <span class="w-12 shrink-0 text-xs opacity-70" x-text="it.kind === 'album' ? 'album' : 'track'"></span>
+                            <span class="min-w-0 flex-1 truncate" x-text="it.kind === 'album' ? it.album.title : it.track.title"></span>
+                            <span class="hidden min-w-0 max-w-[40%] shrink truncate text-xs opacity-70 sm:inline" x-text="it.kind === 'album' ? it.album.artist : [it.track.artist, it.track.album].filter(Boolean).join(' · ')"></span>
+                            <span class="w-11 shrink-0 text-right text-xs tabular-nums" x-show="$store.ui.info > 0 && (it.kind === 'album' ? it.album.dr : it.track.dr) != null" x-cloak x-text="'DR' + (it.kind === 'album' ? it.album.dr : it.track.dr)"></span>
+                            <span class="w-9 shrink-0 text-right text-xs tabular-nums opacity-70" x-text="(it.kind === 'album' ? it.album.year : it.track.year) ?? ''"></span>
+                            <span class="w-4 shrink-0 text-xs opacity-70" :title="(it.kind === 'album' ? it.album.mine : it.track.mine) ? '' : 'Shared by someone else'" x-text="(it.kind === 'album' ? it.album.mine : it.track.mine) ? '' : '⇆'"></span>
+                        </li>
+                    </template>
+                    <li x-show="search.loading && searchList.length" class="px-2 py-1 text-xs text-muted">Searching…</li>
+                </ul>
+
+                {{-- The truth view: every file, worst first. s changes the order, o keeps the ones with findings, Enter plays from here. --}}
+                <ul x-show="mode === 'truth'" x-cloak aria-label="Every file" class="h-[34dvh] min-h-48 overflow-y-auto pb-1 md:h-[calc(100dvh-30rem)] md:min-h-56">
+                    <li x-show="! truth.length" class="px-2 py-1 text-muted">Nothing to show. Analyse the library (A) to measure the files.</li>
+                    <template x-for="(r, i) in truth" :key="r.track.id">
+                        <li :data-selected="i === tcur" class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
+                            :class="i === tcur ? 'bg-accent text-bg' : 'hover:bg-white/5'" @click="tcur = i; focusRoot()" @dblclick="playTruth(i)">
+                            <span class="w-5 shrink-0 text-center text-xs font-bold" :class="i === tcur ? '' : 'text-amber-500'" x-text="flagCount(r.track) ? flagCount(r.track) + '!' : ''"></span>
+                            <span class="min-w-0 flex-1 truncate" :class="$store.player.current?.id === r.track.id && 'font-bold'">
+                                <span x-text="r.track.title"></span>
+                                <span class="text-xs opacity-70" x-text="r.album ? ' · ' + r.album.title : ''"></span>
+                            </span>
+                            <span class="hidden shrink-0 text-xs sm:inline" x-show="$store.ui.info >= 2" x-text="flags(r.track).map((f) => f.label).join(', ')"></span>
+                            <span class="w-11 shrink-0 text-right text-xs font-medium tabular-nums" x-show="$store.ui.info > 0 && r.track.truth.dr != null" x-cloak :class="i === tcur ? '' : drClass(r.track.truth.dr_class)" x-text="'DR' + r.track.truth.dr"></span>
+                            <span class="hidden w-20 shrink-0 text-right text-xs tabular-nums opacity-70 sm:inline" x-text="r.track.truth.lufs != null ? db(r.track.truth.lufs, ' LUFS') : ''"></span>
+                            <span class="w-10 shrink-0 text-right text-xs tabular-nums opacity-70" x-text="fmt(r.track.duration)"></span>
+                        </li>
+                    </template>
+                </ul>
+
+                <ul role="tree" x-show="mode === 'tree'" aria-label="Folders and albums" class="h-[34dvh] min-h-48 md:h-[calc(100dvh-30rem)] md:min-h-56 overflow-y-auto pb-1">
                     <template x-for="(r, i) in rows" :key="r.key">
                         <li role="treeitem" :aria-selected="i === cur" :data-selected="i === cur"
                             class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
@@ -63,8 +103,8 @@
             </div>
 
             {{-- The tracks of the selected album, and under them the measurements of the selected track (l) --}}
-            <div class="relative rounded-theme border pt-3" :class="pane === 'tracks' ? 'border-accent' : 'border-white/15'">
-                <span class="absolute -top-2.5 left-3 max-w-[85%] truncate bg-bg px-1.5" :class="pane === 'tracks' ? 'text-accent' : 'text-muted'" x-text="paneTitle"></span>
+            <div class="relative rounded-theme border pt-3" :class="mode === 'tree' && pane === 'tracks' ? 'border-accent' : 'border-white/15'">
+                <span class="absolute -top-2.5 left-3 max-w-[85%] truncate bg-bg px-1.5" :class="mode === 'tree' && pane === 'tracks' ? 'text-accent' : 'text-muted'" x-text="paneTitle"></span>
                 <div class="flex h-[34dvh] min-h-48 flex-col md:h-[calc(100dvh-30rem)] md:min-h-56">
                     <div x-show="shown" class="flex items-center gap-2 px-2 pb-1">
                         <div x-show="shown && ! shown.loose" class="size-12 shrink-0 overflow-hidden rounded-theme bg-white/5">
@@ -103,7 +143,8 @@
                             </div>
                         </template>
                     </div>
-                    <p x-show="row?.kind === 'folder'" x-cloak class="px-2 py-1 text-muted" x-text="row?.kind === 'folder' ? row.count + (row.count === 1 ? ' album' : ' albums') + ' in this folder and below. l opens it, Enter opens or closes it.' : ''"></p>
+                    <p x-show="mode === 'search' && ! shown && hit" x-cloak class="px-2 py-1 text-muted" x-text="hit?.kind === 'track' ? [hit.track.artist, hit.track.album, hit.track.year].filter(Boolean).join(' · ') + (hit.track.mine ? '' : ' · shared by someone else') : (hit?.album.mine ? '' : 'Shared by someone else: Enter opens the shared page')"></p>
+                    <p x-show="mode === 'tree' && row?.kind === 'folder'" x-cloak class="px-2 py-1 text-muted" x-text="row?.kind === 'folder' ? row.count + (row.count === 1 ? ' album' : ' albums') + ' in this folder and below. l opens it, Enter opens or closes it.' : ''"></p>
                     <ul aria-label="Tracks" class="min-h-0 flex-1 overflow-y-auto pb-1" :class="shown ? '' : 'hidden'">
                         <template x-for="(t, i) in tracks" :key="t.id">
                             <li :data-selected="pane === 'tracks' && i === tsel"
@@ -133,7 +174,8 @@
                     </ul>
 
                     {{-- What was measured for the selected track: numbers, the average spectrum and the findings. --}}
-                    <div x-show="detailTrack" x-cloak class="max-h-[55%] shrink-0 overflow-y-auto border-t border-white/15 px-3 py-2 text-xs">
+                    <p x-show="mode === 'truth' && ! detailTrack" x-cloak class="px-3 py-2 text-xs text-muted">This file has not been measured yet: A analyses it.</p>
+                    <div x-show="detailTrack" x-cloak class="overflow-y-auto px-3 py-2 text-xs" :class="mode === 'truth' ? 'min-h-0 flex-1' : 'max-h-[55%] shrink-0 border-t border-white/15'">
                         <template x-if="detailTrack">
                             <div class="grid gap-4 sm:grid-cols-2">
                                 <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
@@ -168,6 +210,14 @@
             </div>
         </div>
 
+        {{-- The search box: / opens it. Results come as you type; Enter goes to them, Esc closes. --}}
+        <div x-show="mode === 'search'" x-cloak class="mt-2 border-t border-accent2 pt-1.5 text-sm">
+            <div class="flex items-baseline gap-2"><span class="text-accent2">/</span>
+                <input type="text" x-ref="searchInput" x-model="search.q" @input.debounce.250ms="searchTyped()" @keydown="searchKey($event)" @focus="typing = true" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Search"
+                       class="min-w-0 flex-1 bg-transparent outline-none" placeholder="words, year:1983, dr:<8, codec:flac, artist:bowie, album:heroes">
+                <span class="shrink-0 text-xs text-muted" x-text="typing ? 'Enter: results · Esc: close' : '/ : edit · Enter: play or open · Esc: close'"></span></div>
+        </div>
+
         {{-- The command line: : opens it, Tab completes, Enter runs, Esc closes. --}}
         <div x-show="cmd" x-cloak class="mt-2 border-t border-accent2 pt-1.5 text-sm">
             <template x-if="cmd">
@@ -179,7 +229,17 @@
                 </div>
             </template>
         </div>
-        <div x-show="! cmd" class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted">
+        <div x-show="! cmd && mode === 'truth'" x-cloak class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted">
+            <span><kbd class="text-accent2">j k</kbd> move</span>
+            <span><kbd class="text-accent2">Enter</kbd> play from here</span>
+            <span><kbd class="text-accent2">s</kbd> order</span>
+            <span><kbd class="text-accent2">o</kbd> only findings</span>
+            <span><kbd class="text-accent2">A</kbd> analyse</span>
+            <span><kbd class="text-accent2">/</kbd> search</span>
+            <span><kbd class="text-accent2">Esc</kbd> back</span>
+            <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
+        </div>
+        <div x-show="! cmd && mode === 'tree'" class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted">
             <span><kbd class="text-accent2">j k</kbd> move</span>
             <span><kbd class="text-accent2">h l</kbd> folder</span>
             <span><kbd class="text-accent2">Enter</kbd> play</span>
@@ -189,6 +249,7 @@
             <span><kbd class="text-accent2">A</kbd> analyse</span>
             <span><kbd class="text-accent2">e</kbd> edit</span>
             <span><kbd class="text-accent2">i</kbd> look up</span>
+            <span><kbd class="text-accent2">/</kbd> search</span>
             <span><kbd class="text-accent2">:</kbd> command</span>
             <span><kbd class="text-accent2">o</kbd> problems</span>
             <span><kbd class="text-accent2">l</kbd> in tracks: details</span>

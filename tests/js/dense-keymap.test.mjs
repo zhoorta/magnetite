@@ -75,3 +75,20 @@ test('typing in a field is not a command', () => {
     assert.equal(isTextTarget({ tagName: 'BUTTON' }), false);
     assert.equal(isTextTarget(null), false);
 });
+
+test('/ opens the search from the tree, the tracks and the truth view; in the results it edits the box', () => {
+    for (const pane of ['tree', 'tracks', 'truth']) assert.equal(actionFor(pane, key('/')), 'search');
+    assert.equal(actionFor('search', key('/')), 'query');
+    assert.equal(actionFor('search', key('Enter')), 'enter');
+    assert.equal(actionFor('search', key('Escape')), 'close');
+    assert.equal(actionFor('search', key('j')), 'down');
+});
+
+test('the truth view plays, sorts and filters; Esc leaves it', () => {
+    assert.equal(actionFor('truth', key('Enter')), 'play');
+    assert.equal(actionFor('truth', key('s')), 'sort');
+    assert.equal(actionFor('truth', key('o')), 'problems');
+    assert.equal(actionFor('truth', key('Escape')), 'close');
+    assert.equal(actionFor('truth', key('d')), null, 'nothing destructive in a flat list');
+    assert.equal(actionFor('truth', key('x')), null);
+});
