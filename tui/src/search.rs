@@ -7,7 +7,7 @@ use crate::{
 };
 use ratatui::{
     layout::{Constraint, Layout, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
@@ -119,6 +119,66 @@ impl Search {
     }
 }
 
+/// A letter without its accent or case, one character for one character, so positions in the folded text are positions in
+/// the shown one (the server folds the same way: `jafumega` finds Jáfumega).
+fn fold_char(c: char) -> char {
+    let lower = c.to_lowercase().next().unwrap_or(c);
+    match lower {
+        'á' | 'à' | 'â' | 'ã' | 'ä' | 'å' | 'ā' => 'a',
+        'é' | 'è' | 'ê' | 'ë' | 'ē' => 'e',
+        'í' | 'ì' | 'î' | 'ï' | 'ī' => 'i',
+        'ó' | 'ò' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' => 'o',
+        'ú' | 'ù' | 'û' | 'ü' | 'ū' => 'u',
+        'ç' | 'ć' | 'č' => 'c',
+        'ñ' | 'ń' => 'n',
+        'ý' | 'ÿ' => 'y',
+        'š' | 'ś' => 's',
+        'ž' | 'ź' | 'ż' => 'z',
+        other => other,
+    }
+}
+
+fn fold(text: &str) -> Vec<char> {
+    text.chars().map(fold_char).collect()
+}
+
+/// The words of a search text, folded.
+fn terms(query: &str) -> Vec<Vec<char>> {
+    query.split_whitespace().map(fold).filter(|t| !t.is_empty()).collect()
+}
+
+/// Which characters of `text` are part of a match of one of the words.
+fn marks(text: &str, words: &[Vec<char>]) -> Vec<bool> {
+    let folded = fold(text);
+    let mut on = vec![false; folded.len()];
+    for w in words {
+        if w.len() > folded.len() {
+            continue;
+        }
+        for start in 0..=folded.len() - w.len() {
+            if folded[start..start + w.len()] == w[..] {
+                on[start..start + w.len()].iter_mut().for_each(|m| *m = true);
+            }
+        }
+    }
+    on
+}
+
+/// `text` as spans, the parts that match the search words bold and underlined (a style that shows on any background, selected or not).
+fn highlighted(text: &str, words: &[Vec<char>], base: Style) -> Vec<Span<'static>> {
+    let on = marks(text, words);
+    let hit = base.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
+    let chars: Vec<char> = text.chars().collect();
+    let mut spans = vec![];
+    let mut i = 0;
+    while i < chars.len() {
+        let j = (i..chars.len()).find(|&k| on[k] != on[i]).unwrap_or(chars.len());
+        spans.push(Span::styled(chars[i..j].iter().collect::<String>(), if on[i] { hit } else { base }));
+        i = j;
+    }
+    spans
+}
+
 pub fn draw(f: &mut Frame, area: Rect, s: &mut Search, playing: Option<u64>, icon: &str, th: &Theme) {
     let (text, muted, accent) = (c(th.text), c(th.muted), c(th.accent));
     let [input, list] = Layout::vertical([Constraint::Length(3), Constraint::Min(3)]).areas(area);
@@ -129,24 +189,31 @@ pub fn draw(f: &mut Frame, area: Rect, s: &mut Search, playing: Option<u64>, ico
         ),
         input,
     );
+    let words = terms(&s.query);
     let items: Vec<ListItem> = s
         .hits
         .iter()
         .map(|h| match h {
-            Hit::Album(a) => ListItem::new(Line::from(vec![
-                Span::styled("album  ", Style::new().fg(c(th.accent2))),
-                Span::raw(a.title.clone()),
-                Span::styled(format!("  {}{}", a.shown_artist(), a.track_count.map_or(String::new(), |n| format!(" · {n} tracks"))), Style::new().fg(muted)),
-            ])),
+            Hit::Album(a) => {
+                let mut spans = vec![Span::styled("album  ", Style::new().fg(c(th.accent2)))];
+                spans.extend(highlighted(&a.title, &words, Style::new()));
+                spans.push(Span::styled("  ", Style::new().fg(muted)));
+                spans.extend(highlighted(&a.shown_artist(), &words, Style::new().fg(muted)));
+                spans.push(Span::styled(format!("{}{}", a.year.map_or(String::new(), |y| format!(" · {y}")), a.track_count.map_or(String::new(), |n| format!(" · {n} tracks"))), Style::new().fg(muted)));
+                ListItem::new(Line::from(spans))
+            }
             Hit::Track(t) => {
                 let on = Some(t.id) == playing;
                 let mark = if on { format!("{icon}      ") } else { "track  ".to_string() };
                 let st = if on { Style::new().fg(c(th.accent2)) } else if t.open { Style::new() } else { Style::new().fg(muted) };
-                ListItem::new(Line::from(vec![
-                    Span::styled(mark, if on { st } else { Style::new().fg(muted) }),
-                    Span::styled(t.title.clone(), st),
-                    Span::styled(format!("  {} · {}  {}", t.artist.clone().unwrap_or_default(), t.album.clone().unwrap_or_default(), mmss(t.duration.unwrap_or(0.0))), Style::new().fg(muted)),
-                ]))
+                let mut spans = vec![Span::styled(mark, if on { st } else { Style::new().fg(muted) })];
+                spans.extend(highlighted(&t.title, &words, st));
+                spans.push(Span::styled("  ", Style::new().fg(muted)));
+                spans.extend(highlighted(&t.artist.clone().unwrap_or_default(), &words, Style::new().fg(muted)));
+                spans.push(Span::styled(" · ", Style::new().fg(muted)));
+                spans.extend(highlighted(&t.album.clone().unwrap_or_default(), &words, Style::new().fg(muted)));
+                spans.push(Span::styled(format!("  {}", mmss(t.duration.unwrap_or(0.0))), Style::new().fg(muted)));
+                ListItem::new(Line::from(spans))
             }
         })
         .collect();
@@ -195,6 +262,26 @@ mod tests {
         assert_eq!((tracks.iter().map(|t| t.id).collect::<Vec<_>>(), at), (vec![10, 11, 12], 1));
         s.sel.select(Some(0)); // an album is opened, not played
         assert!(s.tracks_from_selected().is_none());
+    }
+
+    #[test]
+    fn the_matching_parts_are_found_without_accents_or_case() {
+        let on = |text: &str, q: &str| marks(text, &terms(q)).iter().map(|&m| if m { '#' } else { '.' }).collect::<String>();
+        assert_eq!(on("Jáfumega - Recados", "jafumega"), "########..........");
+        assert_eq!(on("Heroes", "he ROE"), "#####."); // two words, both found, the final s is not part of either
+        assert_eq!(on("David Bowie", "bowie heroes"), "......#####");
+        assert_eq!(on("Coração", "CORACAO"), "#######");
+        assert_eq!(on("abc", ""), "...");
+        assert_eq!(on("ab", "abcdef"), "..");
+    }
+
+    #[test]
+    fn highlighted_text_keeps_every_character_and_marks_only_the_matches() {
+        let spans = highlighted("Bowie - Heroes", &terms("heroes"), Style::new());
+        assert_eq!(spans.iter().map(|s| s.content.to_string()).collect::<String>(), "Bowie - Heroes");
+        assert_eq!(spans.len(), 2);
+        assert!(spans[1].style.add_modifier.contains(Modifier::BOLD) && !spans[0].style.add_modifier.contains(Modifier::BOLD));
+        assert!(highlighted("", &terms("x"), Style::new()).is_empty());
     }
 
     #[test]
