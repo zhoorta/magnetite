@@ -10,29 +10,57 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
 
-/** Audio files from the phone, one by one, into the root of the user's own folder. Zips keep using POST /upload. */
+/**
+ * Audio files, one by one, into the root of the user's own folder (`files`), and zips unpacked like the web upload does
+ * (`archives`). Both go through LibraryUploader, so the rules are the same: audio and covers only, nothing overwritten.
+ */
 class UploadController extends Controller
 {
     public function store(Request $request, LibraryUploader $uploader): JsonResponse
     {
+        $maxKb = config('magnetite.upload.max_zip_mb') * 1024;
         $request->validate([
-            'files' => ['required', 'array', 'max:100'],
-            'files.*' => ['required', 'file', 'max:'.(config('magnetite.upload.max_zip_mb') * 1024)],
+            'files' => ['required_without:archives', 'array', 'max:100'],
+            'files.*' => ['required', 'file', 'max:'.$maxKb],
+            'archives' => ['required_without:files', 'array', 'max:20'],
+            'archives.*' => ['required', 'file', 'extensions:zip', 'max:'.$maxKb],
         ], [
             'files.*.uploaded' => 'The upload did not arrive in full. The server limits (upload_max_filesize, post_max_size) may be lower than the file.',
+            'archives.*.uploaded' => 'The upload did not arrive in full. The server limits (upload_max_filesize, post_max_size) may be lower than the zip.',
+            'archives.*.extensions' => 'Only .zip files can be uploaded as archives.',
+            'archives.*.max' => 'A zip is larger than the limit of '.config('magnetite.upload.max_zip_mb').' MB.',
         ]);
 
         set_time_limit(0);
 
+        $started = now()->getTimestamp();
+        $results = [];
+        $archives = [];
+        $added = 0;
+
         try {
-            $results = $uploader->addFiles($request->user(), $request->file('files'));
+            $results = $uploader->addFiles($request->user(), $request->file('files', []));
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+        $added += collect($results)->where('status', 'added')->count();
 
-        $added = collect($results)->where('status', 'added')->count();
+        foreach ($request->file('archives', []) as $archive) {
+            try {
+                $result = $uploader->extract($request->user(), $archive->getRealPath(), $archive->getClientOriginalName());
+                $added += $result['added'];
+                $archives[] = ['name' => $archive->getClientOriginalName(), 'ok' => true] + $result;
+            } catch (RuntimeException $e) {
+                $archives[] = ['name' => $archive->getClientOriginalName(), 'ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
         $added > 0 && ScanLibrary::request($request->user());
 
-        return response()->json(['files' => $results, 'scan' => $added > 0 ? ScanStatus::get($request->user()->id) : null], 201);
+        // `since` is the server's clock from before anything was written: GET /albums?since= lists the albums this upload brought tracks to.
+        return response()->json([
+            'files' => $results, 'archives' => $archives, 'since' => $started,
+            'scan' => $added > 0 ? ScanStatus::get($request->user()->id) : null,
+        ], 201);
     }
 }

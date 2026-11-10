@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AlbumResource;
 use App\Models\Album;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -14,8 +15,13 @@ class AlbumController extends Controller
     /** The signed-in user's own albums, like /library. Shared music from others is on /shared. */
     public function index(Request $request): AnonymousResourceCollection
     {
+        // `since` (unix time, as the upload answers it): only albums that got tracks from then on, for a client that wants to
+        // look at what an upload brought in.
+        $since = $request->integer('since');
+
         return AlbumResource::collection(
-            Album::withCount(['tracks', 'tracks as artist_count' => fn ($q) => $q->select(DB::raw('count(distinct artist)'))])
+            Album::when($since > 0, fn ($q) => $q->whereHas('tracks', fn ($t) => $t->where('created_at', '>=', Carbon::createFromTimestamp($since))))
+                ->withCount(['tracks', 'tracks as artist_count' => fn ($q) => $q->select(DB::raw('count(distinct artist)'))])
                 ->withMin('tracks as first_artist', 'artist')->where('user_id', $request->user()->id)
                 ->inLibraryOrder()->paginate(50)
         );

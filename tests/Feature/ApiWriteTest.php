@@ -261,6 +261,62 @@ describe('covers', function () {
     });
 });
 
+function apiZip(array $entries, string $name = 'Album.zip'): UploadedFile
+{
+    $path = sys_get_temp_dir().'/magnetite-api-zip-'.uniqid().'.zip';
+    $zip = new ZipArchive;
+    $zip->open($path, ZipArchive::CREATE);
+    foreach ($entries as $entry => $contents) {
+        $zip->addFromString($entry, $contents);
+    }
+    $zip->close();
+
+    return new UploadedFile($path, $name, 'application/zip', null, true);
+}
+
+describe('uploading zips', function () {
+    it('unpacks a zip into the user\'s folder, queues a scan and says where to look for the result', function () {
+        $audio = file_get_contents(base_path('tests/Fixtures/music/Loose/07_no_tags.mp3'));
+        $before = time();
+
+        $r = $this->post('/api/v1/uploads', ['archives' => [apiZip(['Band - Record/01 One.mp3' => $audio, 'Band - Record/02 Two.mp3' => $audio])]], writer($this->alice) + ['Accept' => 'application/json'])
+            ->assertCreated()->assertJsonPath('archives.0.ok', true)->assertJsonPath('archives.0.added', 2)->assertJsonPath('scan.state', 'queued');
+
+        expect(is_file($this->library.'/Band - Record/01 One.mp3'))->toBeTrue()->and($r->json('since'))->toBeGreaterThanOrEqual($before);
+    });
+
+    it('takes files and zips in one request and refuses a zip without audio', function () {
+        $h = writer($this->alice) + ['Accept' => 'application/json'];
+
+        $r = $this->post('/api/v1/uploads', ['files' => [audioUpload('loose.mp3')], 'archives' => [apiZip(['readme.txt' => 'hi'])]], $h)->assertCreated();
+
+        expect($r->json('files.0.status'))->toBe('added')->and($r->json('archives.0.ok'))->toBeFalse()->and($r->json('archives.0.error'))->toContain('no audio');
+    });
+
+    it('refuses an upload with neither, and a zip that tries to leave the folder', function () {
+        $h = writer($this->alice) + ['Accept' => 'application/json'];
+        $this->post('/api/v1/uploads', [], $h)->assertUnprocessable();
+
+        $audio = file_get_contents(base_path('tests/Fixtures/music/Loose/07_no_tags.mp3'));
+        $r = $this->post('/api/v1/uploads', ['archives' => [apiZip(['../../escape.mp3' => $audio, 'ok/a.mp3' => $audio])]], $h)->assertCreated();
+
+        expect($r->json('archives.0.ok'))->toBeFalse()->and(is_file($this->music.'/escape.mp3'))->toBeFalse();
+    });
+
+    it('refuses a read-only token', function () {
+        $this->post('/api/v1/uploads', ['archives' => [apiZip(['a.mp3' => 'x'])]], writer($this->alice, readOnly: true) + ['Accept' => 'application/json'])->assertForbidden();
+    });
+
+    it('lists only the albums that got tracks since a time', function () {
+        $h = writer($this->alice);
+        $old = Album::where('user_id', $this->alice->id)->count();
+        expect($old)->toBeGreaterThan(0);
+
+        $this->getJson('/api/v1/albums?since='.(time() + 3600), $h)->assertOk()->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/albums?since='.(time() - 3600), $h)->assertOk()->assertJsonCount($old, 'data');
+    });
+});
+
 describe('uploading audio files', function () {
     it('puts an audio file in the root of the user\'s folder and queues a scan', function () {
         $r = $this->post('/api/v1/uploads', ['files' => [audioUpload('new-song.mp3')]], writer($this->alice) + ['Accept' => 'application/json'])
