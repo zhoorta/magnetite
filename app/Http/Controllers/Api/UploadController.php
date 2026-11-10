@@ -35,7 +35,6 @@ class UploadController extends Controller
 
         $started = now()->getTimestamp();
         $results = [];
-        $archives = [];
         $added = 0;
 
         try {
@@ -45,15 +44,9 @@ class UploadController extends Controller
         }
         $added += collect($results)->where('status', 'added')->count();
 
-        foreach ($request->file('archives', []) as $archive) {
-            try {
-                $result = $uploader->extract($request->user(), $archive->getRealPath(), $archive->getClientOriginalName());
-                $added += $result['added'];
-                $archives[] = ['name' => $archive->getClientOriginalName(), 'ok' => true] + $result;
-            } catch (RuntimeException $e) {
-                $archives[] = ['name' => $archive->getClientOriginalName(), 'ok' => false, 'error' => $e->getMessage()];
-            }
-        }
+        $zips = $uploader->extractMany($request->user(), $request->file('archives', []));
+        $archives = $zips['archives'];
+        $added += $zips['added'];
 
         $added > 0 && ScanLibrary::request($request->user());
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AlbumGroupController;
 use App\Http\Controllers\AlbumMergeController;
 use App\Http\Controllers\AlbumTitlesController;
 use App\Http\Controllers\AnalysisController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LibraryEditController;
 use App\Http\Controllers\LibraryRemoveController;
 use App\Http\Controllers\LoginController;
+use App\Http\Controllers\LooseTrackController;
 use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\PrefetchController;
@@ -78,6 +80,8 @@ Route::middleware('auth')->group(function () {
     Route::put('/library/albums/{album}/folder', [FolderController::class, 'moveAlbum'])->whereNumber('album')->name('library.albums.folder');
     Route::post('/library/albums/{album}/titles/find', [AlbumTitlesController::class, 'find'])->whereNumber('album')->name('library.albums.titles.find');
     Route::post('/library/albums/{album}/titles', [AlbumTitlesController::class, 'apply'])->whereNumber('album')->name('library.albums.titles.apply');
+    Route::get('/library/tracks/loose', [LooseTrackController::class, 'index'])->name('library.tracks.loose');
+    Route::post('/library/albums', [AlbumGroupController::class, 'store'])->name('library.albums.store');
     Route::post('/library/albums/{album}/merge', [AlbumMergeController::class, 'store'])->whereNumber('album')->name('library.albums.merge');
     Route::delete('/library/albums/{album}', [LibraryRemoveController::class, 'album'])->whereNumber('album')->name('library.albums.destroy');
     Route::delete('/library/tracks/{track}', [LibraryRemoveController::class, 'track'])->whereNumber('track')->name('library.tracks.destroy');

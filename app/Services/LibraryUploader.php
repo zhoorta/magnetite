@@ -23,6 +23,31 @@ class LibraryUploader
 
     private const CHUNK = 1024 * 1024;
 
+    /**
+     * Several zips for one user, each reported on its own (one that fails does not stop the others): the shared part of the web
+     * and the API upload.
+     *
+     * @param  iterable<UploadedFile>  $archives
+     * @return array{archives: list<array>, added: int} what each zip did, and how many files were written in all
+     */
+    public function extractMany(User $user, iterable $archives): array
+    {
+        $results = [];
+        $added = 0;
+
+        foreach ($archives as $archive) {
+            try {
+                $result = $this->extract($user, $archive->getRealPath(), $archive->getClientOriginalName());
+                $added += $result['added'];
+                $results[] = ['name' => $archive->getClientOriginalName(), 'ok' => true] + $result;
+            } catch (RuntimeException $e) {
+                $results[] = ['name' => $archive->getClientOriginalName(), 'ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        return ['archives' => $results, 'added' => $added];
+    }
+
     /** @return array{folder: string, added: int, existing: int, conflicts: int, skipped: int, bytes: int} */
     public function extract(User $user, string $zipPath, string $originalName): array
     {

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AlbumGroupController;
 use App\Http\Controllers\AlbumMergeController;
 use App\Http\Controllers\AlbumTitlesController;
 use App\Http\Controllers\AnalysisController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\FolderController as FolderWrites;
 use App\Http\Controllers\LibraryEditController;
 use App\Http\Controllers\LibraryRemoveController;
+use App\Http\Controllers\LooseTrackController;
 use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController as PlaylistWrites;
 use App\Http\Controllers\ScanController;
@@ -44,7 +46,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/playlists/{playlist}', [PlaylistController::class, 'show'])->whereNumber('playlist')->name('api.playlists.show');
         Route::get('/search', SearchController::class)->name('api.search');
         Route::get('/tracks', [TrackController::class, 'index'])->name('api.tracks');
-        Route::get('/tracks/loose', [TrackController::class, 'loose'])->name('api.tracks.loose');
+        Route::get('/tracks/loose', [LooseTrackController::class, 'index'])->name('api.tracks.loose');
         Route::get('/tracks/{track}', [TrackController::class, 'show'])->whereNumber('track')->name('api.tracks.show');
         Route::get('/folders', [FolderController::class, 'index'])->name('api.folders');
         Route::get('/analysis', [AnalysisController::class, 'show'])->name('api.analysis.show');
@@ -64,7 +66,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/folders', [FolderWrites::class, 'store'])->name('api.folders.store');
             Route::patch('/folders/{folder}', [FolderWrites::class, 'update'])->whereNumber('folder')->name('api.folders.update');
             Route::put('/albums/{album}/folder', [FolderWrites::class, 'moveAlbum'])->whereNumber('album')->name('api.albums.folder');
-            Route::post('/albums', [AlbumController::class, 'store'])->name('api.albums.store');
+            Route::post('/albums', [AlbumGroupController::class, 'store'])->name('api.albums.store');
             Route::patch('/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('api.albums.update');
             Route::patch('/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('api.tracks.update');
             Route::post('/albums/{album}/merge', [AlbumMergeController::class, 'store'])->whereNumber('album')->name('api.albums.merge');

@@ -8,7 +8,6 @@ use App\Support\ScanStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use RuntimeException;
 
 class UploadController extends Controller
 {
@@ -30,18 +29,7 @@ class UploadController extends Controller
 
         set_time_limit(0);
 
-        $results = [];
-        $added = 0;
-
-        foreach ($request->file('archives') as $archive) {
-            try {
-                $result = $uploader->extract($request->user(), $archive->getRealPath(), $archive->getClientOriginalName());
-                $added += $result['added'];
-                $results[] = ['name' => $archive->getClientOriginalName(), 'ok' => true] + $result;
-            } catch (RuntimeException $e) {
-                $results[] = ['name' => $archive->getClientOriginalName(), 'ok' => false, 'error' => $e->getMessage()];
-            }
-        }
+        ['archives' => $results, 'added' => $added] = $uploader->extractMany($request->user(), $request->file('archives'));
 
         // Only look at the folder again when something new was written, and do it in the queue: it can take minutes.
         if ($added > 0) {
