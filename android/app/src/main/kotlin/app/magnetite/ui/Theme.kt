@@ -53,6 +53,7 @@ val Looks = listOf(
     Look("vintage-vu", "Vintage VU", true, 0xFF17110B, 0xFF241A10, 0xFFF3E3C0, 0xFFA08A62, 0xFFE8432E, 0xFFFFB347, 8, FontFamily.Monospace),
     Look("tube-radio", "Tube radio", true, 0xFF120D08, 0xFF1D140C, 0xFFEAD9B0, 0xFF8F7A55, 0xFFC9953A, 0xFF7DFF6A, 6, FontFamily.Serif),
     Look("amber-receiver", "Amber receiver", true, 0xFF0D0905, 0xFF1A1208, 0xFFFFD9A0, 0xFF9A7A4A, 0xFFFF9D2E, 0xFFFFB347, 6, FontFamily.SansSerif),
+    Look("graphite", "Graphite", true, 0xFF121212, 0xFF1A1A1A, 0xFFD8D8D8, 0xFF8A8A8A, 0xFFF0605D, 0xFFE8B45A, 0, FontFamily.Monospace),
 )
 
 /** The chosen look. Reading it in composition or in a draw block makes that code follow a change. */

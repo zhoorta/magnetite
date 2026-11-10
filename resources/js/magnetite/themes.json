@@ -84,7 +84,8 @@
                 "id": "scope",
                 "params": {}
             }
-        ]
+        ],
+        "pixel": true
     },
     {
         "id": "tube-radio",
@@ -117,5 +118,26 @@
         },
         "radius": "0.35rem",
         "font": "'Helvetica Neue', Helvetica, Arial, sans-serif"
+    },
+    {
+        "id": "graphite",
+        "name": "Graphite",
+        "colors": {
+            "bg": "#121212",
+            "surface": "#1a1a1a",
+            "text": "#d8d8d8",
+            "muted": "#8a8a8a",
+            "accent": "#f0605d",
+            "accent2": "#e8b45a"
+        },
+        "radius": "0rem",
+        "font": "ui-monospace, 'SF Mono', Menlo, monospace",
+        "visualizers": [
+            {
+                "id": "scope",
+                "params": {}
+            }
+        ],
+        "pixel": true
     }
 ]
