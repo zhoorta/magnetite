@@ -333,7 +333,7 @@ fn vu_wide(cx: &Ctx, area: Rect) -> Vec<Line<'static>> {
         let angle = |db: f32| -theta + 2.0 * theta * ((db + 30.0) / 33.0);
         let pt = |db: f32, len: f32| (mx + angle(db).sin() * len, py - angle(db).cos() * len);
         let inside = |p: (f32, f32)| p.0 >= x && p.0 < x + bw && p.1 >= y && p.1 < y + bh;
-        let mut dot = |cv: &mut Canvas, p: (f32, f32), col| {
+        let dot = |cv: &mut Canvas, p: (f32, f32), col| {
             if inside(p) {
                 cv.set_c(p.0.round() as i32, p.1.round() as i32, col);
             }

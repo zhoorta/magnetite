@@ -28,10 +28,19 @@ pub enum Sort {
     Loudness,
     TruePeak,
     Album,
+    /// Copies of one recording next to each other, tracks with copies first.
+    Copies,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Filter {
+    All,
+    Findings,
+    Copies,
 }
 
 impl Sort {
-    const ALL: [Sort; 5] = [Sort::Severity, Sort::Dr, Sort::Loudness, Sort::TruePeak, Sort::Album];
+    const ALL: [Sort; 6] = [Sort::Severity, Sort::Dr, Sort::Loudness, Sort::TruePeak, Sort::Album, Sort::Copies];
     pub fn label(self) -> &'static str {
         match self {
             Sort::Severity => "worst findings first",
@@ -39,6 +48,7 @@ impl Sort {
             Sort::Loudness => "loudest first",
             Sort::TruePeak => "highest true peak first",
             Sort::Album => "library order",
+            Sort::Copies => "copies together",
         }
     }
 }
@@ -131,14 +141,17 @@ pub struct Browser {
     pub total: usize,
     pub loaded: usize,
     pub sort: Sort,
-    pub only_findings: bool,
+    pub filter: Filter,
+    /// The other tracks that are the same recording (same artist and title, length within 2 s), by track id.
+    peers: std::collections::HashMap<u64, Vec<u64>>,
+    keys: std::collections::HashMap<u64, String>,
     pub table: TableState,
     rx: Option<mpsc::Receiver<Msg>>,
 }
 
 impl Browser {
     pub fn new() -> Self {
-        Browser { rows: vec![], total: 0, loaded: 0, sort: Sort::Severity, only_findings: false, table: TableState::default(), rx: None }
+        Browser { rows: vec![], total: 0, loaded: 0, sort: Sort::Severity, filter: Filter::All, peers: Default::default(), keys: Default::default(), table: TableState::default(), rx: None }
     }
 
     /// Load the library's analysed tracks, once, in the background.
@@ -168,8 +181,40 @@ impl Browser {
             }
         }
         if changed {
+            self.regroup();
             self.reselect(keep);
         }
+    }
+
+    /// Find the copies: group by normalised artist and title, then link the tracks of a group whose lengths are within 2 s.
+    fn regroup(&mut self) {
+        let norm = |s: &Option<String>| s.as_deref().unwrap_or("").trim().to_lowercase();
+        self.keys.clear();
+        self.peers.clear();
+        let mut groups: std::collections::HashMap<String, Vec<(u64, f64)>> = Default::default();
+        for r in &self.rows {
+            let key = format!("{}|{}", norm(&r.track.artist), r.track.title.trim().to_lowercase());
+            if !norm(&r.track.artist).is_empty() {
+                groups.entry(key.clone()).or_default().push((r.track.id, r.track.duration.unwrap_or(0.0)));
+            }
+            self.keys.insert(r.track.id, key);
+        }
+        for g in groups.values().filter(|g| g.len() > 1) {
+            for (id, d) in g {
+                let others: Vec<u64> = g.iter().filter(|(o, od)| o != id && (od - d).abs() <= 2.0).map(|(o, _)| *o).collect();
+                if !others.is_empty() {
+                    self.peers.insert(*id, others);
+                }
+            }
+        }
+    }
+
+    /// How many copies of this recording there are (itself included) and whether one is bit-identical; 1 when it is alone.
+    pub fn copies_of(&self, t: &Track) -> (usize, bool) {
+        let flagged = |code: &str| t.truth.as_ref().map_or(0, |x| x.flags.iter().filter(|f| f["code"].as_str() == Some(code)).count());
+        let exact = flagged("duplicate") > 0;
+        let n = self.peers.get(&t.id).map_or(0, Vec::len).max(flagged("duplicate") + flagged("same_recording"));
+        (n + 1, exact)
     }
 
     pub fn done(&self) -> bool {
@@ -178,7 +223,12 @@ impl Browser {
 
     /// The rows shown: filtered, then sorted.
     pub fn view(&self) -> Vec<&Row> {
-        let mut v: Vec<&Row> = self.rows.iter().filter(|r| !self.only_findings || severity(&r.track) > 0).collect();
+        let mut v: Vec<&Row> = self.rows.iter().filter(|r| match self.filter {
+            Filter::All => true,
+            Filter::Findings => severity(&r.track) > 0,
+            Filter::Copies => self.copies_of(&r.track).0 > 1,
+        }).collect();
+        let key = |r: &&Row| self.keys.get(&r.track.id).cloned().unwrap_or_default();
         let by_album = |a: &&Row, b: &&Row| (a.album_order, a.track.number).cmp(&(b.album_order, b.track.number));
         match self.sort {
             Sort::Severity => v.sort_by(|a, b| severity(&b.track).cmp(&severity(&a.track)).then(cmp_opt(num(&a.track, |t| t.dr), num(&b.track, |t| t.dr), false)).then_with(|| by_album(a, b))),
@@ -186,6 +236,7 @@ impl Browser {
             Sort::Loudness => v.sort_by(|a, b| cmp_opt(num(&a.track, |t| t.lufs), num(&b.track, |t| t.lufs), true).then_with(|| by_album(a, b))),
             Sort::TruePeak => v.sort_by(|a, b| cmp_opt(num(&a.track, |t| t.true_peak), num(&b.track, |t| t.true_peak), true).then_with(|| by_album(a, b))),
             Sort::Album => v.sort_by(by_album),
+            Sort::Copies => v.sort_by(|a, b| (self.copies_of(&a.track).0 > 1).cmp(&(self.copies_of(&b.track).0 > 1)).reverse().then_with(|| key(a).cmp(&key(b))).then_with(|| by_album(a, b))),
         }
         v
     }
@@ -208,9 +259,25 @@ impl Browser {
         self.reselect(keep);
     }
 
+    /// `o`: only tracks with findings, or all again.
     pub fn toggle_filter(&mut self) {
+        self.set_filter(if self.filter == Filter::Findings { Filter::All } else { Filter::Findings });
+    }
+
+    /// `d`: only tracks that have copies, copies side by side (and back to the worst-first order when it is left).
+    pub fn toggle_copies(&mut self) {
+        if self.filter == Filter::Copies {
+            self.sort = Sort::Severity;
+            self.set_filter(Filter::All);
+        } else {
+            self.sort = Sort::Copies;
+            self.set_filter(Filter::Copies);
+        }
+    }
+
+    fn set_filter(&mut self, f: Filter) {
         let keep = self.selected_id();
-        self.only_findings = !self.only_findings;
+        self.filter = f;
         self.reselect(keep);
     }
 
@@ -244,7 +311,13 @@ pub fn draw(f: &mut Frame, area: Rect, b: &mut Browser, playing: Option<u64>, ic
     let mut state = b.table.clone();
     let with = b.rows.iter().filter(|r| severity(&r.track) > 0).count();
     let loading = if b.done() { String::new() } else { format!(" · loading {}/{}", b.loaded, b.total) };
-    let title = format!(" File truth · {} tracks · {} with findings · {}{}{} ", b.rows.len(), with, b.sort.label(), if b.only_findings { " · only findings" } else { "" }, loading);
+    let groups = b.rows.iter().filter(|r| b.copies_of(&r.track).0 > 1).count();
+    let filter = match b.filter {
+        Filter::All => "",
+        Filter::Findings => " · only findings",
+        Filter::Copies => " · only copies",
+    };
+    let title = format!(" File truth · {} tracks · {} with findings · {} with copies · {}{}{} ", b.rows.len(), with, groups, b.sort.label(), filter, loading);
 
     let rows: Vec<TRow> = view
         .iter()
@@ -264,6 +337,8 @@ pub fn draw(f: &mut Frame, area: Rect, b: &mut Browser, playing: Option<u64>, ic
                 _ => String::new(),
             }]
             .join(" ");
+            let (n, exact) = b.copies_of(t);
+            let copies = if n > 1 { format!("×{n}{}", if exact { "=" } else { "" }) } else { String::new() };
             let labels = tr.flags.iter().filter_map(|x| x["label"].as_str()).collect::<Vec<_>>().join(", ");
             let name = if Some(t.id) == playing { Style::new().fg(c(th.accent2)) } else { Style::new() };
             TRow::new(vec![
@@ -274,12 +349,13 @@ pub fn draw(f: &mut Frame, area: Rect, b: &mut Browser, playing: Option<u64>, ic
                 Cell::from(num_s(tr.dr, 0)),
                 Cell::from(num_s(tr.lufs, 1)),
                 Cell::from(num_s(tr.true_peak, 1)),
+                Cell::from(copies).style(Style::new().fg(c(th.accent2))),
                 Cell::from(labels).style(st),
             ])
         })
         .collect();
-    let header = TRow::new(["", "Track", "Album", "Format", "DR", "LUFS", "TP", "Findings"]).style(Style::new().fg(muted).add_modifier(Modifier::BOLD));
-    let widths = [Constraint::Length(3), Constraint::Fill(3), Constraint::Fill(2), Constraint::Length(13), Constraint::Length(3), Constraint::Length(6), Constraint::Length(6), Constraint::Fill(3)];
+    let header = TRow::new(["", "Track", "Album", "Format", "DR", "LUFS", "TP", "Copies", "Findings"]).style(Style::new().fg(muted).add_modifier(Modifier::BOLD));
+    let widths = [Constraint::Length(3), Constraint::Fill(3), Constraint::Fill(2), Constraint::Length(13), Constraint::Length(3), Constraint::Length(6), Constraint::Length(6), Constraint::Length(6), Constraint::Fill(3)];
     let table = Table::new(rows, widths)
         .header(header)
         .column_spacing(1)
@@ -289,7 +365,23 @@ pub fn draw(f: &mut Frame, area: Rect, b: &mut Browser, playing: Option<u64>, ic
 
     if detail_h > 0 {
         let sel = state.selected().and_then(|i| view.get(i));
-        let lines = sel.map_or(vec![Line::from("Nothing to show (yet).").style(Style::new().fg(muted))], |r| detail(&r.track, th));
+        let lines = sel.map_or(vec![Line::from("Nothing to show (yet).").style(Style::new().fg(muted))], |r| {
+            let mut l = detail(&r.track, th);
+            for id in b.peers.get(&r.track.id).into_iter().flatten() {
+                if let Some(o) = b.rows.iter().find(|x| x.track.id == *id) {
+                    let tr = o.track.truth.clone().unwrap_or_default();
+                    let fmt = match (tr.bits, tr.sample_rate) {
+                        (Some(bits), Some(sr)) => format!(" {}/{}", bits as u32, (sr / 1000.0 * 10.0).round() / 10.0),
+                        _ => String::new(),
+                    };
+                    l.push(Line::from(vec![
+                        Span::styled("copy  ", Style::new().fg(c(th.accent2)).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{} · {}{} · {} LUFS · DR{}", o.track.album.clone().unwrap_or_default(), o.track.codec.clone().unwrap_or_default().to_uppercase(), fmt, num_s(tr.lufs, 1), num_s(tr.dr, 0)), Style::new().fg(muted)),
+                    ]));
+                }
+            }
+            l
+        });
         f.render_widget(
             Paragraph::new(lines).wrap(Wrap { trim: false }).block(Block::new().borders(Borders::ALL).border_style(Style::new().fg(muted)).style(Style::new().bg(c(th.surface)).fg(text))),
             detail_area,
@@ -385,6 +477,39 @@ mod tests {
         b.table.select(Some(1));
         b.cycle_sort();
         assert_eq!(b.selected_id(), Some(2)); // same track after a re-sort
+    }
+
+    #[test]
+    fn copies_are_found_by_artist_title_and_length_and_the_filter_keeps_them_together() {
+        let mut b = Browser::new();
+        let mk = |id: u64, artist: &str, title: &str, dur: f64, order: usize| {
+            let mut r = row(id, order, Some(8.0), Some(-12.0), &[]);
+            r.track.artist = Some(artist.into());
+            r.track.title = title.into();
+            r.track.duration = Some(dur);
+            r
+        };
+        b.rows = vec![mk(1, "Bowie", "Heroes", 370.0, 0), mk(2, "Other", "Solo", 200.0, 1), mk(3, "bowie", "HEROES ", 371.0, 2), mk(4, "Bowie", "Heroes", 500.0, 3), mk(5, "Zed", "Song", 100.0, 4), mk(6, "Zed", "Song", 101.0, 5)];
+        b.regroup();
+        assert_eq!(b.copies_of(&b.rows[0].track), (2, false));
+        assert_eq!(b.copies_of(&b.rows[1].track), (1, false));
+        assert_eq!(b.copies_of(&b.rows[3].track), (1, false)); // a live version, 130 s longer
+        b.reselect(None);
+        b.toggle_copies();
+        assert_eq!(ids(&b), vec![1, 3, 5, 6]); // only copies, a recording's copies side by side
+        b.toggle_copies();
+        assert_eq!(b.filter, Filter::All);
+        assert_eq!(b.sort, Sort::Severity);
+    }
+
+    #[test]
+    fn the_servers_exact_duplicate_flag_counts_even_when_the_titles_differ() {
+        let mut b = Browser::new();
+        let mut r = row(1, 0, Some(8.0), Some(-12.0), &[]);
+        r.track.truth.as_mut().unwrap().flags = vec![json!({"code": "duplicate", "level": "warn", "label": "Exact duplicate", "detail": "x"})];
+        b.rows = vec![r];
+        b.regroup();
+        assert_eq!(b.copies_of(&b.rows[0].track), (2, true));
     }
 
     #[test]

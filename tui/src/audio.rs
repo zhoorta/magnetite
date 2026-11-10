@@ -5,7 +5,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::{
     collections::VecDeque,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering::SeqCst},
+        atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering::SeqCst},
         Arc, Mutex, OnceLock,
     },
     thread,
@@ -31,6 +31,7 @@ struct Shared {
     tap: Mutex<VecDeque<f32>>,   // last TAP stereo frames
     pending: Mutex<Vec<f32>>,    // every frame played since the UI last asked (loudness needs all of them)
     paused: AtomicBool,
+    gain: AtomicU32, // target gain as f32 bits (1.0 = unchanged, 0.0 = muted); the output eases to it, the meters' tap does not hear it
     decoded: AtomicBool, // the decoder has pushed everything
     ended: AtomicBool,   // decoded and drained: the UI starts the next track
     generation: AtomicU64,
@@ -63,6 +64,7 @@ impl Player {
             tap: Mutex::new(VecDeque::with_capacity(TAP * 2)),
             pending: Mutex::new(Vec::new()),
             paused: AtomicBool::new(false),
+            gain: AtomicU32::new(1.0f32.to_bits()),
             decoded: AtomicBool::new(true),
             ended: AtomicBool::new(false),
             generation: AtomicU64::new(0),
@@ -76,6 +78,8 @@ impl Player {
             collected: Mutex::new(Vec::new()),
         });
         let s = shared.clone();
+        let slew = 1.0 - (-1.0 / (rate as f32 * 0.015)).exp(); // 15 ms: no click when the gain changes or an A/B side is muted
+        let mut gain = 1.0f32;
         let stream = device
             .build_output_stream(
                 &cfg.config(),
@@ -93,8 +97,9 @@ impl Player {
                                 played.extend([a, b]);
                             }
                         }
+                        gain += (f32::from_bits(s.gain.load(SeqCst)) - gain) * slew;
                         for (i, o) in frame.iter_mut().enumerate() {
-                            *o = if i == 0 { l } else if i == 1 { r } else { 0.0 };
+                            *o = if i == 0 { l * gain } else if i == 1 { r * gain } else { 0.0 };
                         }
                         if let Some(t) = tap.as_mut() {
                             t.push_back(l);
@@ -192,6 +197,25 @@ impl Player {
     /// Jump to `t` seconds; call it right after `play` to start a track part-way (`play` clears any earlier seek).
     pub fn seek_to(&self, t: f64) {
         *self.shared.seek.lock().unwrap() = Some(t.max(0.0));
+    }
+
+    /// Linear output gain (1.0 unchanged, 0.0 silent). The meters still see the file's own level.
+    pub fn set_gain(&self, linear: f32) {
+        self.shared.gain.store(linear.max(0.0).to_bits(), SeqCst);
+    }
+
+    pub fn set_paused(&self, paused: bool) {
+        self.shared.paused.store(paused, SeqCst);
+    }
+
+    /// Seconds of decoded audio waiting to be played.
+    pub fn buffered(&self) -> f64 {
+        self.shared.queue.lock().map_or(0.0, |q| q.len() as f64 / 2.0 / self.rate as f64)
+    }
+
+    /// Everything decoded (the end of the file is in the buffer).
+    pub fn decoded(&self) -> bool {
+        self.shared.decoded.load(SeqCst)
     }
 
     pub fn toggle_pause(&self) {
@@ -369,6 +393,7 @@ mod tests {
             tap: Mutex::new(VecDeque::new()),
             pending: Mutex::new(Vec::new()),
             paused: AtomicBool::new(false),
+            gain: AtomicU32::new(1.0f32.to_bits()),
             decoded: AtomicBool::new(false),
             ended: AtomicBool::new(false),
             generation: AtomicU64::new(1),

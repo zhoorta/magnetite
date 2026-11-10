@@ -1,7 +1,9 @@
+mod ab;
 mod api;
 mod audio;
 mod config;
 mod cover;
+mod loudness;
 mod media;
 mod meters;
 mod panels;
@@ -59,7 +61,7 @@ fn login(server: Option<&String>) {
     };
     match result {
         Ok((token, username)) => {
-            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint) }).expect("could not save the config");
+            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint), loudness: config::load().and_then(|c| c.loudness) }).expect("could not save the config");
             println!("Signed in as {username}.");
         }
         Err(e) => eprintln!("Sign-in failed: {e}"),
@@ -174,6 +176,12 @@ struct App {
     active: usize, // the panel that m / M change
     cover: cover::Cover,
     media: media::Media,
+    loud: loudness::Mode,
+    gain_db: Option<f32>, // the loudness gain applied now (None: the output is untouched)
+    player_b: Option<Player>, // the second output stream of the A/B compare
+    meters_b: Meters,
+    tap_b: Vec<f32>,
+    ab: Option<ab::Ab>,
     tint: bool,         // meters take their colours from the cover
     tint_cur: [f32; 6], // the colours shown now (accent, accent2), easing toward the target
     queue_albums: Vec<u64>, // the album of each queued track (a queue from the truth table mixes albums)
@@ -200,12 +208,13 @@ impl App {
             panels = vec![Kind::Spectrum, Kind::VuWide];
         }
         let tint = cfg.tint.unwrap_or(true);
+        let loud = loudness::Mode::from_id(cfg.loudness.as_deref().unwrap_or("off"));
         let tint_cur = { let t = &themes[theme]; [t.accent.0 as f32, t.accent.1 as f32, t.accent.2 as f32, t.accent2.0 as f32, t.accent2.1 as f32, t.accent2.2 as f32] };
         let mut album_sel = ListState::default();
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), resume: None, saved_at: Instant::now(), full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), resume: None, saved_at: Instant::now(), full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -244,6 +253,9 @@ impl App {
         self.cover.poll();
         self.truth.poll();
         self.media_commands();
+        if self.ab.is_some() {
+            return self.ab_tick(dt);
+        }
         // a restored track waits for space: the idle player would otherwise report an "ended" track and move on to the next
         if self.resume.is_none() && self.player.ended() {
             self.step(1, true);
@@ -264,6 +276,9 @@ impl App {
     }
 
     fn key(&mut self, code: KeyCode, mods: KeyModifiers) {
+        if self.ab.is_some() && mods != KeyModifiers::CONTROL && self.ab_key(code) {
+            return;
+        }
         if self.view == View::Truth && !self.full && mods != KeyModifiers::CONTROL && self.truth_key(code) {
             return;
         }
@@ -285,6 +300,17 @@ impl App {
             (KeyCode::Char('M'), _) => self.cycle_meter(-1),
             (KeyCode::Char('+'), _) => self.add_meter(),
             (KeyCode::Char('-'), _) => self.remove_meter(),
+            (KeyCode::Char('L'), _) => {
+                self.loud = self.loud.next();
+                self.cfg.loudness = Some(self.loud.id().into());
+                let _ = config::save(&self.cfg);
+                self.apply_gain();
+                self.status = match (self.loud, self.gain_db) {
+                    (loudness::Mode::Off, _) => "loudness matching: off".into(),
+                    (m, Some(db)) => format!("loudness matching: {} ({db:+.1} dB on this track, target {} LUFS)", m.id(), loudness::TARGET),
+                    (m, None) => format!("loudness matching: {} (this track has no measurement)", m.id()),
+                };
+            }
             (KeyCode::Char('c'), _) => {
                 self.tint = !self.tint;
                 self.cfg.tint = Some(self.tint);
@@ -478,6 +504,9 @@ impl App {
 
     /// Space and the system's play / pause: a restored track starts where it stopped, otherwise pause toggles.
     fn toggle_play(&mut self) {
+        if self.ab.is_some() {
+            return self.ab_toggle();
+        }
         match (self.resume.take(), self.now) {
             (Some(pos), Some(i)) => {
                 self.start(i);
@@ -528,6 +557,203 @@ impl App {
         self.media.update(now.as_ref(), pos);
     }
 
+    /// The loudness-matching state for the screen: the mode and the gain on this track, or that it has no measurement.
+    fn lm_label(&self) -> Option<String> {
+        if self.loud == loudness::Mode::Off {
+            return None;
+        }
+        Some(match self.gain_db {
+            Some(db) => format!("LM {} {db:+.1} dB", self.loud.id()),
+            None => format!("LM {} n/a", self.loud.id()),
+        })
+    }
+
+    /// Work out and apply the loudness gain of the track that plays now (album mode uses the queue's tracks of the same album).
+    fn apply_gain(&mut self) {
+        if self.ab.is_some() {
+            return self.apply_ab_gains();
+        }
+        let Some(i) = self.now else { return };
+        let Some(t) = self.queue.get(i) else { return };
+        let album_id = self.queue_albums.get(i).copied();
+        let album: Vec<&Track> = self.queue.iter().zip(&self.queue_albums).filter(|(_, a)| Some(**a) == album_id).map(|(t, _)| t).collect();
+        self.gain_db = loudness::gain_db(self.loud, t, &album);
+        self.player.set_gain(loudness::linear(self.gain_db.unwrap_or(0.0)));
+    }
+
+    fn apply_ab_gains(&mut self) {
+        if let (Some(ab), Some(pb)) = (&self.ab, &self.player_b) {
+            let (ga, gb) = ab.output_gains();
+            self.player.set_gain(ga);
+            pb.set_gain(gb);
+        }
+    }
+
+    /// From the file-truth table: compare the selected track with another copy of the same recording.
+    fn start_ab(&mut self) {
+        let view = self.truth.view();
+        let Some(row) = self.truth.table.selected().and_then(|i| view.get(i)) else { return };
+        let (a, album_id) = (row.track.clone(), row.album_id);
+        if a.stream_url.is_none() {
+            self.status = "this track is not playable".into();
+            return;
+        }
+        let candidates = ab::copies(&self.truth.rows, &a);
+        if candidates.is_empty() {
+            self.status = "no other copy of this track in your library (same artist, title and length)".into();
+            return;
+        }
+        if self.player_b.is_none() {
+            match Player::new() {
+                Ok(p) => self.player_b = Some(p),
+                Err(e) => {
+                    self.status = format!("audio: {e}");
+                    return;
+                }
+            }
+        }
+        self.player.stop();
+        self.queue = vec![a.clone()];
+        self.queue_albums = vec![album_id];
+        self.now = Some(0);
+        self.resume = None;
+        self.cover.show(&self.api, a.cover_url.as_deref());
+        self.ab = Some(ab::Ab::new(a, candidates));
+        self.status.clear();
+        self.ab_streams(0.0);
+    }
+
+    /// (Re)start both sides from `pos`, paused until both have buffered, so they begin together.
+    fn ab_streams(&mut self, pos: f64) {
+        let (Some(ab), Some(pb)) = (self.ab.as_mut(), self.player_b.as_ref()) else { return };
+        let (Some(ua), Some(ub)) = (ab.a.stream_url.clone(), ab.b().stream_url.clone()) else { return };
+        ab.syncing = true;
+        ab.started = Instant::now();
+        self.meters.reset_track();
+        self.meters_b.reset_track();
+        self.player.play(&self.api, ua);
+        pb.play(&self.api, ub);
+        for p in [&self.player, pb] {
+            p.set_paused(true);
+            if pos > 0.0 {
+                p.seek_to(pos);
+            }
+        }
+        self.apply_ab_gains();
+    }
+
+    fn ab_tick(&mut self, dt: f32) {
+        let Some(pb) = self.player_b.as_ref() else { return };
+        if self.ab.as_ref().is_some_and(|a| a.syncing) {
+            let ready = |p: &Player| p.buffered() >= 1.0 || (p.decoded() && !p.loading());
+            let waited = self.ab.as_ref().is_some_and(|a| a.started.elapsed() > Duration::from_secs(25));
+            if (ready(&self.player) && ready(pb)) || waited {
+                self.player.set_paused(false);
+                pb.set_paused(false);
+                if let Some(a) = self.ab.as_mut() {
+                    a.syncing = false;
+                }
+            }
+        }
+        if let Some(e) = self.player.error().or_else(|| pb.error()) {
+            self.status = e;
+        }
+        if self.player.ended() {
+            self.player.set_paused(true);
+            pb.set_paused(true);
+        }
+        self.tap = self.player.tap();
+        let played = self.player.take_played();
+        self.meters.update(&self.tap, &played, self.player.rate(), dt);
+        self.tap_b = pb.tap();
+        let played_b = pb.take_played();
+        self.meters_b.update(&self.tap_b, &played_b, pb.rate(), dt);
+    }
+
+    fn ab_toggle(&mut self) {
+        let Some(pb) = self.player_b.as_ref() else { return };
+        if self.ab.as_ref().is_some_and(|a| a.syncing) {
+            return;
+        }
+        let pause = !self.player.paused();
+        self.player.set_paused(pause);
+        pb.set_paused(pause);
+    }
+
+    /// Keys of the compare; true when it used the key (the browsing keys are swallowed so nothing leaves the compare by accident).
+    fn ab_key(&mut self, code: KeyCode) -> bool {
+        match code {
+            KeyCode::Char('1') => self.ab_hear(0),
+            KeyCode::Char('2') => self.ab_hear(1),
+            KeyCode::Char('x') => {
+                let to = 1 - self.ab.as_ref().map_or(0, |a| a.audible);
+                self.ab_hear(to)
+            }
+            KeyCode::Char('g') => {
+                if let Some(a) = self.ab.as_mut() {
+                    a.matched = !a.matched;
+                }
+                self.apply_ab_gains();
+            }
+            KeyCode::Char('[') | KeyCode::Char(']') => {
+                let pos = self.player.position();
+                if let Some(a) = self.ab.as_mut() {
+                    let n = a.candidates.len();
+                    a.b_idx = if code == KeyCode::Char(']') { (a.b_idx + 1) % n } else { (a.b_idx + n - 1) % n };
+                }
+                self.ab_streams(pos);
+            }
+            KeyCode::Char(' ') => self.ab_toggle(),
+            KeyCode::Char('.') | KeyCode::Char(',') => {
+                let to = (self.player.position() + if code == KeyCode::Char('.') { 10.0 } else { -10.0 }).max(0.0);
+                self.player.seek_to(to);
+                if let Some(pb) = &self.player_b {
+                    pb.seek_to(to);
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('a') => self.exit_ab(),
+            KeyCode::Char('f' | 'F' | 'i' | 's' | 'o' | 'j' | 'k' | 'h' | 'l' | 'n' | 'p') | KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right | KeyCode::Enter | KeyCode::Tab | KeyCode::Home | KeyCode::End | KeyCode::PageUp | KeyCode::PageDown => {}
+            _ => return false,
+        }
+        true
+    }
+
+    fn ab_hear(&mut self, side: usize) {
+        if let Some(a) = self.ab.as_mut() {
+            a.audible = side;
+        }
+        self.apply_ab_gains();
+    }
+
+    /// Leave the compare; what is heard keeps playing as the normal player.
+    fn exit_ab(&mut self) {
+        let Some(ab) = self.ab.take() else { return };
+        let heard_b = ab.audible == 1;
+        if let Some(pb) = self.player_b.as_mut() {
+            if heard_b {
+                std::mem::swap(&mut self.player, pb);
+                std::mem::swap(&mut self.meters, &mut self.meters_b);
+                std::mem::swap(&mut self.tap, &mut self.tap_b);
+                let b = ab.b().clone();
+                self.queue_albums = vec![b.album_id.unwrap_or(0)];
+                self.cover.show(&self.api, b.cover_url.as_deref());
+                self.queue = vec![b];
+            }
+            pb.stop();
+            pb.set_paused(true);
+            pb.set_gain(1.0);
+        }
+        self.now = Some(0);
+        self.apply_gain();
+        self.status = format!("left the compare, playing {}", if heard_b { "B" } else { "A" });
+    }
+
+    fn draw_ab(&self, f: &mut Frame, th: &Theme) {
+        let Some(ab) = &self.ab else { return };
+        let mt = self.meter_theme(th);
+        ab::draw(f, f.area(), ab, ab::Side { meters: &self.meters, tap: &self.tap }, ab::Side { meters: &self.meters_b, tap: &self.tap_b }, self.player.rate(), &mt, &self.panels, self.player.position(), &self.status);
+    }
+
     fn playing_album(&self) -> Option<u64> {
         self.now.and_then(|i| self.queue_albums.get(i)).copied()
     }
@@ -541,8 +767,10 @@ impl App {
             KeyCode::PageUp => self.truth.mv(-10),
             KeyCode::Home | KeyCode::Char('g') => self.truth.mv(i32::MIN / 2),
             KeyCode::End | KeyCode::Char('G') => self.truth.mv(i32::MAX / 2),
+            KeyCode::Char('a') => self.start_ab(),
             KeyCode::Char('s') => self.truth.cycle_sort(),
             KeyCode::Char('o') => self.truth.toggle_filter(),
+            KeyCode::Char('d') => self.truth.toggle_copies(),
             KeyCode::Esc | KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('i') => self.view = View::Library,
             KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
                 // what is shown becomes the queue, so next and previous walk the list (all the problem files, say)
@@ -671,6 +899,7 @@ impl App {
                 self.meters.reset_track();
                 self.status.clear();
                 self.player.play(&self.api, url);
+                self.apply_gain();
                 self.save_last();
                 // warm the next playable track
                 if let Some(next) = self.queue.iter().skip(i + 1).find_map(|t| t.stream_url.clone()) {
@@ -742,6 +971,9 @@ impl App {
         let th = self.themes[self.theme].clone();
         let (text, muted, accent) = (c(th.text), c(th.muted), c(th.accent));
         f.render_widget(Block::new().style(Style::new().bg(c(th.bg)).fg(text)), f.area());
+        if self.ab.is_some() {
+            return self.draw_ab(f, &th);
+        }
         if self.full {
             return self.draw_full(f, &th);
         }
@@ -756,7 +988,7 @@ impl App {
             let icon = self.play_icon();
             truth::draw(f, body, &mut self.truth, playing, icon, &th);
             self.draw_now(f, now, &th);
-            let hint = if self.status.is_empty() { "enter play from here (the list becomes the queue) · s sort · o only findings · j/k PgUp/PgDn move · space pause · n/p · i or esc back".to_string() } else { self.status.clone() };
+            let hint = if self.status.is_empty() { "enter play from here (the list becomes the queue) · d copies · a A/B compare · s sort · o only findings · j/k PgUp/PgDn move · space pause · n/p · i or esc back".to_string() } else { self.status.clone() };
             f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
             return;
         }
@@ -802,13 +1034,13 @@ impl App {
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Tracks, title)).highlight_style(sel), right, &mut self.track_sel);
 
         self.draw_now(f, now, &th);
-        let hint = if self.status.is_empty() { "enter open/play · i file truth · space pause · n/p next/prev · ,/. seek 10s · tab/m meter · c cover colours · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
+        let hint = if self.status.is_empty() { "enter open/play · i file truth · space pause · n/p next/prev · ,/. seek 10s · tab/m meter · c cover colours · L loudness · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
         f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
     }
 
     fn draw_now(&mut self, f: &mut Frame, area: Rect, th: &Theme) {
         let (muted, accent) = (c(th.muted), c(th.accent));
-        let block = Block::new().borders(Borders::ALL).border_style(Style::new().fg(muted)).title(" Now playing ").style(Style::new().bg(c(th.surface)).fg(c(th.text)));
+        let block = Block::new().borders(Borders::ALL).border_style(Style::new().fg(muted)).title(format!(" Now playing{} ", self.lm_label().map_or(String::new(), |l| format!(" · {l}")))).style(Style::new().bg(c(th.surface)).fg(c(th.text)));
         let inner = block.inner(area);
         f.render_widget(block, area);
         let t = self.now.and_then(|i| self.queue.get(i));
@@ -977,6 +1209,8 @@ mod live_tests {
         app.queue_albums = vec![full.id; app.queue.len()];
         app.now = Some(ti);
         app.resume = None;
+        app.loud = loudness::Mode::Album;
+        app.apply_gain();
         app.open = Some(full.clone());
         app.focus = Focus::Tracks;
         for (i, b) in app.meters.bands.iter_mut().enumerate() {
@@ -1022,11 +1256,77 @@ mod live_truth {
             app.truth.poll();
         }
         println!("loaded {} albums in {:.1}s, {} analysed tracks", app.truth.loaded, t0.elapsed().as_secs_f32(), app.truth.rows.len());
+        app.truth.toggle_copies();
         let mut t = Terminal::new(TestBackend::new(150, 40)).unwrap();
         t.draw(|f| app.draw(f)).unwrap();
         let b = t.backend().buffer();
         for y in 0..40 {
             println!("{}", (0..150).map(|x| b[(x, y)].symbol().to_string()).collect::<String>());
         }
+    }
+}
+
+#[cfg(test)]
+mod live_ab {
+    use super::*;
+
+    /// `cargo test live_ab -- --ignored --nocapture`: finds a recording with another copy in the signed-in library and runs the
+    /// compare for a few seconds with the output silenced (gain 0), printing how far apart the two sides are.
+    #[test]
+    #[ignore]
+    fn live_ab() {
+        let cfg = config::load().expect("sign in first");
+        let api = Api::new(&cfg.server, &cfg.token);
+        let albums = api.albums().unwrap();
+        let mut app = App::new(api.clone(), albums.clone(), Player::new().unwrap(), cfg);
+        app.truth.start(&api, &albums);
+        while !app.truth.done() {
+            std::thread::sleep(Duration::from_millis(100));
+            app.truth.poll();
+        }
+        let rows = app.truth.rows.clone();
+        let Some((i, copies)) = rows.iter().enumerate().find_map(|(i, r)| Some((i, ab::copies(&rows, &r.track))).filter(|(_, c)| !c.is_empty())) else {
+            return println!("no recording with a second copy in this library");
+        };
+        println!("A: {} — {} ({:?}); {} copies, B: {:?}", rows[i].track.artist.clone().unwrap_or_default(), rows[i].track.title, rows[i].track.album, copies.len(), copies[0].album);
+        let view_pos = app.truth.view().iter().position(|r| r.track.id == rows[i].track.id).unwrap();
+        app.truth.table.select(Some(view_pos));
+        app.start_ab();
+        assert!(app.ab.is_some(), "{}", app.status);
+        let t0 = Instant::now();
+        let mut synced_at = None;
+        while t0.elapsed() < Duration::from_secs(40) && app.player.position() < 4.0 {
+            app.tick(0.033);
+            app.player.set_gain(0.0);
+            app.player_b.as_ref().unwrap().set_gain(0.0);
+            if synced_at.is_none() && !app.ab.as_ref().unwrap().syncing {
+                synced_at = Some(t0.elapsed());
+            }
+            std::thread::sleep(Duration::from_millis(33));
+        }
+        let (pa, pb) = (app.player.position(), app.player_b.as_ref().unwrap().position());
+        println!("both started after {:?}; position A {pa:.3} s, B {pb:.3} s, drift {:.0} ms", synced_at, (pa - pb).abs() * 1000.0);
+        println!("meters: A rms {:.1} / {:.1} dB, B rms {:.1} / {:.1} dB", app.meters.rms.0, app.meters.rms.1, app.meters_b.rms.0, app.meters_b.rms.1);
+        let (ga, gb) = app.ab.as_ref().unwrap().gains_db();
+        println!("matched gains: A {ga:+.1} dB, B {gb:+.1} dB");
+        {
+            use ratatui::{backend::TestBackend, Terminal};
+            app.panels = vec![Kind::VuNeedle, Kind::Spectrum];
+            let mut t = Terminal::new(TestBackend::new(130, 34)).unwrap();
+            t.draw(|f| app.draw(f)).unwrap();
+            let b = t.backend().buffer();
+            for y in 0..34 {
+                println!("{}", (0..130).map(|x| b[(x, y)].symbol().to_string()).collect::<String>());
+            }
+        }
+        app.ab_key(KeyCode::Char('x'));
+        println!("after x: audible = {}", app.ab.as_ref().unwrap().audible);
+        app.player.set_gain(0.0);
+        app.player_b.as_ref().unwrap().set_gain(0.0);
+        app.ab_key(KeyCode::Esc);
+        assert!(app.ab.is_none());
+        app.player.set_gain(0.0);
+        app.player.stop();
+        assert!((pa - pb).abs() < 0.25, "sides drifted apart");
     }
 }

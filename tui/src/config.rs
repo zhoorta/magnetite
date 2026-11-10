@@ -17,6 +17,9 @@ pub struct Config {
     /// Meter colours taken from the album cover; absent means on.
     #[serde(default)]
     pub tint: Option<bool>,
+    /// Loudness matching: "off", "album" or "track" (absent: off).
+    #[serde(default)]
+    pub loudness: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
