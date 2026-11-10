@@ -75,6 +75,57 @@ fn cmp_opt(a: Option<f64>, b: Option<f64>, desc: bool) -> Ordering {
     }
 }
 
+/// What the loading thread reports: how many steps there will be (pages or albums), then the rows of each step.
+enum Msg {
+    Total(usize),
+    Rows(Vec<Row>),
+}
+
+fn analysed(t: &Track) -> bool {
+    t.truth.as_ref().is_some_and(|x| x.analyzed)
+}
+
+/// The library's analysed tracks: a few paged requests when the server has `/tracks`, else every album (four threads).
+fn load(api: Api, albums: Vec<Album>, tx: mpsc::Sender<Msg>) {
+    let order: std::collections::HashMap<u64, usize> = albums.iter().enumerate().map(|(i, a)| (a.id, i)).collect();
+    if let Ok((first, last)) = api.analysed_tracks(1) {
+        let _ = tx.send(Msg::Total(last as usize));
+        let rows = |tracks: Vec<Track>| -> Vec<Row> {
+            tracks.into_iter().filter(analysed).map(|track| Row { album_id: track.album_id.unwrap_or(0), album_order: track.album_id.and_then(|id| order.get(&id).copied()).unwrap_or(usize::MAX), track }).collect()
+        };
+        let _ = tx.send(Msg::Rows(rows(first)));
+        for page in 2..=last {
+            match api.analysed_tracks(page) {
+                Ok((t, _)) => {
+                    let _ = tx.send(Msg::Rows(rows(t)));
+                }
+                Err(_) => {
+                    let _ = tx.send(Msg::Rows(vec![]));
+                }
+            }
+        }
+        return;
+    }
+    let _ = tx.send(Msg::Total(albums.len()));
+    let ids: Vec<u64> = albums.iter().map(|a| a.id).collect();
+    let workers: Vec<_> = (0..4usize)
+        .map(|k| {
+            let (api, tx, ids) = (api.clone(), tx.clone(), ids.clone());
+            thread::spawn(move || {
+                for (i, id) in ids.iter().enumerate().skip(k).step_by(4) {
+                    let rows = api.album(*id).map(|a| a.tracks.into_iter().filter(analysed).map(|track| Row { album_id: *id, album_order: i, track }).collect()).unwrap_or_default();
+                    if tx.send(Msg::Rows(rows)).is_err() {
+                        return;
+                    }
+                }
+            })
+        })
+        .collect();
+    for w in workers {
+        let _ = w.join();
+    }
+}
+
 pub struct Browser {
     pub rows: Vec<Row>,
     pub total: usize,
@@ -82,7 +133,7 @@ pub struct Browser {
     pub sort: Sort,
     pub only_findings: bool,
     pub table: TableState,
-    rx: Option<mpsc::Receiver<(usize, Option<Album>)>>,
+    rx: Option<mpsc::Receiver<Msg>>,
 }
 
 impl Browser {
@@ -90,24 +141,15 @@ impl Browser {
         Browser { rows: vec![], total: 0, loaded: 0, sort: Sort::Severity, only_findings: false, table: TableState::default(), rx: None }
     }
 
-    /// Fetch every album's tracks, once, with four threads.
+    /// Load the library's analysed tracks, once, in the background.
     pub fn start(&mut self, api: &Api, albums: &[Album]) {
         if self.rx.is_some() {
             return;
         }
         let (tx, rx) = mpsc::channel();
-        self.total = albums.len();
-        let ids: Vec<u64> = albums.iter().map(|a| a.id).collect();
-        for k in 0..4usize {
-            let (api, tx, ids) = (api.clone(), tx.clone(), ids.clone());
-            thread::spawn(move || {
-                for (i, id) in ids.iter().enumerate().skip(k).step_by(4) {
-                    if tx.send((i, api.album(*id).ok())).is_err() {
-                        return;
-                    }
-                }
-            });
-        }
+        self.total = albums.len().max(1);
+        let (api, albums) = (api.clone(), albums.to_vec());
+        thread::spawn(move || load(api, albums, tx));
         self.rx = Some(rx);
     }
 
@@ -115,11 +157,14 @@ impl Browser {
         let Some(rx) = &self.rx else { return };
         let keep = self.selected_id();
         let mut changed = false;
-        while let Ok((order, album)) = rx.try_recv() {
-            self.loaded += 1;
-            if let Some(a) = album {
-                changed = true;
-                self.rows.extend(a.tracks.into_iter().filter(|t| t.truth.as_ref().is_some_and(|x| x.analyzed)).map(|track| Row { album_id: a.id, album_order: order, track }));
+        while let Ok(msg) = rx.try_recv() {
+            match msg {
+                Msg::Total(n) => self.total = n.max(1),
+                Msg::Rows(rows) => {
+                    self.loaded += 1;
+                    changed |= !rows.is_empty();
+                    self.rows.extend(rows);
+                }
             }
         }
         if changed {
@@ -300,7 +345,7 @@ mod tests {
         Row {
             album_id: 1,
             album_order: order,
-            track: Track { id, title: format!("t{id}"), artist: None, album: None, number: Some(id as i64), duration: None, codec: None, open: true, stream_url: None, cover_url: None, truth: Some(truth) },
+            track: Track { id, title: format!("t{id}"), artist: None, album: None, number: Some(id as i64), album_id: None, duration: None, codec: None, open: true, stream_url: None, cover_url: None, truth: Some(truth) },
         }
     }
 
@@ -346,6 +391,71 @@ mod tests {
     fn severity_is_the_worst_level() {
         assert_eq!(severity(&row(1, 0, None, None, &["note", "problem"]).track), 3);
         assert_eq!(severity(&row(1, 0, None, None, &[]).track), 0);
+    }
+
+    /// A stand-in server: `/tracks` answers two pages (only when `bulk`), `/albums/N` one album each, anything else 404.
+    fn serve(bulk: bool) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                std::thread::spawn(move || {
+                    let mut s = stream;
+                    let mut buf = [0u8; 2048];
+                    let n = s.read(&mut buf).unwrap_or(0);
+                    let line = String::from_utf8_lossy(&buf[..n]).lines().next().unwrap_or("").to_string();
+                    let track = |id: u64, album: u64| json!({"id": id, "title": format!("t{id}"), "album_id": album, "open": true, "truth": {"analyzed": true, "dr": 8.0, "flags": []}});
+                    let body = if bulk && line.contains("/tracks?") {
+                        let page = if line.contains("page=2") { 2 } else { 1 };
+                        Some(json!({"data": [track(page * 10, 2), track(page * 10 + 1, 1)], "meta": {"current_page": page, "last_page": 2}}))
+                    } else if let Some(id) = line.split("/albums/").nth(1).and_then(|r| r.split(' ').next()).and_then(|r| r.parse::<u64>().ok()) {
+                        Some(json!({"data": {"id": id, "title": "A", "tracks": [track(id * 100, id)]}}))
+                    } else {
+                        None
+                    };
+                    let reply = match body {
+                        Some(b) => format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", b.to_string().len(), b),
+                        None => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+                    };
+                    let _ = s.write_all(reply.as_bytes());
+                });
+            }
+        });
+        base
+    }
+
+    fn album(id: u64) -> Album {
+        serde_json::from_value(json!({"id": id, "title": "A"})).unwrap()
+    }
+
+    fn load_all(base: &str) -> Browser {
+        let api = Api::new(base, "tok");
+        let mut b = Browser::new();
+        b.start(&api, &[album(1), album(2)]);
+        for _ in 0..100 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            b.poll();
+            if b.done() {
+                break;
+            }
+        }
+        b
+    }
+
+    #[test]
+    fn it_loads_with_a_few_paged_requests_when_the_server_has_tracks_and_falls_back_to_albums_when_not() {
+        let bulk = load_all(&serve(true));
+        assert!(bulk.done());
+        let mut ids: Vec<_> = bulk.rows.iter().map(|r| (r.track.id, r.album_order)).collect();
+        ids.sort();
+        assert_eq!(ids, vec![(10, 1), (11, 0), (20, 1), (21, 0)]); // album_order is the position in the album list
+
+        let old = load_all(&serve(false)); // 404 on /tracks: one request per album
+        assert!(old.done());
+        let mut ids: Vec<_> = old.rows.iter().map(|r| (r.track.id, r.album_id)).collect();
+        ids.sort();
+        assert_eq!(ids, vec![(100, 1), (200, 2)]);
     }
 
     #[test]

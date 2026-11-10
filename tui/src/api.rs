@@ -7,11 +7,31 @@ pub struct Album {
     pub id: u64,
     pub title: String,
     pub artist: Option<String>,
+    /// The album artist, else its tracks' single artist, else "Various artists" (older servers do not send it).
+    pub display_artist: Option<String>,
     pub year: Option<i64>,
     pub track_count: Option<u64>,
     pub dr: Option<f64>,
     #[serde(default)]
     pub tracks: Vec<Track>,
+}
+
+impl Album {
+    /// What to show as the artist: the server's `display_artist`, else the tagged one, else the single artist of the tracks when they are loaded.
+    pub fn shown_artist(&self) -> String {
+        self.display_artist
+            .clone()
+            .or_else(|| self.artist.clone())
+            .or_else(|| {
+                let names: Vec<&str> = self.tracks.iter().filter_map(|t| t.artist.as_deref()).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+                match names.len() {
+                    0 => None,
+                    1 => Some(names[0].to_string()),
+                    _ => Some("Various artists".into()),
+                }
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -21,6 +41,7 @@ pub struct Track {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub number: Option<i64>,
+    pub album_id: Option<u64>,
     pub duration: Option<f64>,
     pub codec: Option<String>,
     pub open: bool,
@@ -114,6 +135,13 @@ impl Api {
         }
     }
 
+    /// One page of the library's tracks with their truth (`/tracks?truth=1`, only the analysed ones) and the last page number.
+    /// A server without the endpoint answers with an error: the caller falls back to reading albums.
+    pub fn analysed_tracks(&self, page: u32) -> Result<(Vec<Track>, u32)> {
+        let p: Page<Track> = self.get(&format!("/tracks?truth=1&per_page=300&page={page}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+        Ok((p.data, p.meta.map_or(1, |m| m.last_page)))
+    }
+
     pub fn album(&self, id: u64) -> Result<Album> {
         let d: Data<Album> = self.get(&format!("/albums/{id}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
         Ok(d.data)
@@ -172,4 +200,45 @@ pub fn device_login(server: &str, device_name: &str) -> Result<(String, String)>
         }
     }
     Err("the code expired".into())
+}
+
+#[cfg(test)]
+mod live_artists {
+    use super::*;
+    /// `cargo test live_artists -- --ignored --nocapture`: albums whose `artist` is missing, and what their tracks say.
+    #[test]
+    #[ignore]
+    fn live_artists() {
+        let cfg = crate::config::load().expect("sign in first");
+        let api = Api::new(&cfg.server, &cfg.token);
+        let albums = api.albums().unwrap();
+        let missing: Vec<_> = albums.iter().filter(|a| a.artist.as_deref().unwrap_or("").is_empty()).collect();
+        println!("{} of {} albums have no artist", missing.len(), albums.len());
+        for a in missing {
+            let full = api.album(a.id).unwrap();
+            let mut artists: Vec<String> = full.tracks.iter().filter_map(|t| t.artist.clone()).collect();
+            artists.sort();
+            artists.dedup();
+            println!("{:<45} tracks={} track artists={:?}", a.title, full.tracks.len(), artists);
+        }
+    }
+}
+
+#[cfg(test)]
+mod artist_tests {
+    use super::*;
+
+    fn album(artist: Option<&str>, display: Option<&str>, tracks: &[&str]) -> Album {
+        let t = |a: &str| serde_json::from_value::<Track>(serde_json::json!({"id": 1, "title": "x", "artist": a, "open": true})).unwrap();
+        Album { id: 1, title: "A".into(), artist: artist.map(Into::into), display_artist: display.map(Into::into), year: None, track_count: None, dr: None, tracks: tracks.iter().map(|a| t(a)).collect() }
+    }
+
+    #[test]
+    fn the_shown_artist_prefers_the_servers_then_the_tag_then_the_tracks() {
+        assert_eq!(album(None, Some("Srv"), &[]).shown_artist(), "Srv");
+        assert_eq!(album(Some("Tag"), None, &["x"]).shown_artist(), "Tag");
+        assert_eq!(album(None, None, &["Solo", "Solo"]).shown_artist(), "Solo");
+        assert_eq!(album(None, None, &["B", "A", "B"]).shown_artist(), "Various artists");
+        assert_eq!(album(None, None, &[]).shown_artist(), "");
+    }
 }

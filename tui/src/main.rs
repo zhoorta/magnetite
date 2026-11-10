@@ -626,6 +626,11 @@ impl App {
                 match self.api.album(a.id) {
                     Ok(full) => {
                         self.track_sel.select(if full.tracks.is_empty() { None } else { Some(0) });
+                        if let Some(i) = self.album_sel.selected() {
+                            if self.albums[i].display_artist.is_none() && self.albums[i].artist.is_none() {
+                                self.albums[i].display_artist = Some(full.shown_artist()).filter(|a| !a.is_empty());
+                            }
+                        }
                         self.open = Some(full);
                         self.focus = Focus::Tracks;
                         self.status.clear();
@@ -765,12 +770,13 @@ impl App {
                 let on = self.playing_album() == Some(a.id);
                 let mark = if on { Span::styled(format!("{} ", self.play_icon()), Style::new().fg(c(th.accent2))) } else { Span::raw("  ") };
                 let title = if on { Span::styled(a.title.clone(), Style::new().fg(c(th.accent2))) } else { Span::raw(a.title.clone()) };
-                ListItem::new(Line::from(vec![mark, title, Span::styled(format!("  {}", a.artist.clone().unwrap_or_default()), Style::new().fg(muted))]))
+                ListItem::new(Line::from(vec![mark, title, Span::styled(format!("  {}", a.shown_artist()), Style::new().fg(muted))]))
             })
             .collect();
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, " Albums ".into())).highlight_style(sel), left, &mut self.album_sel);
 
         let playing = self.now.and_then(|i| self.queue.get(i)).map(|t| t.id);
+        let mt = self.meter_theme(&th);
         let title = self.open.as_ref().map_or(" Tracks ".to_string(), |a| format!(" {} ", a.title));
         let items: Vec<ListItem> = self
             .open
@@ -782,7 +788,15 @@ impl App {
                 let mark = if Some(t.id) == playing { self.play_icon() } else { " " };
                 let n = t.number.map_or(String::new(), |n| n.to_string());
                 let style = if Some(t.id) == playing { Style::new().fg(c(th.accent2)) } else if t.open { Style::new() } else { Style::new().fg(muted) };
-                ListItem::new(Line::from(format!("{mark}{n:>2} {:<30} {:>6}", t.title, mmss(t.duration.unwrap_or(0.0))))).style(style)
+                let mut spans = vec![Span::raw(format!("{mark}{n:>2} {:<30} {:>6}", t.title, mmss(t.duration.unwrap_or(0.0))))];
+                if Some(t.id) == playing {
+                    // a live spectrum peek beside the playing track; on the selected row (accent background) it is drawn in the page colour
+                    let on_sel = self.track_sel.selected().is_some_and(|i| self.open.as_ref().and_then(|a| a.tracks.get(i)).is_some_and(|x| x.id == t.id));
+                    let (lo, hi) = if on_sel { (c(th.bg), c(th.bg)) } else { (c(mt.accent), c(mt.accent2)) };
+                    spans.push(Span::raw("  "));
+                    spans.extend(spark(&self.meters.bands, 8, lo, hi, self.player.paused() || self.resume.is_some()));
+                }
+                ListItem::new(Line::from(spans)).style(style)
             })
             .collect();
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Tracks, title)).highlight_style(sel), right, &mut self.track_sel);
@@ -888,9 +902,40 @@ fn cells(n: usize, area: Rect) -> Vec<Rect> {
     out
 }
 
+/// `n` bars of eighth blocks from spectrum bands (0..1): each bar the loudest of its share of the bands; bars from `lo` up to `hi`
+/// by height. Paused, a flat low line instead of whatever the decay left.
+fn spark(bands: &[f32], n: usize, lo: ratatui::style::Color, hi: ratatui::style::Color, paused: bool) -> Vec<Span<'static>> {
+    const B: [char; 9] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    (0..n)
+        .map(|i| {
+            let (a, b) = (i * bands.len() / n, ((i + 1) * bands.len() / n).max(i * bands.len() / n + 1));
+            let v = if paused { 0.0 } else { bands[a..b.min(bands.len())].iter().cloned().fold(0.0, f32::max) };
+            let level = ((v * 8.0).round() as usize).clamp(1, 8); // never blank: an idle bar is a short stub
+            Span::styled(B[level].to_string(), Style::new().fg(if level >= 6 { hi } else { lo }))
+        })
+        .collect()
+}
+
 fn mmss(s: f64) -> String {
     let s = s.max(0.0) as u64;
     format!("{}:{:02}", s / 60, s % 60)
+}
+
+#[cfg(test)]
+mod spark_tests {
+    use super::*;
+
+    #[test]
+    fn the_peek_has_n_bars_that_follow_the_loudest_band_of_their_share() {
+        let mut bands = [0.0f32; 24];
+        bands[0] = 1.0; // first share of three bands
+        bands[23] = 0.5;
+        let s = spark(&bands, 8, ratatui::style::Color::Red, ratatui::style::Color::Blue, false);
+        assert_eq!(s.len(), 8);
+        let ch = |i: usize| s[i].content.chars().next().unwrap();
+        assert_eq!((ch(0), ch(7), ch(3)), ('█', '▄', '▁'));
+        assert!(spark(&bands, 8, ratatui::style::Color::Red, ratatui::style::Color::Blue, true).iter().all(|x| x.content == "▁"));
+    }
 }
 
 #[cfg(test)]
@@ -931,7 +976,12 @@ mod live_tests {
         app.queue = full.tracks.clone();
         app.queue_albums = vec![full.id; app.queue.len()];
         app.now = Some(ti);
-        app.resume = Some(12.0);
+        app.resume = None;
+        app.open = Some(full.clone());
+        app.focus = Focus::Tracks;
+        for (i, b) in app.meters.bands.iter_mut().enumerate() {
+            *b = ((i as f32 * 0.5).sin().abs() * 0.8 + 0.1).min(1.0);
+        }
         app.panels.clear();
         app.cover.show(&api, app.queue[ti].cover_url.as_deref());
         for _ in 0..50 {
@@ -941,7 +991,7 @@ mod live_tests {
                 break;
             }
         }
-        app.full = true;
+        app.full = false;
         let mut t = Terminal::new(TestBackend::new(110, 40)).unwrap();
         t.draw(|f| app.draw(f)).unwrap();
         let b = t.backend().buffer();
