@@ -52,6 +52,7 @@ class Api(private val session: Session) {
         val obj = json.parseToJsonElement(body).jsonObject
         obj["errors"]?.jsonObject?.values?.firstOrNull()?.let { (it as? kotlinx.serialization.json.JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull }
             ?: obj["message"]?.jsonPrimitive?.contentOrNull
+            ?: obj["error"]?.jsonPrimitive?.contentOrNull
     }.getOrNull()
 
     private fun url(path: String) = session.serverUrl + "/api/v1" + path
@@ -67,6 +68,33 @@ class Api(private val session: Session) {
             Request.Builder().url(url("/token")).header("Accept", "application/json")
                 .post(payload.toString().toRequestBody("application/json".toMediaType())).build(),
         )
+        return json.decodeFromString<SignedIn>(body).also {
+            session.token = it.token
+            session.username = it.user.username
+            session.lastUsername = it.user.username
+        }
+    }
+
+    /** Asks the server for a code to show on a screen without a keyboard; the person approves it at [DeviceCode.verificationUrl]. */
+    suspend fun startDeviceLink(server: String): DeviceCode {
+        session.serverUrl = server
+        val payload = buildJsonObject { put("device_name", "${Build.MANUFACTURER} ${Build.MODEL}") }
+        return json.decodeFromString(
+            call(Request.Builder().url(url("/device-code")).header("Accept", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType())).build()),
+        )
+    }
+
+    /** Null while the person has not approved yet; throws [ApiException] `expired_token` when the code is gone. */
+    suspend fun pollDeviceLink(deviceCode: String): SignedIn? {
+        val payload = buildJsonObject { put("device_code", deviceCode) }
+        val body = try {
+            call(Request.Builder().url(url("/device-token")).header("Accept", "application/json")
+                .post(payload.toString().toRequestBody("application/json".toMediaType())).build())
+        } catch (e: ApiException) {
+            if (e.message == "authorization_pending") return null
+            throw e
+        }
         return json.decodeFromString<SignedIn>(body).also {
             session.token = it.token
             session.username = it.user.username

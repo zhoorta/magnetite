@@ -159,3 +159,41 @@ describe('meters', function () {
         $this->putJson('/api/v1/settings/meters', ['ids' => []])->assertUnauthorized();
     });
 });
+
+describe('device code', function () {
+    it('signs a TV in once a person has approved its code', function () {
+        $start = $this->postJson('/api/v1/device-code', ['device_name' => 'Living room TV'])
+            ->assertCreated()
+            ->assertJsonPath('verification_url', route('device'))
+            ->assertJsonStructure(['device_code', 'user_code', 'expires_in', 'interval']);
+
+        $this->postJson('/api/v1/device-token', ['device_code' => $start->json('device_code')])
+            ->assertStatus(400)->assertJsonPath('error', 'authorization_pending');
+
+        $this->actingAs($this->alice)->post('/device', ['user_code' => strtolower(str_replace('-', ' ', $start->json('user_code')))])
+            ->assertOk()->assertSee('signing in as alice');
+
+        $this->postJson('/api/v1/device-token', ['device_code' => $start->json('device_code')])
+            ->assertCreated()->assertJsonPath('user.username', 'alice')->assertJsonStructure(['token']);
+        expect($this->alice->tokens()->where('name', 'Living room TV')->count())->toBe(1);
+
+        // The token is handed out once.
+        $this->postJson('/api/v1/device-token', ['device_code' => $start->json('device_code')])
+            ->assertStatus(400)->assertJsonPath('error', 'expired_token');
+    });
+
+    it('refuses an unknown code and an unknown device code', function () {
+        $this->actingAs($this->alice)->post('/device', ['user_code' => 'ABCD-EFGH'])->assertSessionHasErrors('user_code');
+        $this->postJson('/api/v1/device-token', ['device_code' => 'nope'])->assertStatus(400)->assertJsonPath('error', 'expired_token');
+    });
+
+    it('lets only signed-in people approve, and a code only once', function () {
+        $start = $this->postJson('/api/v1/device-code', ['device_name' => 'TV'])->assertCreated();
+
+        $this->post('/device', ['user_code' => $start->json('user_code')])->assertRedirect('/login');
+        $this->get('/device')->assertRedirect('/login');
+
+        $this->actingAs($this->alice)->post('/device', ['user_code' => $start->json('user_code')])->assertOk();
+        $this->actingAs($this->bob)->post('/device', ['user_code' => $start->json('user_code')])->assertSessionHasErrors('user_code');
+    });
+});

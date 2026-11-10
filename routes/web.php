@@ -5,6 +5,7 @@ use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\CopyController;
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
+use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\IdentifyController;
 use App\Http\Controllers\LibraryController;
@@ -47,6 +48,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/copy/{kind}/{id}', [CopyController::class, 'store'])->whereIn('kind', ['albums', 'tracks'])->whereNumber('id')->name('copy.store');
 
     Route::put('/settings/meters', [MeterSettingController::class, 'update'])->name('settings.meters');
+
+    Route::get('/device', [DeviceController::class, 'create'])->name('device');
+    Route::post('/device', [DeviceController::class, 'store'])->middleware('throttle:10,1')->name('device.store');
 
     Route::get('/playlists', [PlaylistController::class, 'index'])->name('playlists');
     Route::post('/playlists', [PlaylistController::class, 'store'])->name('playlists.store');

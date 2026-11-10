@@ -5,6 +5,7 @@ use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\Api\AlbumController;
 use App\Http\Controllers\Api\AlbumCoverController;
 use App\Http\Controllers\Api\AlbumTrackController;
+use App\Http\Controllers\Api\DeviceCodeController;
 use App\Http\Controllers\Api\FolderController;
 use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\PlaylistController;
@@ -25,6 +26,10 @@ use Illuminate\Support\Facades\Route;
 // Token API for the Android app (docs/android.md). Visibility is decided by the same scopes and policies as the web.
 Route::prefix('v1')->group(function () {
     Route::post('/token', [TokenController::class, 'store'])->name('api.token.store');
+
+    // Sign-in for a TV: it shows a code, a signed-in person approves it at /device (App\Support\DeviceGrants).
+    Route::post('/device-code', [DeviceCodeController::class, 'store'])->middleware('throttle:10,1')->name('api.device-code.store');
+    Route::post('/device-token', [DeviceCodeController::class, 'token'])->middleware('throttle:30,1')->name('api.device-code.token');
 
     Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
         Route::delete('/token', [TokenController::class, 'destroy'])->name('api.token.destroy');

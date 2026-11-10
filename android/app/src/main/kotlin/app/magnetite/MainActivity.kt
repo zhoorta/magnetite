@@ -34,6 +34,8 @@ import app.magnetite.ui.NowPlayingScreen
 import app.magnetite.ui.PlaylistScreen
 import app.magnetite.ui.PlaylistsScreen
 import app.magnetite.ui.SharedScreen
+import app.magnetite.ui.TvApp
+import app.magnetite.ui.isTelevision
 
 private enum class Tab(val label: String) { Library("Library"), Shared("Shared"), Playlists("Playlists") }
 
@@ -56,6 +58,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MagnetiteTheme {
+                if (isTelevision(this@MainActivity)) {
+                    TvApp(app)
+                    return@MagnetiteTheme
+                }
                 var signedIn by remember { mutableStateOf(app.session.signedIn) }
                 var tab by remember { mutableStateOf(Tab.Library) }
                 var detail by remember { mutableStateOf<Detail?>(null) }

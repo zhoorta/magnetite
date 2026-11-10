@@ -74,3 +74,12 @@ data class SignedIn(val token: String, val user: UserInfo)
 
 @Serializable
 data class UserInfo(val id: Int, val username: String)
+
+@Serializable
+data class DeviceCode(
+    @SerialName("device_code") val deviceCode: String,
+    @SerialName("user_code") val userCode: String,
+    @SerialName("verification_url") val verificationUrl: String,
+    @SerialName("expires_in") val expiresIn: Int,
+    val interval: Int = 5,
+)

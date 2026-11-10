@@ -137,3 +137,30 @@ The app is a media app for Android Auto: `PlaybackService` is a `MediaLibrarySer
 - FFTs for third-octave and spectrogram run on `Dispatchers.Default` (`MeterCanvas(work = …)`); `Spectrum` has precomputed twiddles and band edges.
 - `MainActivity.preferHighRefreshRate()` asks for the fastest display mode at the current resolution (adaptive-refresh phones otherwise drop for touch-free animation).
 - Draw costs (2026-10-10): the goniometer draws points (`drawPoints`) instead of a 1024-segment stroked path (it was ~3x slower than the other meters on the emulator); the scope draws one point per ~3 px; the magic eye uses concentric translucent discs instead of radial gradients; the spectrogram has 400 columns and slides by the fractional column; LUFS numbers are formatted without `String.format`.
+
+## Android TV (plan 2026-10-12; steps 1 and 4 built 2026-10-29, not yet run on a TV or emulator)
+
+Same Gradle project and APK as the phone app (Compose + Media3 carry over); the data layer, `PlaybackService`, meters, loudness/spectrum code and themes are reused unchanged.
+
+Steps:
+1. Manifest: `LEANBACK_LAUNCHER` category, banner image, `uses-feature android.software.leanback` and `touchscreen` both `required=false` (so phones still install). Detect TV (`UiModeManager`) to pick the TV UI.
+2. Focus and D-pad: every row, button and tab focusable with a visible focus state; Back behaves; D-pad alternatives for what is gesture-only now (`Drag.kt` reordering, swipe to fold the mini player).
+3. 10-foot layout: larger type, landscape, overscan-safe margins; library list on the left, large Now Playing with big meters on the right; no mini player.
+4. Sign-in: typing a password with a remote is poor. Preferred: pairing code (TV shows a code, approve on the web or phone; needs a small server endpoint). Fallback: on-screen keyboard.
+5. Performance: goniometer, loudness and scope are already sluggish on phones (see android-meters-performance); cheap boxes need a lighter meter mode.
+6. Distribution: sideload the APK from the landing page. Skip Play Store TV (extra review requirements).
+
+Testing on a real box:
+- Box: Settings, Device Preferences, About, tap Build 7 times; then Developer options, USB/network debugging on.
+- Mac (same network): `adb connect <box-ip>:5555`, accept the prompt on the TV (always allow). adb is in `~/Library/Android/sdk/platform-tools`.
+- Install: `./gradlew installDebug`; give the debug build `applicationIdSuffix = ".debug"` so it sits next to the signed release. Start before the leanback entry exists with `adb shell am start -n app.magnetite/.MainActivity`.
+- Handy: `adb logcat | grep -i magnetite`, `adb exec-out screencap -p > tv.png`, `adb shell input keyevent KEYCODE_DPAD_DOWN` (also `DPAD_CENTER`, `BACK`), `scrcpy` to mirror.
+- Caveats: some cheap generic boxes hide developer options or allow USB only. Also test in an Android TV emulator image. Cheap boxes are the right performance test.
+
+Built 2026-10-29 (compiles; not yet run on a TV): manifest entries and banner; `isTelevision()` and `tvFocus()` in `ui/Tv.kt`; `ui/TvApp.kt` (side rail, album grid, reuses the phone's detail, player and picker screens); `ui/TvLoginScreen.kt`. Still open: focus fixes after a run, a real TV Now Playing layout, step 5, a debug `applicationIdSuffix`.
+
+### Pairing-code sign-in (built 2026-10-29)
+- `POST /api/v1/device-code` (`device_name`; throttle 10/min) answers `device_code` (secret, stays on the TV), `user_code` (`ABCD-EFGH`, no look-alike characters), `verification_url` (`/device`), `expires_in` 600, `interval` 5.
+- `POST /api/v1/device-token` (`device_code`; throttle 30/min): 400 `authorization_pending` until approved, 400 `expired_token` if unknown, expired or already collected, else 201 with the same `{token, user}` as `POST /token` (ability `*`). The token is handed out once.
+- Web `GET/POST /device` (signed in; the POST is throttled 10/min): the person types the code; unknown or used codes fail validation. A code can be approved once.
+- State is in the cache only (`App\Support\DeviceGrants`, 10 minutes); only the SHA-256 of `device_code` is stored. Tests in `ApiTest` ("device code"). The TV still types the server address once; username and password remain as a fallback button.
