@@ -17,7 +17,7 @@ class AlbumController extends Controller
         return AlbumResource::collection(
             Album::withCount(['tracks', 'tracks as artist_count' => fn ($q) => $q->select(DB::raw('count(distinct artist)'))])
                 ->withMin('tracks as first_artist', 'artist')->where('user_id', $request->user()->id)
-                ->orderBy('artist')->orderBy('year')->orderBy('title')->paginate(50)
+                ->inLibraryOrder()->paginate(50)
         );
     }
 

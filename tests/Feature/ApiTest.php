@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Album;
 use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
@@ -119,6 +120,20 @@ describe('library', function () {
             ->and($analysed->json('data.0.truth'))->not->toHaveKey('spectrum');
 
         $this->getJson('/api/v1/tracks?per_page=1&page=2', bearer($this->alice))->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.per_page', 1);
+    });
+
+    it('sorts albums by the artist that is shown, also when it comes from the tracks and not from an album-artist tag', function () {
+        $album = $this->aliceTrack->album;
+        $album->update(['artist' => null, 'title' => 'Happy Trails']);
+        Track::where('album_id', $album->id)->update(['artist' => 'Quicksilver Messenger Service']);
+        $first = Album::create(['user_id' => $this->alice->id, 'title' => 'Zed', 'artist' => 'Black Sabbath']);
+        $last = Album::create(['user_id' => $this->alice->id, 'title' => 'Aaa', 'artist' => 'Talking Heads']);
+
+        $order = collect($this->getJson('/api/v1/albums', bearer($this->alice))->assertOk()->json('data'))->pluck('id')
+            ->filter(fn ($id) => in_array($id, [$first->id, $album->id, $last->id]))->values()->all();
+
+        // Black Sabbath, Quicksilver (artist only on the tracks), Talking Heads: not "no artist" first
+        expect($order)->toBe([$first->id, $album->id, $last->id]);
     });
 
     it('shows my album with stream urls, and hides another user\'s unshared album', function () {

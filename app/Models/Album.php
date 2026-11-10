@@ -23,6 +23,19 @@ class Album extends Model
     /** A date as MusicBrainz and the edit form write it: `2001`, `2001-03` or `2001-03-12`. */
     public const DATE_PATTERN = '/^\d{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12]\d|3[01]))?)?$/';
 
+    /**
+     * Library order: by the artist that is shown (the tagged album artist, else the single artist of the tracks, else "Various
+     * artists", the same rule as `display_artist`), then year, then title. Sorting on the `artist` column alone put every
+     * album without an album-artist tag first, whatever its tracks' artist was.
+     */
+    public function scopeInLibraryOrder(Builder $query): void
+    {
+        $tracks = '(select count(distinct t.artist) from tracks t where t.album_id = albums.id)';
+        $first = '(select min(t.artist) from tracks t where t.album_id = albums.id)';
+        $query->orderByRaw("lower(coalesce(albums.artist, case when {$tracks} > 1 then 'Various artists' else {$first} end, ''))")
+            ->orderBy('albums.year')->orderByRaw('lower(albums.title)');
+    }
+
     /** What the pages show for when the album came out: the full date when known, else the year. */
     public function getReleasedAttribute(): ?string
     {

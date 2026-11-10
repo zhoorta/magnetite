@@ -21,7 +21,7 @@ class LibraryController extends Controller
     {
         $me = $request->user();
 
-        $albums = Album::with('tracks')->where('user_id', $me->id)->orderBy('artist')->orderBy('year')->orderBy('title')->get()
+        $albums = Album::with('tracks')->where('user_id', $me->id)->inLibraryOrder()->get()
             ->each(fn (Album $a) => $a->tracks->each->setRelation('album', $a));
 
         // The owner's folders as a tree: children and albums by parent (0 is the top), a flat list for the pickers, and album counts including subfolders.
@@ -64,7 +64,7 @@ class LibraryController extends Controller
     /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */
     public function shared(Request $request): View
     {
-        $albums = Album::with(['user', 'tracks'])->whereHas('share')->orderBy('artist')->orderBy('year')->orderBy('title')->get()
+        $albums = Album::with(['user', 'tracks'])->whereHas('share')->inLibraryOrder()->get()
             ->each(fn (Album $a) => $a->tracks->each->setRelation('album', $a));
 
         $singles = Track::with(['user', 'album'])->whereHas('share')
