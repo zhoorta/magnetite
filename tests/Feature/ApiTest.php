@@ -67,6 +67,7 @@ describe('token', function () {
     it('answers guests with 401', function () {
         $this->getJson('/api/v1/albums')->assertUnauthorized();
         $this->getJson('/api/v1/me')->assertUnauthorized();
+        $this->getJson('/api/v1/tracks')->assertUnauthorized();
     });
 });
 
@@ -77,6 +78,47 @@ describe('library', function () {
         expect(collect($response->json('data'))->pluck('id')->all())
             ->not->toContain($this->bobAlbum->id)
             ->and(json_encode($response->json('data')))->not->toContain('path');
+    });
+
+    it('gives every album a display artist: the tagged one, else its tracks\' single artist, else Various artists', function () {
+        $album = $this->aliceTrack->album;
+        $album->update(['artist' => null]);
+        Track::where('album_id', $album->id)->update(['artist' => 'Solo Act']);
+
+        $shown = fn () => collect($this->getJson('/api/v1/albums', bearer($this->alice))->assertOk()->json('data'))->firstWhere('id', $album->id);
+
+        expect($shown()['artist'])->toBeNull()
+            ->and($shown()['display_artist'])->toBe('Solo Act');
+
+        Track::where('album_id', $album->id)->orderBy('id')->first()->update(['artist' => 'Someone Else']);
+        expect($shown()['display_artist'])->toBe('Various artists');
+
+        $album->update(['artist' => 'Tagged Band']);
+        expect($shown()['display_artist'])->toBe('Tagged Band');
+
+        $album->update(['artist' => null]);
+        Track::where('album_id', $album->id)->update(['artist' => 'Solo Act']);
+        $this->getJson("/api/v1/albums/{$album->id}", bearer($this->alice))->assertJsonPath('data.display_artist', 'Solo Act');
+    });
+
+    it('lists all my tracks with their truth in pages, only the analysed ones with truth=1, never another user\'s', function () {
+        $this->aliceTrack->update(['analysis' => ['sample_rate' => 44100, 'loudness' => ['integrated' => -12.5, 'true_peak_db' => 0.4]], 'dr' => 6]);
+
+        $all = $this->getJson('/api/v1/tracks', bearer($this->alice))->assertOk();
+        $mine = Track::where('user_id', $this->alice->id)->count();
+        expect($all->json('meta.total'))->toBe($mine)
+            ->and(collect($all->json('data'))->pluck('id')->all())->not->toContain($this->bobTrack->id)
+            ->and(json_encode($all->json('data')))->not->toContain('"path"');
+
+        $analysed = $this->getJson('/api/v1/tracks?truth=1', bearer($this->alice))->assertOk();
+        expect($analysed->json('data'))->toHaveCount(1)
+            ->and($analysed->json('data.0.id'))->toBe($this->aliceTrack->id)
+            ->and($analysed->json('data.0.truth.analyzed'))->toBeTrue()
+            ->and($analysed->json('data.0.truth.lufs'))->toBe(-12.5)
+            ->and($analysed->json('data.0.album_id'))->toBe($this->aliceTrack->album_id)
+            ->and($analysed->json('data.0.truth'))->not->toHaveKey('spectrum');
+
+        $this->getJson('/api/v1/tracks?per_page=1&page=2', bearer($this->alice))->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('meta.per_page', 1);
     });
 
     it('shows my album with stream urls, and hides another user\'s unshared album', function () {

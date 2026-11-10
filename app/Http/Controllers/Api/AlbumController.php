@@ -7,6 +7,7 @@ use App\Http\Resources\AlbumResource;
 use App\Models\Album;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class AlbumController extends Controller
 {
@@ -14,7 +15,8 @@ class AlbumController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         return AlbumResource::collection(
-            Album::withCount('tracks')->where('user_id', $request->user()->id)
+            Album::withCount(['tracks', 'tracks as artist_count' => fn ($q) => $q->select(DB::raw('count(distinct artist)'))])
+                ->withMin('tracks as first_artist', 'artist')->where('user_id', $request->user()->id)
                 ->orderBy('artist')->orderBy('year')->orderBy('title')->paginate(50)
         );
     }

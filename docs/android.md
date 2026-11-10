@@ -32,7 +32,8 @@ Sanctum is installed; `routes/api.php` holds `POST/DELETE /api/v1/token`, `GET /
 
 ### Endpoints (v1, read first)
 - `GET /api/v1/me`: id, username, meters.
-- `GET /api/v1/albums?page=`: own albums, with `cover_url`, artist, year, track count.
+- `GET /api/v1/albums?page=`: own albums, with `cover_url`, artist, `display_artist` (the tagged artist, else the tracks' single artist, else "Various artists": use this one for lists, since only an explicit album-artist tag fills `artist`), year, track count.
+- `GET /api/v1/tracks?page=&per_page=&truth=1`: the owner's tracks (300 a page, up to 500) with `truth`; `truth=1` keeps the analysed ones. Added 2026-11-10 for the terminal client's file-truth table.
 - `GET /api/v1/albums/{album}`: tracks in order (`id`, title, artist, number, duration, codec, `stream_url`).
 - `GET /api/v1/shared`: albums, tracks and playlists shared with the user.
 - `GET /api/v1/playlists`, `GET /api/v1/playlists/{id}`: tracks marked `open` or not.

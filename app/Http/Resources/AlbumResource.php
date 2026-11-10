@@ -13,6 +13,8 @@ class AlbumResource extends JsonResource
             'id' => $this->id,
             'title' => $this->title,
             'artist' => $this->artist,
+            // What to show: the album artist if tagged, else the one artist of its tracks, else "Various artists" (like the web's list).
+            'display_artist' => $this->displayArtist(),
             'year' => $this->year,
             'release_date' => $this->release_date,
             'label' => $this->label,
@@ -23,5 +25,23 @@ class AlbumResource extends JsonResource
             'track_count' => $this->tracks_count ?? $this->whenLoaded('tracks', fn () => $this->tracks->count()),
             'tracks' => TrackResource::collection($this->whenLoaded('tracks')),
         ];
+    }
+
+    /** Without a tagged album artist, from the track counts of the list query, or from the loaded tracks; never a query per album. */
+    private function displayArtist(): ?string
+    {
+        if ($this->artist !== null) {
+            return $this->artist;
+        }
+
+        if (isset($this->artist_count)) {
+            return match (true) {
+                (int) $this->artist_count === 1 => $this->first_artist,
+                (int) $this->artist_count > 1 => 'Various artists',
+                default => null,
+            };
+        }
+
+        return $this->relationLoaded('tracks') ? $this->display_artist : null;
     }
 }

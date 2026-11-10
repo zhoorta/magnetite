@@ -42,6 +42,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/playlists', [PlaylistController::class, 'index'])->name('api.playlists');
         Route::get('/playlists/{playlist}', [PlaylistController::class, 'show'])->whereNumber('playlist')->name('api.playlists.show');
         Route::get('/search', SearchController::class)->name('api.search');
+        Route::get('/tracks', [TrackController::class, 'index'])->name('api.tracks');
         Route::get('/tracks/{track}', [TrackController::class, 'show'])->whereNumber('track')->name('api.tracks.show');
         Route::get('/folders', [FolderController::class, 'index'])->name('api.folders');
         Route::get('/analysis', [AnalysisController::class, 'show'])->name('api.analysis.show');
