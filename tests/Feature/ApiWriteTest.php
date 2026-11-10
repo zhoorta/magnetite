@@ -274,6 +274,44 @@ function apiZip(array $entries, string $name = 'Album.zip'): UploadedFile
     return new UploadedFile($path, $name, 'application/zip', null, true);
 }
 
+describe('naming an album for loose tracks', function () {
+    beforeEach(function () {
+        $this->loose = collect(['a.mp3', 'b.mp3'])->map(fn ($n) => Track::create(['user_id' => $this->alice->id, 'album_id' => null, 'path' => 'Some Folder/'.$n, 'title' => $n, 'mime' => 'audio/mpeg', 'size' => 1, 'mtime' => 1]));
+    });
+
+    it('lists loose tracks by folder, with the folder\'s name and no path', function () {
+        $r = $this->getJson('/api/v1/tracks/loose?since='.(time() - 3600), writer($this->alice))->assertOk();
+
+        expect(collect($r->json('groups'))->firstWhere('folder', 'Some Folder')['tracks'])->toHaveCount(2)
+            ->and(json_encode($r->json()))->not->toContain('Some Folder/');
+        $this->getJson('/api/v1/tracks/loose?since='.(time() + 3600), writer($this->alice))->assertJsonCount(0, 'groups');
+    });
+
+    it('lists nobody else\'s loose tracks', function () {
+        expect(collect($this->getJson('/api/v1/tracks/loose', writer($this->bob))->assertOk()->json('groups'))->pluck('folder')->all())->not->toContain('Some Folder');
+    });
+
+    it('makes an album of them, kept through a rescan', function () {
+        $r = $this->postJson('/api/v1/albums', ['title' => 'Recados', 'artist' => 'Jáfumega', 'year' => 1983, 'track_ids' => $this->loose->pluck('id')->all()], writer($this->alice))
+            ->assertCreated()->assertJsonPath('data.title', 'Recados')->assertJsonPath('data.year', 1983)->assertJsonPath('data.track_count', 2);
+
+        $this->loose->each(fn ($t) => expect($t->fresh())->album_id->toBe($r->json('data.id'))->identified->toBeTrue());
+    });
+
+    it('does not take tracks that are another user\'s or already in an album', function () {
+        $theirs = Track::where('user_id', $this->bob->id)->first();
+        $this->postJson('/api/v1/albums', ['title' => 'Nope', 'track_ids' => [$theirs->id]], writer($this->alice))->assertUnprocessable();
+
+        $mine = Track::where('user_id', $this->alice->id)->whereNotNull('album_id')->first();
+        $this->postJson('/api/v1/albums', ['title' => 'Nope', 'track_ids' => [$mine->id]], writer($this->alice))->assertUnprocessable();
+        expect($theirs->fresh()->album_id)->not->toBeNull();
+    });
+
+    it('needs the write ability', function () {
+        $this->postJson('/api/v1/albums', ['title' => 'X', 'track_ids' => [$this->loose[0]->id]], writer($this->alice, readOnly: true))->assertForbidden();
+    });
+});
+
 describe('uploading zips', function () {
     it('unpacks a zip into the user\'s folder, queues a scan and says where to look for the result', function () {
         $audio = file_get_contents(base_path('tests/Fixtures/music/Loose/07_no_tags.mp3'));
