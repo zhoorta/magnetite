@@ -58,7 +58,9 @@ const TRUTH: Section = ("File-truth table", &[
 ]);
 
 const SEARCH: Section = ("Search", &[
-    ("type", "two letters or more; every key is text"),
+    ("type", "two letters or more; every key is text; all words must match"),
+    ("year: dr: codec:", "year:1983  year:1960..1969  dr:<8  codec:flac"),
+    ("artist: album:", "artist:bowie  artist:\"david bowie\"  album:heroes"),
     ("enter / down", "move into the results"),
     ("delete", "clear the text"),
     ("j / k  PgUp / PgDn", "move in the results"),

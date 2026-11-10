@@ -77,6 +77,17 @@ pub struct SearchResult {
     pub albums: Vec<Album>,
     #[serde(default)]
     pub tracks: Vec<Track>,
+    /// Further pages exist (an older server does not say, and has one page).
+    #[serde(default)]
+    pub more: More,
+}
+
+#[derive(Deserialize, Default, Clone, Copy, Debug)]
+pub struct More {
+    #[serde(default)]
+    pub albums: bool,
+    #[serde(default)]
+    pub tracks: bool,
 }
 
 #[derive(Deserialize)]
@@ -173,9 +184,10 @@ impl Api {
         Ok((p.data, p.meta.map_or(1, |m| m.last_page)))
     }
 
-    /// The server's search: albums and tracks whose title or artist contains the text (yours and what is shared with you).
-    pub fn search(&self, q: &str) -> Result<SearchResult> {
-        self.get("/search").query("q", q).call().json_body()
+    /// The server's search (yours and what is shared with you): every word in a title, artist or album, with `key:value` filters
+    /// (`year:`, `dr:`, `codec:`, `artist:`, `album:`), 25 albums and 50 tracks a page.
+    pub fn search(&self, q: &str, page: u32) -> Result<SearchResult> {
+        self.get("/search").query("q", q).query("page", &page.to_string()).call().json_body()
     }
 
     fn send(&self, method: &str, path: &str) -> ureq::Request {

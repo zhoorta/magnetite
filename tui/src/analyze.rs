@@ -94,7 +94,7 @@ enum Found {
 
 /// A search text that must lead to one album (or, failing that, one track); several are listed with their ids, or chosen at a terminal.
 fn resolve(api: &Api, text: &str) -> Result<Found, String> {
-    let r = api.search(text)?;
+    let r = api.search(text, 1)?;
     match (r.albums.len(), r.tracks.len()) {
         (0, 0) => Err(format!("nothing found for \"{text}\"")),
         (1, _) => Ok(Found::Album(r.albums.into_iter().next().unwrap())),
