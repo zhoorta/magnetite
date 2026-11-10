@@ -14,6 +14,9 @@ pub struct Config {
     /// What was playing when the client last ran: it is opened again (paused) at the next start.
     #[serde(default)]
     pub last: Option<Last>,
+    /// Meter colours taken from the album cover; absent means on.
+    #[serde(default)]
+    pub tint: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]

@@ -2,6 +2,7 @@ mod api;
 mod audio;
 mod config;
 mod cover;
+mod media;
 mod meters;
 mod panels;
 mod stream;
@@ -58,7 +59,7 @@ fn login(server: Option<&String>) {
     };
     match result {
         Ok((token, username)) => {
-            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last) }).expect("could not save the config");
+            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint) }).expect("could not save the config");
             println!("Signed in as {username}.");
         }
         Err(e) => eprintln!("Sign-in failed: {e}"),
@@ -172,6 +173,9 @@ struct App {
     panels: Vec<Kind>,
     active: usize, // the panel that m / M change
     cover: cover::Cover,
+    media: media::Media,
+    tint: bool,         // meters take their colours from the cover
+    tint_cur: [f32; 6], // the colours shown now (accent, accent2), easing toward the target
     queue_albums: Vec<u64>, // the album of each queued track (a queue from the truth table mixes albums)
     view: View,
     truth: truth::Browser,
@@ -195,11 +199,13 @@ impl App {
         if panels.is_empty() && cfg.meters.is_none() {
             panels = vec![Kind::Spectrum, Kind::VuWide];
         }
+        let tint = cfg.tint.unwrap_or(true);
+        let tint_cur = { let t = &themes[theme]; [t.accent.0 as f32, t.accent.1 as f32, t.accent.2 as f32, t.accent2.0 as f32, t.accent2.1 as f32, t.accent2.2 as f32] };
         let mut album_sel = ListState::default();
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), resume: None, saved_at: Instant::now(), full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), resume: None, saved_at: Instant::now(), full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -209,6 +215,7 @@ impl App {
             last = Instant::now();
             self.tick(dt);
             term.draw(|f| self.draw(f))?;
+            media::pump();
             if event::poll(Duration::from_millis(33))? {
                 if let Event::Key(k) = event::read()? {
                     if k.kind == KeyEventKind::Press {
@@ -223,8 +230,20 @@ impl App {
     }
 
     fn tick(&mut self, dt: f32) {
+        // ease the meter colours toward the cover's (or the theme's own when the cover has none or the tint is off)
+        let th = &self.themes[self.theme];
+        let (a, b) = match (self.tint, self.cover.palette()) {
+            (true, Some(p)) => p,
+            _ => (th.accent, th.accent2),
+        };
+        let target = [a.0, a.1, a.2, b.0, b.1, b.2].map(|v| v as f32);
+        let k = 1.0 - (-dt / 0.3).exp();
+        for (cur, t) in self.tint_cur.iter_mut().zip(target) {
+            *cur += (t - *cur) * k;
+        }
         self.cover.poll();
         self.truth.poll();
+        self.media_commands();
         // a restored track waits for space: the idle player would otherwise report an "ended" track and move on to the next
         if self.resume.is_none() && self.player.ended() {
             self.step(1, true);
@@ -257,13 +276,7 @@ impl App {
             (KeyCode::Esc, _) if self.full => self.full = false,
             (KeyCode::Down | KeyCode::Up | KeyCode::Left | KeyCode::Right | KeyCode::Enter | KeyCode::Char('j' | 'k' | 'h' | 'l'), _) if self.full => {}
             (KeyCode::Char('q'), _) | (KeyCode::Char('c'), KeyModifiers::CONTROL) => self.quit = true,
-            (KeyCode::Char(' '), _) => match (self.resume.take(), self.now) {
-                (Some(pos), Some(i)) => {
-                    self.start(i);
-                    self.player.seek_to(pos);
-                }
-                _ => self.player.toggle_pause(),
-            },
+            (KeyCode::Char(' '), _) => self.toggle_play(),
             (KeyCode::Char('n'), _) => self.step(1, false),
             (KeyCode::Char('p'), _) => self.step(-1, false),
             (KeyCode::Tab, _) => self.active = (self.active + 1) % self.panels.len().max(1),
@@ -272,6 +285,12 @@ impl App {
             (KeyCode::Char('M'), _) => self.cycle_meter(-1),
             (KeyCode::Char('+'), _) => self.add_meter(),
             (KeyCode::Char('-'), _) => self.remove_meter(),
+            (KeyCode::Char('c'), _) => {
+                self.tint = !self.tint;
+                self.cfg.tint = Some(self.tint);
+                let _ = config::save(&self.cfg);
+                self.status = format!("meter colours from the cover: {}", if self.tint { "on" } else { "off" });
+            }
             (KeyCode::Char('t'), _) => self.cycle_theme(1),
             (KeyCode::Char('T'), _) => self.cycle_theme(-1),
             (KeyCode::Char('.'), _) => match self.resume {
@@ -449,6 +468,64 @@ impl App {
             ])),
             area,
         );
+    }
+
+    /// The theme with its two accents replaced by the eased cover colours; only the meters are drawn with it.
+    fn meter_theme(&self, th: &Theme) -> Theme {
+        let q = |i: usize| self.tint_cur[i].round().clamp(0.0, 255.0) as u8;
+        Theme { accent: (q(0), q(1), q(2)), accent2: (q(3), q(4), q(5)), ..th.clone() }
+    }
+
+    /// Space and the system's play / pause: a restored track starts where it stopped, otherwise pause toggles.
+    fn toggle_play(&mut self) {
+        match (self.resume.take(), self.now) {
+            (Some(pos), Some(i)) => {
+                self.start(i);
+                self.player.seek_to(pos);
+            }
+            _ => self.player.toggle_pause(),
+        }
+    }
+
+    /// ▶ while it plays, a pause mark while it is paused (also a restored track waiting for space).
+    fn play_icon(&self) -> &'static str {
+        if self.player.paused() || self.resume.is_some() { "‖" } else { "▶" }
+    }
+
+    fn is_playing(&self) -> bool {
+        self.now.is_some() && self.resume.is_none() && !self.player.paused()
+    }
+
+    /// Commands from the media keys, Control Center, `playerctl`...
+    fn media_commands(&mut self) {
+        for cmd in self.media.commands() {
+            match cmd {
+                media::Cmd::Toggle => self.toggle_play(),
+                media::Cmd::Play if !self.is_playing() => self.toggle_play(),
+                media::Cmd::Pause | media::Cmd::Stop if self.is_playing() => self.toggle_play(),
+                media::Cmd::Next => self.step(1, false),
+                media::Cmd::Previous => self.step(-1, false),
+                media::Cmd::SeekBy(d) => match self.resume {
+                    Some(p) => self.resume = Some((p + d).max(0.0)),
+                    None => self.player.seek_by(d),
+                },
+                media::Cmd::SetPosition(t) => match self.resume {
+                    Some(_) => self.resume = Some(t),
+                    None => self.player.seek_to(t),
+                },
+                _ => {}
+            }
+        }
+        let now = self.now.and_then(|i| self.queue.get(i)).map(|t| media::Now {
+            track: Some(t.id),
+            title: t.title.clone(),
+            artist: t.artist.clone().unwrap_or_default(),
+            album: t.album.clone().unwrap_or_default(),
+            duration: t.duration.unwrap_or(0.0),
+            playing: self.is_playing(),
+        });
+        let pos = self.position();
+        self.media.update(now.as_ref(), pos);
     }
 
     fn playing_album(&self) -> Option<u64> {
@@ -631,7 +708,8 @@ impl App {
             return;
         }
         let [meters, title, prog, foot] = Layout::vertical([Constraint::Min(3), Constraint::Length(2), Constraint::Length(1), Constraint::Length(1)]).areas(f.area());
-        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th };
+        let mt = self.meter_theme(th);
+        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt };
         // no meters: like the web, the cover big in the middle above the title
         let (cover_area, meters) = if self.panels.is_empty() { (Rect::new(meters.x, meters.y + 1, meters.width, meters.height.saturating_sub(2)), meters) } else { self.split_cover(meters) };
         self.cover.draw(f, cover_area);
@@ -670,7 +748,8 @@ impl App {
 
         if self.view == View::Truth {
             let playing = self.now.and_then(|i| self.queue.get(i)).map(|t| t.id);
-            truth::draw(f, body, &mut self.truth, playing, &th);
+            let icon = self.play_icon();
+            truth::draw(f, body, &mut self.truth, playing, icon, &th);
             self.draw_now(f, now, &th);
             let hint = if self.status.is_empty() { "enter play from here (the list becomes the queue) · s sort · o only findings · j/k PgUp/PgDn move · space pause · n/p · i or esc back".to_string() } else { self.status.clone() };
             f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
@@ -684,7 +763,7 @@ impl App {
             .iter()
             .map(|a| {
                 let on = self.playing_album() == Some(a.id);
-                let mark = if on { Span::styled("▶ ", Style::new().fg(c(th.accent2))) } else { Span::raw("  ") };
+                let mark = if on { Span::styled(format!("{} ", self.play_icon()), Style::new().fg(c(th.accent2))) } else { Span::raw("  ") };
                 let title = if on { Span::styled(a.title.clone(), Style::new().fg(c(th.accent2))) } else { Span::raw(a.title.clone()) };
                 ListItem::new(Line::from(vec![mark, title, Span::styled(format!("  {}", a.artist.clone().unwrap_or_default()), Style::new().fg(muted))]))
             })
@@ -700,7 +779,7 @@ impl App {
             .unwrap_or(&[])
             .iter()
             .map(|t| {
-                let mark = if Some(t.id) == playing { "▶" } else { " " };
+                let mark = if Some(t.id) == playing { self.play_icon() } else { " " };
                 let n = t.number.map_or(String::new(), |n| n.to_string());
                 let style = if Some(t.id) == playing { Style::new().fg(c(th.accent2)) } else if t.open { Style::new() } else { Style::new().fg(muted) };
                 ListItem::new(Line::from(format!("{mark}{n:>2} {:<30} {:>6}", t.title, mmss(t.duration.unwrap_or(0.0))))).style(style)
@@ -709,7 +788,7 @@ impl App {
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Tracks, title)).highlight_style(sel), right, &mut self.track_sel);
 
         self.draw_now(f, now, &th);
-        let hint = if self.status.is_empty() { "enter open/play · i file truth · space pause · n/p next/prev · ,/. seek 10s · tab/m meter · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
+        let hint = if self.status.is_empty() { "enter open/play · i file truth · space pause · n/p next/prev · ,/. seek 10s · tab/m meter · c cover colours · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
         f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
     }
 
@@ -756,7 +835,8 @@ impl App {
             info,
         );
 
-        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th };
+        let mt = self.meter_theme(th);
+        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt };
         let (cover_area, mid) = self.split_cover(mid);
         self.cover.draw(f, cover_area);
         for (i, (kind, cell)) in self.panels.iter().zip(cells(self.panels.len(), mid)).enumerate() {

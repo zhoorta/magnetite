@@ -190,7 +190,7 @@ fn num_s(v: Option<f64>, d: usize) -> String {
     v.map_or("—".into(), |v| format!("{v:.d$}"))
 }
 
-pub fn draw(f: &mut Frame, area: Rect, b: &mut Browser, playing: Option<u64>, th: &Theme) {
+pub fn draw(f: &mut Frame, area: Rect, b: &mut Browser, playing: Option<u64>, icon: &str, th: &Theme) {
     let (text, muted, accent) = (c(th.text), c(th.muted), c(th.accent));
     let detail_h = if area.height >= 16 { 8 } else { 0 };
     let [table_area, detail_area] = Layout::vertical([Constraint::Min(4), Constraint::Length(detail_h)]).areas(area);
@@ -213,7 +213,7 @@ pub fn draw(f: &mut Frame, area: Rect, b: &mut Browser, playing: Option<u64>, th
                 1 => ("·", level_style("note", th)),
                 _ => (" ", Style::new()),
             };
-            let play = if Some(t.id) == playing { "▶" } else { " " };
+            let play = if Some(t.id) == playing { icon } else { " " };
             let fmt = [t.codec.clone().unwrap_or_default().to_uppercase(), match (tr.bits, tr.sample_rate) {
                 (Some(bits), Some(sr)) => format!("{}/{}", bits as u32, (sr / 1000.0 * 10.0).round() / 10.0),
                 _ => String::new(),
@@ -355,7 +355,7 @@ mod tests {
         for (w, h) in [(120u16, 30u16), (40, 6), (10, 3)] {
             let mut b = browser();
             let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
-            t.draw(|f| draw(f, Rect::new(0, 0, w, h), &mut b, Some(2), &th)).unwrap();
+            t.draw(|f| draw(f, Rect::new(0, 0, w, h), &mut b, Some(2), "▶", &th)).unwrap();
         }
     }
 }
