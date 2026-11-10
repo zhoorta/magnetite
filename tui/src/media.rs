@@ -46,6 +46,8 @@ pub struct Now {
     pub album: String,
     pub duration: f64,
     pub playing: bool,
+    /// `file://` url of the cover to show, once it exists.
+    pub cover: Option<String>,
 }
 
 pub struct Media {
@@ -88,13 +90,13 @@ impl Media {
         let progress = Some(MediaPosition(Duration::from_secs_f64(position.max(0.0))));
         match now {
             Some(n) => {
-                if self.shown.as_ref().map(|s| (s.track, &s.title)) != Some((n.track, &n.title)) {
+                if self.shown.as_ref().map(|s| (s.track, &s.title, &s.cover)) != Some((n.track, &n.title, &n.cover)) {
                     let _ = c.set_metadata(MediaMetadata {
                         title: Some(&n.title),
                         artist: Some(&n.artist),
                         album: Some(&n.album),
                         duration: (n.duration > 0.0).then(|| Duration::from_secs_f64(n.duration)),
-                        cover_url: None, // our covers need the token, which the system cannot send
+                        cover_url: n.cover.as_deref(), // a local pixelated copy: the real cover needs our token, which the system cannot send
                     });
                 }
                 let _ = c.set_playback(if n.playing { MediaPlayback::Playing { progress } } else { MediaPlayback::Paused { progress } });
@@ -151,7 +153,7 @@ mod live {
     fn live_media() {
         let mut m = Media::new();
         println!("controls active: {}", m.active());
-        let now = Now { track: Some(1), title: "Test tone".into(), artist: "Magnetite".into(), album: "Checks".into(), duration: 180.0, playing: true };
+        let now = Now { track: Some(1), title: "Test tone".into(), artist: "Magnetite".into(), album: "Checks".into(), duration: 180.0, playing: true, cover: None };
         m.update(Some(&now), 12.0);
         for _ in 0..60 {
             pump();

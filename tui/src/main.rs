@@ -293,7 +293,7 @@ impl App {
             (KeyCode::Char('q'), _) | (KeyCode::Char('c'), KeyModifiers::CONTROL) => self.quit = true,
             (KeyCode::Char(' '), _) => self.toggle_play(),
             (KeyCode::Char('n'), _) => self.step(1, false),
-            (KeyCode::Char('p'), _) => self.step(-1, false),
+            (KeyCode::Char('p'), _) => self.previous(),
             (KeyCode::Tab, _) => self.active = (self.active + 1) % self.panels.len().max(1),
             (KeyCode::Char('m' | 'M'), _) if self.panels.is_empty() => self.add_meter(),
             (KeyCode::Char('m'), _) => self.cycle_meter(1),
@@ -533,7 +533,7 @@ impl App {
                 media::Cmd::Play if !self.is_playing() => self.toggle_play(),
                 media::Cmd::Pause | media::Cmd::Stop if self.is_playing() => self.toggle_play(),
                 media::Cmd::Next => self.step(1, false),
-                media::Cmd::Previous => self.step(-1, false),
+                media::Cmd::Previous => self.previous(),
                 media::Cmd::SeekBy(d) => match self.resume {
                     Some(p) => self.resume = Some((p + d).max(0.0)),
                     None => self.player.seek_by(d),
@@ -552,6 +552,7 @@ impl App {
             album: t.album.clone().unwrap_or_default(),
             duration: t.duration.unwrap_or(0.0),
             playing: self.is_playing(),
+            cover: self.cover.artwork().map(str::to_string),
         });
         let pos = self.position();
         self.media.update(now.as_ref(), pos);
@@ -875,6 +876,15 @@ impl App {
         }
     }
 
+    /// Previous: more than 3 s into a track it starts that track again, as every player does; earlier, the track before it.
+    fn previous(&mut self) {
+        match self.resume {
+            Some(p) if p > 3.0 => self.resume = Some(0.0),
+            None if self.now.is_some() && self.player.position() > 3.0 => self.player.seek_to(0.0),
+            _ => self.step(-1, false),
+        }
+    }
+
     /// Next or previous playable track; at the end of the queue playback just stops.
     fn step(&mut self, d: i32, auto: bool) {
         let Some(now) = self.now else { return };
@@ -1034,7 +1044,7 @@ impl App {
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Tracks, title)).highlight_style(sel), right, &mut self.track_sel);
 
         self.draw_now(f, now, &th);
-        let hint = if self.status.is_empty() { "enter open/play · i file truth · space pause · n/p next/prev · ,/. seek 10s · tab/m meter · c cover colours · L loudness · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
+        let hint = if self.status.is_empty() { "enter open/play · i file truth · space pause · n next · p previous (restarts after 3 s) · ,/. seek 10s · tab/m meter · c cover colours · L loudness · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
         f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
     }
 

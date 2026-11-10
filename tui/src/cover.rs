@@ -11,6 +11,7 @@ pub struct Cover {
     scaled: Option<((u32, u32), RgbImage)>,
     rx: Option<mpsc::Receiver<Option<RgbImage>>>,
     palette: Option<(Rgb, Rgb)>,
+    artwork: Option<String>, // file:// url of the pixelated copy handed to the system's now-playing display
 }
 
 /// `cover_url` is absolute and may name another scheme or host than the one signed in to (a proxy), so only its path and query are used.
@@ -29,7 +30,7 @@ fn fetch(api: &Api, url: &str) -> Option<RgbImage> {
 
 impl Cover {
     pub fn new() -> Self {
-        Cover { url: None, img: None, scaled: None, rx: None, palette: None }
+        Cover { url: None, img: None, scaled: None, rx: None, palette: None, artwork: None }
     }
 
     /// The track changed: fetch its cover unless it is the one already held.
@@ -40,6 +41,7 @@ impl Cover {
         self.url = url.map(str::to_string);
         self.img = None;
         self.palette = None;
+        self.artwork = None;
         self.scaled = None;
         self.rx = None;
         if let Some(u) = url {
@@ -54,6 +56,7 @@ impl Cover {
     pub fn poll(&mut self) {
         if let Some(Ok(done)) = self.rx.as_ref().map(|r| r.try_recv()) {
             self.palette = done.as_ref().and_then(|i| palette(i, false));
+            self.artwork = done.as_ref().and_then(|i| write_artwork(i, self.url.as_deref().unwrap_or("")));
             self.img = done;
             self.rx = None;
         }
@@ -62,6 +65,11 @@ impl Cover {
     /// Two vivid colours from the cover (accent, accent2), when it has any.
     pub fn palette(&self) -> Option<(Rgb, Rgb)> {
         self.palette
+    }
+
+    /// `file://` url of the pixelated cover for the system's now-playing display, once the cover has loaded.
+    pub fn artwork(&self) -> Option<&str> {
+        self.artwork.as_deref()
     }
 
     pub fn has(&self) -> bool {
@@ -96,6 +104,31 @@ impl Cover {
             .collect();
         f.render_widget(Paragraph::new(lines), Rect::new(x0, y0, cols, rows));
     }
+}
+
+/// The cover as the terminal shows it, only bigger: a `grid` x `grid` mosaic (averaged, so it is the same picture as the
+/// half-block one) scaled up with hard edges to `size` pixels square.
+pub fn pixelated(img: &RgbImage, grid: u32, size: u32) -> RgbImage {
+    let small = image::imageops::resize(img, grid, grid, FilterType::Triangle);
+    image::imageops::resize(&small, size, size, FilterType::Nearest)
+}
+
+/// Write the pixelated cover where the system can read it (the now-playing display of macOS, MPRIS and Windows load a file,
+/// and cannot send our token to fetch the real cover). One file per cover, the older ones removed. Returns its `file://` url.
+fn write_artwork(img: &RgbImage, key: &str) -> Option<String> {
+    use std::hash::{Hash, Hasher};
+    let dir = crate::config::dir().join("artwork");
+    std::fs::create_dir_all(&dir).ok()?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    key.hash(&mut h);
+    let file = dir.join(format!("{:016x}.png", h.finish()));
+    for old in std::fs::read_dir(&dir).ok()?.flatten() {
+        if old.path() != file {
+            let _ = std::fs::remove_file(old.path());
+        }
+    }
+    pixelated(img, 32, 512).save(&file).ok()?;
+    Some(format!("file://{}", file.to_str()?))
 }
 
 fn hsv(c: [u8; 3]) -> (f32, f32, f32) {
@@ -198,6 +231,22 @@ mod palette_tests {
     }
 
     #[test]
+    fn the_artwork_is_a_hard_edged_mosaic_of_the_cover() {
+        let mut img = RgbImage::from_pixel(64, 64, image::Rgb([200, 30, 30]));
+        for y in 0..64 {
+            for x in 32..64 {
+                img.put_pixel(x, y, image::Rgb([30, 60, 210]));
+            }
+        }
+        let p = pixelated(&img, 32, 512);
+        assert_eq!((p.width(), p.height()), (512, 512));
+        // every 16 x 16 block is one colour; left half red, right half blue
+        assert_eq!(p.get_pixel(0, 0), p.get_pixel(15, 15));
+        assert_eq!(p.get_pixel(20, 0).0, [200, 30, 30]);
+        assert_eq!(p.get_pixel(500, 500).0, [30, 60, 210]);
+    }
+
+    #[test]
     fn two_colour_cover_gives_both_hues_grey_gives_none() {
         let mut img = RgbImage::from_pixel(64, 64, image::Rgb([200, 30, 30]));
         for y in 0..64 {
@@ -269,6 +318,24 @@ mod live {
         let img = fetch(&api, &url).expect("cover decodes");
         println!("{}x{} from {}", img.width(), img.height(), path_of(&url));
         assert!(img.width() > 8);
+    }
+}
+
+#[cfg(test)]
+mod live_artwork {
+    use super::*;
+
+    /// `cargo test live_artwork -- --ignored --nocapture`: writes the pixelated artwork of the first cover and prints where.
+    #[test]
+    #[ignore]
+    fn live_artwork() {
+        let cfg = crate::config::load().expect("sign in first");
+        let api = Api::new(&cfg.server, &cfg.token);
+        let a = api.albums().unwrap().into_iter().nth(20).unwrap();
+        let full = api.album(a.id).unwrap();
+        let url = full.tracks.iter().find_map(|t| t.cover_url.clone()).unwrap();
+        let img = fetch(&api, &url).unwrap();
+        println!("{} -> {:?}", a.title, write_artwork(&img, &url));
     }
 }
 
