@@ -3,6 +3,7 @@ mod api;
 mod audio;
 mod config;
 mod cover;
+mod help;
 mod loudness;
 mod media;
 mod meters;
@@ -36,7 +37,7 @@ fn main() {
             println!("Signed out locally (revoke the token on the server under your account if you want it gone).");
         }
         Some("theme") => theme_cmd(args.get(1)),
-        Some("-h") | Some("--help") => println!("magnetite            open the player\nmagnetite login URL  sign in (shows a code to approve in the browser)\nmagnetite logout     forget the token\nmagnetite theme [ID] list themes or choose one (t cycles them in the player)"),
+        Some("-h") | Some("--help") => println!("magnetite            open the player\nmagnetite login URL  sign in (shows a code to approve in the browser)\nmagnetite logout     forget the token\nmagnetite theme [ID] list themes or choose one (t cycles them in the player)\n\nIn the player, ? shows every key."),
         _ => run(),
     }
 }
@@ -199,6 +200,7 @@ struct App {
     search: search::Search,
     resume: Option<f64>, // a track opened from the last session, not started: space plays it from here
     saved_at: Instant,
+    help: bool,    // the ? overlay
     full: bool,    // meters fill the terminal, like the web's full screen
     status: String,
     quit: bool,
@@ -224,7 +226,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -289,6 +291,12 @@ impl App {
     }
 
     fn key(&mut self, code: KeyCode, mods: KeyModifiers) {
+        if self.help {
+            if matches!(code, KeyCode::Char('?') | KeyCode::Esc) {
+                self.help = false;
+            }
+            return;
+        }
         if self.ab.is_some() && mods != KeyModifiers::CONTROL && self.ab_key(code) {
             return;
         }
@@ -299,6 +307,7 @@ impl App {
             return;
         }
         match (code, mods) {
+            (KeyCode::Char('?'), _) => self.help = true,
             (KeyCode::Char('/'), _) if !self.full && self.ab.is_none() => {
                 self.view = View::Search;
                 self.search.typing = true;
@@ -1054,6 +1063,14 @@ impl App {
     }
 
     fn draw(&mut self, f: &mut Frame) {
+        self.draw_screen(f);
+        if self.help {
+            let w = if self.ab.is_some() { help::Where::Ab } else if self.full { help::Where::Full } else { match self.view { View::Library => help::Where::Library, View::Truth => help::Where::Truth, View::Search => help::Where::Search } };
+            help::draw(f, w, &self.themes[self.theme].clone());
+        }
+    }
+
+    fn draw_screen(&mut self, f: &mut Frame) {
         let th = self.themes[self.theme].clone();
         let (text, muted, accent) = (c(th.text), c(th.muted), c(th.accent));
         f.render_widget(Block::new().style(Style::new().bg(c(th.bg)).fg(text)), f.area());
@@ -1133,7 +1150,7 @@ impl App {
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Tracks, title)).highlight_style(sel), right, &mut self.track_sel);
 
         self.draw_now(f, now, &th);
-        let hint = if self.status.is_empty() { "enter open/play · / search · i file truth · space pause · n next · p previous (restarts after 3 s) · ,/. seek 10s · tab/m meter · c cover colours · L loudness · +/- add/remove (the last one too) · f full screen · t theme · h back · q quit".to_string() } else { self.status.clone() };
+        let hint = if self.status.is_empty() { "? all keys · enter open/play · / search · i file truth · space pause · n/p · ,/. seek · m meter · f full screen · t theme · q quit".to_string() } else { self.status.clone() };
         f.render_widget(Paragraph::new(format!(" {hint}")).style(Style::new().fg(muted)), foot);
     }
 
