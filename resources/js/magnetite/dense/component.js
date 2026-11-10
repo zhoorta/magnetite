@@ -47,6 +47,7 @@ export default function dense(data) {
         msg: '',
         dropOn: null, // the folder row an album is being dragged over
         dragIds: null,
+        undo: null, // the last move of albums, to put back with u: { prev: [[albumId, folderId]], until }
         lpFlag: false,
 
         mode: 'tree', // what the left pane shows: 'tree', 'search' (results) or 'truth' (every file, worst first)
@@ -55,6 +56,8 @@ export default function dense(data) {
         typing: false, // the cursor is in the search box
         truthSort: 'findings',
         truth: [],
+        truthLimit: 300, // rows drawn: 12,000 files would take seconds to draw at once; more are added as the selection nears the end
+        spectra: {}, // average spectra fetched for the measurements panel: { trackId: { spectrum, step_hz } }
         tcur: 0, // selected row of the truth view
         cmd: null, // the command line: { text, list, index }
         table: null, // the edit table
@@ -72,6 +75,8 @@ export default function dense(data) {
         analysisError: null,
 
         init() {
+            // `$root` is the root of whichever x-data is running a handler: inside a menu it is the menu. The library's own root is kept here.
+            this.libraryRoot = this.$el;
             this.openIds = this.folders.filter((f) => storage((s) => s.getItem(OPEN_KEY(f.id))) === '1').map((f) => f.id);
             // Start on the album that is playing, if there is one, with the way to it open.
             const playing = this.$store.player.current?.album_id;
@@ -80,6 +85,25 @@ export default function dense(data) {
             this.rebuild();
             if (album) this.cur = Math.max(0, rowOfAlbum(this.rows, album.id));
             this.$nextTick(() => this.focusRoot()); // the keys work as soon as the page is there
+            this.$store.player.libraryKeys = true; // the ? list shows the library's keys while this page is open
+
+            // The key hints, the search box and the command line sit under the player: the player and the page leave room for them.
+            const bar = this.libraryRoot.querySelector('[x-ref="statusBar"]');
+            if (bar) {
+                this.statusObserver = new ResizeObserver(() => document.documentElement.style.setProperty('--status-h', `${bar.offsetHeight}px`));
+                this.statusObserver.observe(bar);
+            }
+
+            // The two panes fill what is left between the toolbar and the player, so the player follows right after them: --panes-top is
+            // where they start (it changes when the toolbar wraps onto another line).
+            this.measure = () => {
+                const panes = this.libraryRoot.querySelector('.panes');
+                if (panes) document.documentElement.style.setProperty('--panes-top', `${panes.getBoundingClientRect().top + window.scrollY}px`);
+            };
+            this.layoutObserver = new ResizeObserver(() => this.measure());
+            this.layoutObserver.observe(this.libraryRoot);
+            window.addEventListener('resize', this.measure);
+            this.afterUpdate(() => this.measure(), 100);
 
             // An analysis or a scan started before this page loaded carries on showing its progress.
             fetch('/analysis', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((a) => {
@@ -97,6 +121,16 @@ export default function dense(data) {
                     if (!running(s)) await this.reload();
                 }
             }).catch(() => {});
+        },
+
+        /** Alpine calls this when the page goes (also on every wire:navigate). */
+        destroy() {
+            this.$store.player.libraryKeys = false;
+            this.statusObserver?.disconnect();
+            this.layoutObserver?.disconnect();
+            window.removeEventListener('resize', this.measure);
+            document.documentElement.style.removeProperty('--status-h');
+            document.documentElement.style.removeProperty('--panes-top');
         },
 
         // ---- what is shown ----
@@ -176,6 +210,24 @@ export default function dense(data) {
             return !!album && ancestorIds(this.folders, album.folder_id).includes(folderId);
         },
 
+        /** What the selection is, for the actions menu: 'folder', 'album', 'loose' (tracks without an album), 'track' (in the tracks pane), or null. */
+        get ctx() {
+            if (this.mode !== 'tree') return null;
+            if (this.pane === 'tracks' && this.tracks[this.tsel]) return 'track';
+            const r = this.row;
+
+            return r ? r.kind : null;
+        },
+
+        /** Right-click on a row: select it and open the actions menu. */
+        rowContext(i) {
+            this.focusRoot();
+            this.pane = 'tree';
+            this.cur = i;
+            this.tsel = 0;
+            this.afterUpdate((root) => root.querySelector('[data-actions]')?.click());
+        },
+
         get hasAnything() {
             return this.albums.length > 0 || this.loose.length > 0;
         },
@@ -191,13 +243,13 @@ export default function dense(data) {
          * is running the handler: one inside a template that has gone by then (the command line) would find nothing, so the root is taken now.
          */
         afterUpdate(fn, delay = 0) {
-            const root = this.$root;
+            const root = this.libraryRoot;
             this.$nextTick(() => fn(root));
             if (delay) setTimeout(() => fn(root), delay);
         },
 
         focusRoot() {
-            this.$root.focus({ preventScroll: true });
+            this.libraryRoot.focus({ preventScroll: true });
         },
 
         isMarked(id) {
@@ -208,7 +260,7 @@ export default function dense(data) {
 
         onKey(e) {
             // A control that has focus keeps its own keys (Enter on a button presses it); fields keep every key; a dialog has the keyboard.
-            if (e.defaultPrevented || e.target !== this.$root || isTextTarget(e.target) || this.$store.dialog.open || this.$store.player.expanded) return; // full screen has the keyboard
+            if (e.defaultPrevented || e.target !== this.libraryRoot || isTextTarget(e.target) || this.$store.dialog.open || this.$store.player.expanded) return; // full screen has the keyboard
             if (this.mover) return this.moverKey(e);
             if (this.fd || this.edit || this.table || this.titles || this.gd || this.cmd || this.typing) return;
             const action = actionFor(this.mode === 'tree' ? this.pane : this.mode, e);
@@ -269,6 +321,7 @@ export default function dense(data) {
                 case 'problems': return this.toggleProblems();
                 case 'play': return this.playTrack(this.tsel);
                 case 'analyse': return this.analyseSelected();
+                case 'undo': return this.undoLast();
                 case 'edit': return this.editSelected();
                 case 'details': return this.openDetails();
                 case 'cover': return this.findCover();
@@ -284,7 +337,9 @@ export default function dense(data) {
         },
 
         scrollToSelection() {
-            this.afterUpdate((root) => root.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' }));
+            // the selected row of the list that has the cursor (the tree's row is "selected" also while the tracks have it)
+            const list = this.mode === 'tree' ? this.pane : this.mode;
+            this.afterUpdate((root) => root.querySelector(`[data-list="${list}"] [data-selected="true"]`)?.scrollIntoView({ block: 'nearest' }));
         },
 
         toggleDetail() {
@@ -471,14 +526,18 @@ export default function dense(data) {
 
         async moveAlbums(ids, folderId) {
             let moved = 0;
+            const prev = [];
             for (const id of ids) {
+                const a = this.albums.find((x) => x.id === id);
+                const before = a?.folder_id ?? null;
                 const r = await send('PUT', `/library/albums/${id}/folder`, { folder_id: folderId });
                 if (r.ok) {
                     moved++;
-                    const a = this.albums.find((x) => x.id === id);
+                    prev.push([id, before]);
                     if (a) a.folder_id = folderId;
                 }
             }
+            this.undo = prev.length ? { prev, until: Date.now() + 60000 } : null;
             this.marks = [];
             this.selectMode = false;
             if (folderId !== null) this.reveal(folderId, false);
@@ -486,7 +545,17 @@ export default function dense(data) {
             this.rebuild();
             const at = this.rows.findIndex((r) => r.key === key);
             if (at >= 0) this.cur = at;
-            this.say(moved === ids.length ? `Moved ${moved} ${moved === 1 ? 'album' : 'albums'}` : `Moved ${moved} of ${ids.length}`);
+            this.say((moved === ids.length ? `Moved ${moved} ${moved === 1 ? 'album' : 'albums'}` : `Moved ${moved} of ${ids.length}`) + (this.undo ? ' · u undoes it' : ''), 8000);
+        },
+
+        /** u: put the albums of the last move back where they were (for a minute). */
+        async undoLast() {
+            const u = this.undo;
+            if (!u || Date.now() > u.until) return this.say('Nothing to undo');
+            this.undo = null;
+            for (const [id, folderId] of u.prev) await send('PUT', `/library/albums/${id}/folder`, { folder_id: folderId });
+            await this.reload();
+            this.say(`Move undone (${u.prev.length})`);
         },
 
         // ---- folder dialog: new folder, rename ----
@@ -835,7 +904,6 @@ export default function dense(data) {
 
                     return this.say(`info level ${level}`);
                 }
-                case 'pixel': return ui.togglePixel();
                 case 'tint': return ui.toggleTint();
                 case 'theme': {
                     const ids = player.themes.map((t) => t.id);
@@ -935,7 +1003,7 @@ export default function dense(data) {
             const to = r + d;
             if (to < -1 || to >= this.table.rows.length) return;
             const col = to === -1 || r === -1 ? (c === 2 ? 2 : 1) : c; // the header has title, artist, date, label; a row has number, title, artist
-            const next = this.$root.querySelector(`[data-table] [data-r="${to}"][data-c="${col}"]`);
+            const next = this.libraryRoot.querySelector(`[data-table] [data-r="${to}"][data-c="${col}"]`);
             next?.focus();
             next?.select();
         },
@@ -1294,9 +1362,14 @@ export default function dense(data) {
         openTruth() {
             this.mode = 'truth';
             this.tcur = 0;
+            this.truthLimit = 300;
             this.rebuildTruth();
             this.focusRoot();
             this.say(`every file, ${TRUTH_SORT_NAMES[this.truthSort]}`);
+        },
+
+        get truthShown() {
+            return this.truth.slice(0, this.truthLimit);
         },
 
         rebuildTruth() {
@@ -1307,6 +1380,7 @@ export default function dense(data) {
         runTruth(action) {
             const move = (to) => {
                 this.tcur = clamp(this.truth, to);
+                if (this.tcur >= this.truthLimit - 20) this.truthLimit = Math.min(this.truth.length, this.tcur + 300);
                 this.scrollToSelection();
             };
             switch (action) {
@@ -1367,14 +1441,23 @@ export default function dense(data) {
         },
 
         /** The points of the average-spectrum line (200 x 60 box, -130 to -20 dB). */
+        /** The long spectrum curve is not in the page data: fetch it once, when a track's measurements are opened. */
+        async ensureSpectrum(t) {
+            if (this.spectra[t.id]) return;
+            this.spectra = { ...this.spectra, [t.id]: { spectrum: [], step_hz: t.truth.step_hz } }; // asked once
+            const r = await fetch(`/library/tracks/${t.id}/spectrum`, { headers: { Accept: 'application/json' } }).catch(() => null);
+            if (r && r.ok) this.spectra = { ...this.spectra, [t.id]: await r.json() };
+        },
+
         spark(t) {
-            const s = t.truth.spectrum;
+            const s = this.spectra[t.id]?.spectrum ?? [];
+            if (s.length < 2) return '';
 
             return s.map((v, i) => (i / (s.length - 1) * 200).toFixed(1) + ',' + (60 - (Math.max(-130, Math.min(-20, v)) + 130) / 110 * 60).toFixed(1)).join(' ');
         },
 
         cutX(t) {
-            const n = t.truth.spectrum.length;
+            const n = t.truth.spectrum_points;
 
             return n ? (t.truth.cutoff_hz / (t.truth.step_hz * n)) * 200 : 0;
         },

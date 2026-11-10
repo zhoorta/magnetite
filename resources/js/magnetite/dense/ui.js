@@ -1,18 +1,17 @@
 import { INFO_LEVELS } from './info';
-import { coverPixels, paintMosaic } from './cover';
+import { coverPixels } from './cover';
 import { ease, fromHex, isLight, palette, toHex } from './palette';
 import { send } from '../http';
 
 /**
  * The user's interface choices (`users.ui`), shared by the library and the player bar: how much detail the lists and the
- * player show (`info`: 0 none, 1 DR, 2 DR and findings) and whether covers are pixelated (`pixel`: true, false, or null to
- * follow the theme). Saved with the account when someone is signed in; a guest keeps them until the page is reloaded.
+ * player show (`info`: 0 none, 1 DR, 2 DR and findings) and whether the meters take their colours from the cover (`tint`).
+ * Saved with the account when someone is signed in; a guest keeps them until the page is reloaded.
  *
- * @param {{ info?: number, pixel?: ?boolean } | null} saved what the server sent
- * @param {function(): boolean} themePixel does the current theme ask for pixelated covers?
+ * @param {{ info?: number, tint?: boolean } | null} saved what the server sent
  * @param {boolean} signedIn
  */
-export function uiStore(saved, themePixel, signedIn) {
+export function uiStore(saved, signedIn) {
     // Meter colours from the cover: what the cover offers, and the colours shown now, easing toward the target. Not reactive on purpose:
     // they change every frame.
     let coverUrl = null;
@@ -21,22 +20,11 @@ export function uiStore(saved, themePixel, signedIn) {
 
     return {
         info: Number.isInteger(saved?.info) ? Math.max(0, Math.min(INFO_LEVELS - 1, saved.info)) : 2,
-        pixel: typeof saved?.pixel === 'boolean' ? saved.pixel : null,
         tint: saved?.tint === true, // meters take their colours from the playing cover (off until chosen)
-
-        /** Pixelated now: the user's choice, else the theme's. */
-        get pixelated() {
-            return this.pixel ?? themePixel();
-        },
 
         cycleInfo() {
             this.info = (this.info + INFO_LEVELS - 1) % INFO_LEVELS; // 2, 1, 0, 2 ...
             this.save({ info: this.info });
-        },
-
-        togglePixel() {
-            this.pixel = !this.pixelated;
-            this.save({ pixel: this.pixel });
         },
 
         toggleTint() {
@@ -76,9 +64,5 @@ export function uiStore(saved, themePixel, signedIn) {
             if (signedIn) send('PUT', '/settings/ui', part).catch(() => {});
         },
 
-        /** For `x-effect` on a canvas: show the cover there as a mosaic. */
-        paint(canvas, url) {
-            paintMosaic(canvas, url);
-        },
     };
 }

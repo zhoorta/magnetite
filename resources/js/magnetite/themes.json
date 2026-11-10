@@ -84,8 +84,7 @@
                 "id": "scope",
                 "params": {}
             }
-        ],
-        "pixel": true
+        ]
     },
     {
         "id": "tube-radio",
@@ -137,7 +136,6 @@
                 "id": "scope",
                 "params": {}
             }
-        ],
-        "pixel": true
+        ]
     }
 ]

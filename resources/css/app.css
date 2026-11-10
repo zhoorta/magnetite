@@ -30,3 +30,46 @@ body {
     color: var(--c-text);
     font-family: var(--font-ui);
 }
+
+/* The seek bar: the played part is painted with a gradient on the track itself, because `accent-color` does not fill a range
+   input in Safari (the bar then showed only the thumb). `--p` is the position in percent, set by the player bar. */
+input[type='range'].seek {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 0.75rem;
+    background: transparent;
+    cursor: pointer;
+}
+input[type='range'].seek::-webkit-slider-runnable-track {
+    height: 4px;
+    background: linear-gradient(to right, var(--c-accent) var(--p, 0%), color-mix(in srgb, var(--c-muted) 40%, var(--c-bg)) var(--p, 0%));
+}
+input[type='range'].seek::-moz-range-track {
+    height: 4px;
+    background: color-mix(in srgb, var(--c-muted) 40%, var(--c-bg));
+}
+input[type='range'].seek::-moz-range-progress {
+    height: 4px;
+    background: var(--c-accent);
+}
+input[type='range'].seek::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 0.75rem;
+    height: 0.75rem;
+    margin-top: -4px;
+    border-radius: var(--radius, 0);
+    background: var(--c-accent);
+    border: 0;
+}
+input[type='range'].seek::-moz-range-thumb {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: var(--radius, 0);
+    background: var(--c-accent);
+    border: 0;
+}
+input[type='range'].seek:focus-visible {
+    outline: 1px solid var(--c-accent2);
+    outline-offset: 3px;
+}

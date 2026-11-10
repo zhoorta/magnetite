@@ -103,12 +103,8 @@ Alpine.store('dialog', {
     },
 });
 
-/** The user's interface choices (info level, pixelated covers); the theme decides the cover when they have not chosen. */
-Alpine.store('ui', uiStore(
-    window.magnetite?.ui,
-    () => !!themes.find((t) => t.id === Alpine.store('player').themeId)?.pixel,
-    !!window.magnetite?.signedIn,
-));
+/** The user's interface choices (info level, meter tint). */
+Alpine.store('ui', uiStore(window.magnetite?.ui, !!window.magnetite?.signedIn));
 
 Alpine.store('player', {
     // state
@@ -129,6 +125,7 @@ Alpine.store('player', {
     signingOut: false,
     prefetched: null, // id of the track the server was last asked to fetch ahead (Ferrite libraries), so it is asked once
     savedAt: 0, // performance.now() of the last save of the playback state
+    libraryKeys: false, // the library page is open (the ? list then shows its keys)
     activePanel: 0, // the meter the m keys change
     note: '', // a few words about what a key just did, shown in the bar
     lastMeters: null, // what was showing before the meters were switched off, for the M key and the Meters button
@@ -156,6 +153,14 @@ Alpine.store('player', {
             document.addEventListener(type, unlock, { passive: true });
         }
         this.canvas = canvas;
+
+        // The height of the docked player, for the pages that fit themselves above it (--dock-h); in full screen it is the whole window, so not then.
+        const dock = canvas.closest('.fixed');
+        if (dock) {
+            new ResizeObserver(() => {
+                if (!this.expanded) document.documentElement.style.setProperty('--dock-h', `${dock.offsetHeight}px`);
+            }).observe(dock);
+        }
 
         audio.addEventListener('timeupdate', () => {
             this.time = audio.currentTime;
@@ -486,7 +491,6 @@ Alpine.store('player', {
         else if (/^[0-9]$/.test(key) && this.duration) act(() => this.seek(Number(key) / 10));
         else if (key === 'n') act(() => this.next());
         else if (key === 'p') act(() => this.prev());
-        else if (key === 'P') act(() => Alpine.store('ui').togglePixel()); // covers: real or pixelated
         else if (key === 'I') act(() => Alpine.store('ui').cycleInfo()); // how much the lists and the player say about the files
         else if (key === 'f' || key === 'F') act(() => (this.expanded = !this.expanded));
         else if (key === 'm') act(() => this.cycleMeter(1)); // the terminal client's keys: m / M change the meter, + and - the number of meters
@@ -553,12 +557,6 @@ Alpine.store('player', {
                 g.translate(x, y);
                 visualizers[panels[i].id].draw(g, sample, { w: cw, h: ch, colors, params: panels[i].params, dt });
                 g.restore();
-                // with several meters, the one the m keys change has a frame
-                if (panels.length > 1 && i === this.activePanel) {
-                    g.strokeStyle = colors.accent2;
-                    g.lineWidth = 2;
-                    g.strokeRect(x + 1, y + 1, cw - 2, ch - 2);
-                }
             }
 
             // Dev probe for the frame budget: set `window.__magnetitePerf = []` in the console to collect timings (ms).

@@ -25,6 +25,7 @@ export const TREE = {
     S: 'share',
     i: 'details',
     C: 'cover',
+    u: 'undo',
     ':': 'command',
     '/': 'search',
     Escape: 'clear',

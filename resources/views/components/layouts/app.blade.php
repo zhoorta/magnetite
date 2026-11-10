@@ -7,25 +7,29 @@
     $maxWidth = ($wide ?? false) === 'full' ? 'max-w-7xl' : (($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl');
 @endphp
 <body class="min-h-screen bg-bg text-text antialiased">
-    <header class="border-b border-white/10" x-data="{ menu: false }" @keydown.escape.window="menu = false">
-        <nav class="mx-auto flex {{ $maxWidth }} flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 text-sm sm:flex-nowrap">
-            <a href="{{ route('welcome') }}" wire:navigate class="font-semibold tracking-wide text-accent">Magnetite</a>
+    {{-- The top bar, as in the mockup: small, on the surface colour, the page you are on underlined. --}}
+    @php
+        $link = fn (string $route) => request()->routeIs($route) ? 'border-b border-accent text-text' : 'text-muted hover:text-accent';
+    @endphp
+    <header class="border-b border-white/15 bg-surface" x-data="{ menu: false }" @keydown.escape.window="menu = false">
+        <nav class="mx-auto flex {{ $maxWidth }} flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 text-xs sm:flex-nowrap">
+            <a href="{{ route('welcome') }}" wire:navigate class="font-bold text-accent">Magnetite</a>
             <button type="button" class="-mr-1 ml-auto rounded-theme p-1.5 text-muted hover:text-accent sm:hidden" aria-label="Menu" :aria-expanded="menu" @click="menu = ! menu">
                 <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
                     <path x-show="! menu" d="M4 6h16M4 12h16M4 18h16"/>
                     <path x-show="menu" x-cloak d="M6 6l12 12M18 6L6 18"/>
                 </svg>
             </button>
-            <div :class="menu ? 'flex' : 'hidden'" class="basis-full -mx-2 flex-col gap-1 sm:contents [&_a]:block [&_a]:rounded-theme [&_a]:px-2 [&_a]:py-2 [&_a:hover]:bg-white/10 sm:[&_a]:p-0 sm:[&_a:hover]:bg-transparent [&_button]:rounded-theme [&_button]:px-2 [&_button]:py-2 [&_button:hover]:bg-white/10 sm:[&_button]:p-0 sm:[&_button:hover]:bg-transparent">
-                <a href="{{ route('library') }}" wire:navigate class="hover:text-accent">Library</a>
+            <div :class="menu ? 'flex' : 'hidden'" class="basis-full -mx-2 flex-col gap-1 sm:contents [&_a]:block [&_a]:rounded-theme [&_a]:px-2 [&_a]:py-2 [&_a:hover]:bg-white/10 sm:[&_a]:p-0 sm:[&_a]:rounded-none sm:[&_a:hover]:bg-transparent [&_button]:rounded-theme [&_button]:px-2 [&_button]:py-2 [&_button:hover]:bg-white/10 sm:[&_button]:p-0 sm:[&_button:hover]:bg-transparent">
+                <a href="{{ route('library') }}" wire:navigate class="{{ $link('library') }}">Library</a>
                 @auth
-                    <a href="{{ route('shared') }}" wire:navigate class="hover:text-accent">Shared</a>
-                    <a href="{{ route('playlists') }}" wire:navigate class="hover:text-accent">Playlists</a>
+                    <a href="{{ route('shared') }}" wire:navigate class="{{ $link('shared') }}">Shared</a>
+                    <a href="{{ route('playlists') }}" wire:navigate class="{{ $link('playlists*') }}">Playlists</a>
                 @endauth
-                <a href="{{ route('themes') }}" wire:navigate class="hover:text-accent">Themes</a>
+                <a href="{{ route('themes') }}" wire:navigate class="{{ $link('themes') }}">Themes</a>
                 @auth
-                    <a href="{{ route('upload') }}" wire:navigate class="hover:text-accent">Upload</a>
-                    <a href="{{ route('storage') }}" wire:navigate class="hover:text-accent">Storage</a>
+                    <a href="{{ route('upload') }}" wire:navigate class="{{ $link('upload') }}">Upload</a>
+                    <a href="{{ route('storage') }}" wire:navigate class="{{ $link('storage') }}">Storage</a>
                     <form method="POST" action="{{ route('logout') }}" class="sm:ml-auto">
                         @csrf
                         <button type="submit" class="text-muted hover:text-accent">Sign out</button>
@@ -35,7 +39,7 @@
         </nav>
     </header>
 
-    <main x-data :class="$store.player.panels.length ? 'pb-80' : 'pb-52'" class="mx-auto {{ $maxWidth }} px-4 pt-8">
+    <main x-data class="mx-auto {{ $maxWidth }} px-4 pt-6" style="padding-bottom: calc(var(--dock-h, 13rem) + var(--status-h, 0px))">
         {{ $slot }}
     </main>
 
@@ -43,20 +47,24 @@
     @persist('player')
         <div x-data
              x-init="$store.player.mount($refs.audio, $refs.canvas)"
-             :class="$store.player.expanded ? 'inset-0 bg-bg' : 'inset-x-0 bottom-0 border-t border-white/10 bg-surface'"
-             class="fixed z-10 flex flex-col">
+             :class="$store.player.expanded ? 'inset-0 flex flex-col bg-bg' : 'inset-x-0 bg-bg px-[max(1rem,calc((100vw-80rem)/2+1rem))] pb-1 pt-3'"
+             :style="$store.player.expanded ? '' : 'bottom: var(--status-h, 0px)'"
+             class="fixed z-10">
             <audio x-ref="audio" preload="metadata"></audio>
 
+            {{-- Docked, as in docs/mockups/dense-library.html: a "Now playing" box with the track on the left, the meters on the right, and the progress and buttons under both. Full screen: the meters fill the screen. --}}
+            <div :class="$store.player.expanded ? 'flex min-h-0 flex-1 flex-col' : 'relative grid grid-cols-1 gap-x-4 rounded-theme border border-white/15 px-3 md:grid-cols-2'">
+            <span x-show="! $store.player.expanded" class="absolute -top-2.5 left-3 bg-bg px-1.5 text-xs text-muted">Now playing</span>
+
             <canvas x-ref="canvas" x-show="$store.player.panels.length"
-                    :class="$store.player.expanded ? 'flex-1' : 'h-28'"
+                    :class="$store.player.expanded ? 'flex-1' : 'order-2 my-2 h-28 md:order-none md:col-start-2 md:row-start-1 md:my-3'"
                     class="w-full"></canvas>
 
             {{-- No meters: the player is just the small-cover row below, so the page keeps its space; the big centred cover only in full screen. --}}
             <div x-show="! $store.player.panels.length && $store.player.expanded" x-cloak
                  class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-6 px-6 text-center">
                 <div class="aspect-square max-h-[50vh] w-[min(80vw,28rem)] shrink-0 overflow-hidden rounded-theme bg-surface shadow-lg shadow-black/30">
-                    <img x-show="$store.player.current?.cover && ! $store.ui.pixelated" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
-                    <canvas x-show="$store.player.current?.cover && $store.ui.pixelated" x-effect="$store.ui.paint($el, $store.player.current?.cover)" class="h-full w-full [image-rendering:pixelated]" aria-hidden="true"></canvas>
+                    <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
                 </div>
                 <div class="min-w-0">
                     <p x-text="$store.player.current?.title ?? 'Nothing playing'"
@@ -103,7 +111,6 @@
                             '0 – 9' => 'Jump to 0 – 90 % of the track',
                             'n / p' => 'Next track / previous (or restart)',
                             ', .' => 'Back or forward 10 s',
-                            'Shift + P' => 'Pixelate the covers, or show them as they are',
                             'Shift + I' => 'How much the lists and the player say about the files: all, DR only, nothing',
                             'm / M' => 'Next / previous meter on the active panel (none shown: bring one back)',
                             '+ / -' => 'Add / remove a meter panel (0 to 4)',
@@ -118,26 +125,52 @@
                             <dd class="text-muted">{{ $what }}</dd>
                         @endforeach
                     </dl>
+                    {{-- The library's own keys, while its page is open (resources/js/magnetite/dense/keymap.js) --}}
+                    <div x-show="$store.player.libraryKeys" x-cloak class="mt-5 border-t border-white/10 pt-4">
+                        <h3 class="mb-2 text-xs uppercase tracking-wide text-muted">In the library</h3>
+                        <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+                            @foreach ([
+                                'j k · h l' => 'Move · close or open a folder (h on an album: its folder)',
+                                'g G · Tab' => 'Top, bottom · the other pane',
+                                'Enter' => 'Play, or open or close a folder',
+                                'x · v' => 'Mark an album · move the marked (or selected) to a folder; u undoes a move',
+                                'N r d' => 'New folder · rename · delete (asks first)',
+                                'e · i · C' => 'Edit table · look up online · find a cover',
+                                'A · S' => 'Analyse · share',
+                                's · o' => 'Order (title, year, DR) · only files with findings',
+                                'l (tracks)' => 'The measurements of a file',
+                                '/ · :' => 'Search (year: dr: codec: artist: album:) · command line, Tab completes',
+                                ':truth' => 'Every file, the worst first',
+                            ] as $keys => $what)
+                                <dt><kbd class="rounded-theme border border-white/10 bg-bg px-1.5 py-0.5 text-xs">{{ $keys }}</kbd></dt>
+                                <dd class="text-muted">{{ $what }}</dd>
+                            @endforeach
+                        </dl>
+                    </div>
                     <button type="button" class="mt-4 text-xs text-muted hover:text-accent" @click="$store.player.helpOpen = false">Close</button>
                 </div>
             </div>
 
-            <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3">
+            <div :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pt-3' : 'order-1 py-3 ' + ($store.player.panels.length ? 'md:col-start-1 md:row-start-1' : 'md:col-span-2 md:row-start-1')"
+                 class="flex flex-col gap-2">
                 <div class="flex min-h-10 items-center justify-between text-sm">
                     <div x-show="$store.player.panels.length || ! $store.player.expanded" class="flex min-w-0 items-center gap-3">
-                        <div class="h-16 w-16 shrink-0 overflow-hidden rounded-theme bg-surface">
-                            <img x-show="$store.player.current?.cover && ! $store.ui.pixelated" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
-                            {{-- The mosaic view of the same cover (P, or the theme's choice) --}}
-                            <canvas x-show="$store.player.current?.cover && $store.ui.pixelated" x-effect="$store.ui.paint($el, $store.player.current?.cover)" class="h-full w-full [image-rendering:pixelated]" aria-hidden="true"></canvas>
+                        <div :class="$store.player.expanded ? 'h-16 w-16' : 'h-24 w-24'" class="shrink-0 overflow-hidden rounded-theme bg-surface">
+                            <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
                         </div>
                         <div class="min-w-0 leading-snug">
                             <p class="truncate">
-                                <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-medium"></span>
-                                <span x-show="$store.player.current?.artist" x-text="' · ' + $store.player.current?.artist" class="text-muted"></span>
+                                <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-bold"></span>
+                                <span x-show="$store.player.current" class="ml-1 inline-flex align-middle" role="img" :aria-label="$store.player.playing ? 'Playing' : 'Paused'">
+                                    <x-icon name="play" x-show="$store.player.playing" class="size-3 text-amber-500" />
+                                    <x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3 text-amber-500" />
+                                </span>
                             </p>
-                            <p x-show="$store.player.current?.album" class="truncate text-xs text-muted" x-text="[$store.player.current?.album, $store.player.position].filter(Boolean).join(' · ')"></p>
+                            <p x-show="$store.player.current?.artist" x-text="$store.player.current?.artist" class="truncate text-accent"></p>
+                            <p x-show="$store.player.current?.album" class="truncate text-xs text-muted" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
                             {{-- Format, DR and loudness (info level 1 and up), then the findings (level 2): see dense/info.js --}}
                             <p x-show="$store.player.dock.line" class="truncate text-xs" x-text="$store.player.dock.line"></p>
+                            <p x-show="$store.player.note" x-cloak x-text="$store.player.note" class="truncate text-xs text-accent2" aria-live="polite"></p>
                             <p x-show="$store.player.dock.findings.length" class="truncate text-xs">
                                 <template x-for="f in $store.player.dock.findings" :key="f.code">
                                     <span class="mr-3" :title="f.detail"><span :class="f.level === 'problem' ? 'text-red-500' : 'text-amber-500'">!</span> <span x-text="f.label"></span></span>
@@ -145,8 +178,8 @@
                             </p>
                         </div>
                     </div>
-                    <div class="ml-auto flex items-center gap-2">
-                        <span x-show="$store.player.note" x-cloak x-text="$store.player.note" class="truncate text-xs text-accent2" aria-live="polite"></span>
+                    {{-- The mockup's dock has no buttons: on the library page the meters and full screen are in its toolbar and on keys. Other pages keep them, and full screen shows them (to get out of it). --}}
+                    <div x-show="$store.player.expanded || ! $store.player.libraryKeys" class="ml-auto flex items-center gap-2">
                         <x-menu up label="Meters" width="w-56">
                             <x-slot:trigger>
                                 <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu"
@@ -189,20 +222,26 @@
                 <p x-show="$store.player.playing && ['suspended', 'interrupted'].includes($store.player.audioState)"
                    class="text-xs text-accent2">Sound is blocked by the browser. Click anywhere on the page to enable it.</p>
 
+            </div>
+
+            <div :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pb-3' : 'order-3 pb-3 md:col-span-2 md:row-start-2'" class="flex flex-col gap-3">
                 <div class="flex items-center gap-3 text-xs text-muted">
                     <span x-text="$store.player.fmt($store.player.time)" class="w-10 text-right tabular-nums"></span>
-                    <input type="range" min="0" max="1000" class="h-1 flex-1 cursor-pointer accent-[var(--c-accent)]"
+                    <input type="range" min="0" max="1000" class="seek flex-1" aria-label="Position in the track"
+                           :style="'--p: ' + ($store.player.duration ? Math.min(100, $store.player.time / $store.player.duration * 100) : 0) + '%'"
                            :value="$store.player.duration ? ($store.player.time / $store.player.duration) * 1000 : 0"
                            @input="$store.player.seek($event.target.value / 1000)">
                     <span x-text="$store.player.fmt($store.player.duration)" class="w-10 tabular-nums"></span>
                 </div>
 
-                <div class="flex items-center justify-center gap-3 text-sm">
-                    <button type="button" class="rounded-theme border border-white/10 px-3 py-1 hover:text-accent" @click="$store.player.prev()">Prev</button>
-                    <button type="button" class="rounded-theme bg-accent px-5 py-1 font-medium text-bg" @click="$store.player.toggle()"
-                            x-text="$store.player.playing ? 'Pause' : 'Play'"></button>
-                    <button type="button" class="rounded-theme border border-white/10 px-3 py-1 hover:text-accent" @click="$store.player.next()">Next</button>
+                {{-- Previous, play or pause, next: as in the mockup. --}}
+                <div class="flex items-center justify-center gap-2 text-sm">
+                    <button type="button" class="rounded-theme border border-white/15 px-4 py-0.5 hover:border-accent hover:text-accent" title="Previous (p)" aria-label="Previous" @click="$store.player.prev()">⏮</button>
+                    <button type="button" class="rounded-theme border px-4 py-0.5 hover:border-accent hover:text-accent" :class="$store.player.playing ? 'border-accent text-accent' : 'border-white/15'"
+                            :title="$store.player.playing ? 'Pause (space)' : 'Play (space)'" :aria-label="$store.player.playing ? 'Pause' : 'Play'" :aria-pressed="$store.player.playing" @click="$store.player.toggle()">⏯</button>
+                    <button type="button" class="rounded-theme border border-white/15 px-4 py-0.5 hover:border-accent hover:text-accent" title="Next (n)" aria-label="Next" @click="$store.player.next()">⏭</button>
                 </div>
+            </div>
             </div>
         </div>
     @endpersist

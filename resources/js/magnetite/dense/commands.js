@@ -23,7 +23,6 @@ export const COMMANDS = [
     ['truth', 'every file, the worst first; truth again goes back'],
     ['tree', 'back to the folders and albums'],
     ['info', 'info 0, 1 or 2 (I)'],
-    ['pixel', 'pixelate the covers (P)'],
     ['tint', 'meter colours from the cover (c)'],
     ['theme', 'theme NAME (t)'],
     ['full', 'full screen (f)'],
