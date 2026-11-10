@@ -108,12 +108,13 @@ impl Cover {
         self.img.is_some()
     }
 
-    /// How the cover is drawn: quadrants (twice the detail across), or half blocks with `MAGNETITE_COVER=half` for a terminal or
-    /// font that cannot show the quadrant characters.
-    fn shape() -> Shape {
+    /// How the cover is drawn: the plain pixelated half blocks by default (the look that was liked best); `MAGNETITE_COVER=fine`
+    /// asks for the sharper quadrant renderer, `MAGNETITE_COVER=half` for the sharpened half-block one.
+    fn shape() -> Option<Shape> {
         match std::env::var("MAGNETITE_COVER").as_deref() {
-            Ok("half") => Shape::Half,
-            _ => Shape::Quadrant,
+            Ok("fine") => Some(Shape::Quadrant),
+            Ok("half") => Some(Shape::Half),
+            _ => None,
         }
     }
 
@@ -124,14 +125,26 @@ impl Cover {
         if cols < 4 || rows < 2 {
             return;
         }
-        let (shape, indexed) = (Self::shape(), !truecolor());
-        let key = (cols, rows, shape, indexed);
+        let (shape, indexed) = (Self::shape().unwrap_or(Shape::Half), !truecolor());
+        let plain = Self::shape().is_none();
+        let key = (cols, rows, shape, indexed || plain);
         if self.drawn.as_ref().map(|d| d.0) != Some(key) {
-            // a sharp resize, then a touch of sharpening: the picture has few pixels, so edges count
             let (cw, ch) = shape.pixels();
-            let grid = image::imageops::resize(img, cols as u32 * cw as u32, rows as u32 * ch as u32, FilterType::Lanczos3);
-            let grid = image::imageops::unsharpen(&grid, 0.7, 2);
-            self.drawn = Some((key, blocks::render(&grid, shape, indexed)));
+            let (w, h) = (cols as u32 * cw as u32, rows as u32 * ch as u32);
+            self.drawn = Some(if plain {
+                // soft: a plain triangle-filter shrink, each pixel one block half, nearest colour with no error spreading
+                let px = image::imageops::resize(img, w, h, FilterType::Triangle);
+                let cells = (0..rows as u32).map(|r| (0..cols as u32).map(|x| {
+                    let (t, b) = (px.get_pixel(x, r * 2).0, px.get_pixel(x, r * 2 + 1).0);
+                    Cell { ch: '▀', fg: crate::theme::c((t[0], t[1], t[2])), bg: crate::theme::c((b[0], b[1], b[2])) }
+                }).collect()).collect();
+                (key, cells)
+            } else {
+                // a sharp resize, then a touch of sharpening: the picture has few pixels, so edges count
+                let grid = image::imageops::resize(img, w, h, FilterType::Lanczos3);
+                let grid = image::imageops::unsharpen(&grid, 0.7, 2);
+                (key, blocks::render(&grid, shape, indexed))
+            });
         }
         let cells = &self.drawn.as_ref().unwrap().1;
         let (x0, y0) = (area.x + (area.width - cols) / 2, area.y + (area.height - rows) / 2);
