@@ -35,6 +35,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'meters' => 'array',
+            'ui' => 'array',
             'store' => 'encrypted:array',
         ];
     }
