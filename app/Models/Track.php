@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\TranscodeCache;
+use App\Support\AlbumKey;
 use App\Support\FileTruth;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,6 +16,12 @@ class Track extends Model
     use HasFactory;
 
     protected $guarded = [];
+
+    protected static function booted(): void
+    {
+        // The text a search looks in, kept with the title and artist wherever a track is created or edited.
+        static::saving(fn (Track $track) => $track->search_key = mb_substr(AlbumKey::searchKey($track->title, $track->artist), 0, 600));
+    }
 
     protected function casts(): array
     {

@@ -19,7 +19,10 @@ class Album extends Model
     protected static function booted(): void
     {
         // The comparison form of the title, kept with the title wherever an album is created or renamed.
-        static::saving(fn (Album $album) => $album->title_key = AlbumKey::title($album->title));
+        static::saving(function (Album $album) {
+            $album->title_key = AlbumKey::title($album->title);
+            $album->search_key = mb_substr(AlbumKey::searchKey($album->title, $album->artist), 0, 600);
+        });
     }
 
     protected function casts(): array
