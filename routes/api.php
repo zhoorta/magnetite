@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AlbumMergeController;
 use App\Http\Controllers\AlbumTitlesController;
 use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\Api\AlbumController;
@@ -64,6 +65,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/albums/{album}/folder', [FolderWrites::class, 'moveAlbum'])->whereNumber('album')->name('api.albums.folder');
             Route::patch('/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('api.albums.update');
             Route::patch('/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('api.tracks.update');
+            Route::post('/albums/{album}/merge', [AlbumMergeController::class, 'store'])->whereNumber('album')->name('api.albums.merge');
             Route::post('/albums/{album}/titles/find', [AlbumTitlesController::class, 'find'])->whereNumber('album')->name('api.albums.titles.find');
             Route::post('/albums/{album}/titles', [AlbumTitlesController::class, 'apply'])->whereNumber('album')->name('api.albums.titles.apply');
             Route::post('/covers/find', [CoverSearchController::class, 'store'])->name('api.covers.find');

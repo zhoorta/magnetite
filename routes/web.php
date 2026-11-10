@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AlbumMergeController;
 use App\Http\Controllers\AlbumTitlesController;
 use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\CopyController;
@@ -77,6 +78,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/library/albums/{album}/folder', [FolderController::class, 'moveAlbum'])->whereNumber('album')->name('library.albums.folder');
     Route::post('/library/albums/{album}/titles/find', [AlbumTitlesController::class, 'find'])->whereNumber('album')->name('library.albums.titles.find');
     Route::post('/library/albums/{album}/titles', [AlbumTitlesController::class, 'apply'])->whereNumber('album')->name('library.albums.titles.apply');
+    Route::post('/library/albums/{album}/merge', [AlbumMergeController::class, 'store'])->whereNumber('album')->name('library.albums.merge');
     Route::delete('/library/albums/{album}', [LibraryRemoveController::class, 'album'])->whereNumber('album')->name('library.albums.destroy');
     Route::delete('/library/tracks/{track}', [LibraryRemoveController::class, 'track'])->whereNumber('track')->name('library.tracks.destroy');
 

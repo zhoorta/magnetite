@@ -6,6 +6,7 @@ use App\Contracts\LibraryStore;
 use App\Models\Album;
 use App\Models\Track;
 use App\Models\User;
+use App\Support\AlbumKey;
 use App\Support\StoredFile;
 use App\Support\TrackLibrary;
 use getID3;
@@ -83,6 +84,41 @@ class LibraryScanner
         return $counts;
     }
 
+    /**
+     * The album a file belongs to. Albums are compared by the cleaned-up title (App\Support\AlbumKey). With an album-artist tag
+     * the album is the one with that artist; without one it is the album of that folder (so a compilation with a different
+     * artist per track stays together). A file that has the tag next to files that do not is still the same album when it sits
+     * in the same folder with the same title: it fills in the album's artist, or is taken into the tagged album, whichever
+     * was scanned first. Two different album artists in one folder with one title stay two albums, and files at the top of
+     * the library (`.`), where unrelated albums share a folder, keep the strict identity.
+     *
+     * @param  array{year: ?int, label: ?string}  $defaults
+     */
+    private function albumFor(User $user, string $relative, string $title, ?string $albumArtist, array $defaults): Album
+    {
+        $key = AlbumKey::title($title);
+        $artistKey = AlbumKey::artist($albumArtist);
+        $folder = dirname($relative);
+        $atTop = $folder === '.' || $folder === '';
+
+        $candidates = Album::where('user_id', $user->id)->where('title_key', $key)->get();
+        $hasFileIn = fn (Album $a) => $a->folder === $folder || $a->tracks()->pluck('path')->contains(fn ($p) => dirname($p) === $folder);
+
+        if ($artistKey !== null) {
+            $album = $candidates->first(fn (Album $a) => AlbumKey::artist($a->artist) === $artistKey)
+                ?? ($atTop ? null : $candidates->first(fn (Album $a) => $a->artist === null && $hasFileIn($a)));
+
+            if ($album && $album->artist === null) {
+                $album->update(['artist' => $albumArtist]);
+            }
+        } else {
+            $album = $candidates->first(fn (Album $a) => $a->artist === null && $a->folder === $folder)
+                ?? ($atTop ? null : $candidates->first(fn (Album $a) => $a->artist !== null && $hasFileIn($a)));
+        }
+
+        return $album ?? Album::create(['user_id' => $user->id, 'title' => $title, 'artist' => $albumArtist, 'folder' => $folder] + $defaults);
+    }
+
     /** A remote store vouches with a hash (and the id it serves the file under); a folder only has size and mtime. */
     private function unchanged(Track $existing, StoredFile $file): bool
     {
@@ -136,15 +172,7 @@ class LibraryScanner
 
         $album = null;
         if ($albumTitle !== null) {
-            $identity = ['user_id' => $user->id, 'artist' => $albumArtist, 'title' => $albumTitle];
-            if ($albumArtist === null) {
-                $identity['folder'] = dirname($relative);
-            }
-
-            $album = Album::firstOrCreate(
-                $identity,
-                ['year' => $this->year($first('year') ?? $first('recording_time') ?? $first('date') ?? $first('creation_date')), 'label' => $label],
-            );
+            $album = $this->albumFor($user, $relative, $albumTitle, $albumArtist, ['year' => $this->year($first('year') ?? $first('recording_time') ?? $first('date') ?? $first('creation_date')), 'label' => $label]);
 
             if ($album->label === null && $label !== null) {
                 $album->update(['label' => $label]);

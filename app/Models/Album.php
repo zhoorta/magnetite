@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AlbumKey;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,12 @@ class Album extends Model
     use HasFactory;
 
     protected $guarded = [];
+
+    protected static function booted(): void
+    {
+        // The comparison form of the title, kept with the title wherever an album is created or renamed.
+        static::saving(fn (Album $album) => $album->title_key = AlbumKey::title($album->title));
+    }
 
     protected function casts(): array
     {
