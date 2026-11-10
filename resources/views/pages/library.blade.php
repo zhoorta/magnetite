@@ -14,7 +14,7 @@
             <button type="button" x-show="mode !== 'tree'" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Back to the folders and albums (Esc)" @click="closeView()"><x-icon name="back" /> Back</button>
 
             <button type="button" x-show="mode === 'tree' && tracks.length" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Play (Enter)" @click="pane === 'tracks' ? playTrack(tsel) : playTrack(0, false); focusRoot()"><x-icon name="play" /> Play</button>
-            <button type="button" x-show="mode === 'tree'" class="{{ $btn }} inline-flex items-center gap-1.5" :class="selectMode && 'border-accent text-accent'" :aria-pressed="selectMode" title="Mark several albums (x)" @click="toggleSelectMode()">
+            <button type="button" x-show="mode === 'tree'" class="{{ $btn }} inline-flex items-center gap-1.5" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x)" @click="toggleSelectMode()">
                 <x-icon name="select" /><span x-show="marks.length" x-cloak x-text="marks.length"></span><span class="hidden sm:inline" x-text="selectMode ? 'Done' : 'Select'"></span>
             </button>
             <button type="button" x-show="mode === 'tree' && (ctx === 'album' || ctx === 'folder')" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Move to a folder (v)" @click="openMover()"><x-icon name="move" /><span class="hidden sm:inline">Move</span></button>
@@ -39,9 +39,9 @@
 
             {{-- The views and filters, as icons (the name and the key are in the tooltip). --}}
             <div class="ml-auto flex flex-wrap items-center gap-1.5">
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'search' && 'border-accent text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" aria-label="Search" @click="mode === 'search' ? closeView() : openSearch()"><x-icon name="search" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && 'border-accent text-accent'" :aria-pressed="mode === 'truth'" title="Every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' ? closeView() : openTruth(); focusRoot()"><x-icon name="truth" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="onlyProblems && 'border-accent text-accent'" :aria-pressed="onlyProblems" title="Only albums and tracks with findings (o)" aria-label="Only findings" @click="toggleProblems(); focusRoot()"><x-icon name="warn" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'search' && '!border-accent !text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" aria-label="Search" @click="mode === 'search' ? closeView() : openSearch()"><x-icon name="search" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && '!border-accent !text-accent'" :aria-pressed="mode === 'truth'" title="Every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' ? closeView() : openTruth(); focusRoot()"><x-icon name="truth" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center" :class="onlyProblems && '!border-accent !text-accent'" :aria-pressed="onlyProblems" title="Only albums and tracks with findings (o)" aria-label="Only findings" @click="toggleProblems(); focusRoot()"><x-icon name="warn" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center gap-1.5" :class="$store.ui.info > 0 && 'text-accent'" title="How much to show about the files: all, DR only, nothing (I)" :aria-label="$store.ui.label()" @click="$store.ui.cycleInfo(); focusRoot()"><x-icon name="info" /><span class="hidden text-xs sm:inline" x-text="['off', 'DR', 'all'][$store.ui.info]"></span></button>
                 <x-menu label="Meters" width="w-56">
                     <x-slot:trigger>
@@ -56,7 +56,7 @@
                     </template>
                 </x-menu>
                 <button type="button" class="{{ $btn }} inline-flex items-center" title="Full screen (f)" aria-label="Full screen" @click="$store.player.expanded = true"><x-icon name="full" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" title="Command line (:)" aria-label="Command line" @click="openCmd()"><x-icon name="command" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center" :class="cmd && '!border-accent !text-accent'" :aria-pressed="!! cmd" title="Command line (:)" aria-label="Command line" @click="cmd ? closeCmd() : openCmd()"><x-icon name="command" /></button>
             </div>
         </div>
 
