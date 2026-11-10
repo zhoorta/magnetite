@@ -21,6 +21,13 @@ Same contract as the web visualizers: each draws only into the cell it is given 
 ## Help
 `?` opens a centred panel with the keys of the view you are in (library, file-truth table, search, full screen, A/B compare), grouped; `?` or `esc` closes it and every other key is ignored meanwhile. The table is in `src/help.rs`, so a new key goes there and in the key handler. In the search box `?` is text. The library footer is short now (`? all keys · …`), and `magnetite --help` points at `?`.
 
+## Upload
+`magnetite upload PATH…` sends music to the server without the web page. A path is a zip (sent as it is), a folder (zipped to the temp folder first, audio and cover images only, uncompressed, deleted afterwards) or audio files (sent as single files, which land loose in your folder). One request per path, with a percentage, then it waits for the scan (`/scan`, polled every 2 s, 30 minutes at most) and lists the albums that got tracks from this upload (`GET /albums?since=`, the server's clock from the upload's answer). The rules are the server's (`LibraryUploader`: audio and covers only, nothing overwritten, unsafe paths refuse the zip, quota).
+
+Then, per new album, in a terminal: `i` MusicBrainz titles (each candidate with the per-track change `old → new` and its fit, then yes / next / skip; titles, date and label are applied), `c` look for a cover on the web, `e` edit artist, album and year, `enter` next album, `q` stop. Flags: `--identify` applies the best MusicBrainz candidate without asking when its fit is 80% or more and every track found a title (otherwise nothing is changed); `--cover` looks for a cover for every new album (an album that has one is left alone); `--artist X`, `--album X`, `--year N` set those fields on every new album; `--no-review` skips the menu (also skipped when the input is not a terminal). Needs a write token (the device sign-in gives one).
+
+Not done: chunked or resumable upload (one big zip over a slow link is one request), choosing between several covers (the server picks the first it finds), the review inside the full-screen player, albums that are only tracks without tags (they stay loose tracks and are not listed).
+
 ## Album order
 The album list is sorted by the artist that is shown (`display_artist`), then year, then title, in the client too (`sort_albums`), so an album without an album-artist tag sits under its tracks' artist (Quicksilver Messenger Service among the Q's) instead of at the top; the server now sorts the same way (`Album::inLibraryOrder()`).
 

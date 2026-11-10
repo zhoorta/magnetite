@@ -22,6 +22,7 @@ symphonia = { version = "0.6.1", features = ["all"] }
 symphonia-adapter-opus-rs = "0.1.1"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 souvlaki = { version = "0.9.3", default-features = false, features = ["use_zbus"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [profile.release]
 lto = true

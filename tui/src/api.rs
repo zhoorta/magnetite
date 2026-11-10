@@ -101,7 +101,12 @@ pub type Result<T> = std::result::Result<T, String>;
 fn err(e: ureq::Error) -> String {
     match e {
         ureq::Error::Status(401, _) => "not signed in (run `magnetite login`)".into(),
-        ureq::Error::Status(c, r) => format!("server answered {c}: {}", r.into_string().unwrap_or_default().chars().take(200).collect::<String>()),
+        ureq::Error::Status(c, r) => {
+            let body = r.into_string().unwrap_or_default();
+            // Laravel's JSON errors carry a readable `message`; show that instead of the whole body.
+            let said = serde_json::from_str::<Value>(&body).ok().and_then(|v| v["message"].as_str().filter(|m| !m.is_empty()).map(str::to_string)).unwrap_or_else(|| body.chars().take(200).collect());
+            format!("server answered {c}: {said}")
+        }
         e => e.to_string(),
     }
 }
@@ -153,6 +158,53 @@ impl Api {
     /// The server's search: albums and tracks whose title or artist contains the text (yours and what is shared with you).
     pub fn search(&self, q: &str) -> Result<SearchResult> {
         self.get("/search").query("q", q).call().map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    fn send(&self, method: &str, path: &str) -> ureq::Request {
+        ureq::request(method, &format!("{}/api/v1{}", self.base, path)).set("Authorization", &self.auth()).set("Accept", "application/json")
+    }
+
+    /// The scan of this account: `state` is idle, queued, running, done or failed.
+    pub fn scan(&self) -> Result<Value> {
+        self.get("/scan").call().map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    /// The albums that got tracks since a server time (`since` from the upload's answer), all pages.
+    pub fn albums_since(&self, since: i64) -> Result<Vec<Album>> {
+        let mut all = vec![];
+        let mut page = 1;
+        loop {
+            let p: Page<Album> = self.get(&format!("/albums?since={since}&page={page}")).call().map_err(err)?.into_json().map_err(|e| e.to_string())?;
+            all.extend(p.data);
+            match p.meta {
+                Some(m) if m.current_page < m.last_page => page += 1,
+                _ => return Ok(all),
+            }
+        }
+    }
+
+    /// Send a multipart body of known length (the upload streams it from disk) and read the JSON answer.
+    pub fn upload(&self, content_type: &str, len: u64, body: impl std::io::Read) -> Result<Value> {
+        self.send("POST", "/uploads").set("Content-Type", content_type).set("Content-Length", &len.to_string()).send(body).map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    /// MusicBrainz releases that could name the album's tracks (candidates with their per-track proposals).
+    pub fn find_titles(&self, id: u64) -> Result<Value> {
+        self.send("POST", &format!("/albums/{id}/titles/find")).send_json(json!({})).map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    pub fn apply_titles(&self, id: u64, candidate: usize, parts: &[&str]) -> Result<Value> {
+        self.send("POST", &format!("/albums/{id}/titles")).send_json(json!({ "candidate": candidate, "parts": parts })).map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    /// Look for a cover on the web and set it; the answer says where it came from (null: nothing found).
+    pub fn find_cover(&self, id: u64) -> Result<Value> {
+        self.send("POST", &format!("/albums/{id}/cover/find")).send_json(json!({})).map_err(err)?.into_json().map_err(|e| e.to_string())
+    }
+
+    /// Change album fields (the server wants the title every time).
+    pub fn edit_album(&self, id: u64, fields: Value) -> Result<Value> {
+        self.send("PATCH", &format!("/albums/{id}")).send_json(fields).map_err(err)?.into_json().map_err(|e| e.to_string())
     }
 
     pub fn album(&self, id: u64) -> Result<Album> {

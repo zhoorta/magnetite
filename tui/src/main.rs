@@ -11,6 +11,7 @@ mod panels;
 mod search;
 mod stream;
 mod theme;
+mod upload;
 mod truth;
 
 use api::{Album, Api, Track};
@@ -37,9 +38,18 @@ fn main() {
             println!("Signed out locally (revoke the token on the server under your account if you want it gone).");
         }
         Some("theme") => theme_cmd(args.get(1)),
-        Some("-h") | Some("--help") => println!("magnetite            open the player\nmagnetite login URL  sign in (shows a code to approve in the browser)\nmagnetite logout     forget the token\nmagnetite theme [ID] list themes or choose one (t cycles them in the player)\n\nIn the player, ? shows every key."),
+        Some("upload") => std::process::exit(upload_cmd(&args[1..])),
+        Some("-h") | Some("--help") => println!("magnetite            open the player\nmagnetite login URL  sign in (shows a code to approve in the browser)\nmagnetite logout     forget the token\nmagnetite theme [ID] list themes or choose one (t cycles them in the player)\nmagnetite upload PATH… send zips, folders or audio files, then look at the new albums (--identify, --cover, --no-review, --artist, --album, --year)\n\nIn the player, ? shows every key."),
         _ => run(),
     }
+}
+
+fn upload_cmd(args: &[String]) -> i32 {
+    let Some(cfg) = config::load() else {
+        eprintln!("not signed in (run `magnetite login https://your.server`)");
+        return 1;
+    };
+    upload::run(&api::Api::new(&cfg.server, &cfg.token), args)
 }
 
 fn config_path_hint() -> std::path::PathBuf {
