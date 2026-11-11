@@ -1,15 +1,16 @@
 <x-layouts.app title="Storage · Magnetite">
-    <h1 class="mb-2 text-2xl font-semibold">Storage</h1>
-    <p class="mb-6 max-w-prose text-sm text-muted">
-        Where your music files live. This page only shows the setup; it is changed with
-        <code>php artisan magnetite:storage</code>.
-    </p>
-
     @php
         $size = fn (int $bytes) => $bytes >= 1024 ** 3 ? round($bytes / 1024 ** 3, 1).' GB' : ($bytes >= 1024 ** 2 ? round($bytes / 1024 ** 2, 1).' MB' : round($bytes / 1024).' KB');
     @endphp
 
-    <div x-data="storage(@js(route('storage.test')), @js(route('storage.cache.clear')), @js(csrf_token()), @js($cache))" class="space-y-6 text-sm">
+    <div x-data="storage(@js(route('storage.test')), @js(route('storage.cache.clear')), @js(csrf_token()), @js($cache))" class="grid gap-x-10 gap-y-6 text-sm lg:grid-cols-2 lg:items-start">
+        <div>
+            <h1 class="mb-2 text-2xl font-semibold">Storage</h1>
+            <p class="mb-6 max-w-prose text-sm text-muted">
+                Where your music files live. This page only shows the setup; it is changed with
+                <code>php artisan magnetite:storage</code>.
+            </p>
+
         <dl class="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-2">
             <dt class="text-muted">Source</dt>
             <dd>{{ $remote ? 'Ferrite' : 'Local folder' }}</dd>
@@ -39,8 +40,10 @@
                 @endif
             </dd>
         </dl>
+        </div>
 
-        <div class="space-y-2 border-t border-white/10 pt-4">
+        <div class="space-y-6 lg:pt-1">
+        <div class="space-y-2 border-t border-white/10 pt-4 lg:border-t-0 lg:pt-0">
             <button type="button" class="rounded-theme border border-white/10 px-3 py-1 text-xs hover:text-accent" :disabled="busy" @click="test()">
                 Test connection
             </button>
@@ -80,5 +83,6 @@
                 </button>
             </div>
         @endif
+        </div>
     </div>
 </x-layouts.app>

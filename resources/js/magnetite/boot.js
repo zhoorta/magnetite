@@ -2,8 +2,10 @@ import { Livewire, Alpine } from '../../../vendor/livewire/livewire/dist/livewir
 import { AudioEngine, SILENCE } from './engine';
 import { visualizers } from './visualizers';
 import { layout, MAX_PANELS } from './layout';
-import themes from './themes.json';
-import uploader from './upload';
+import builtinThemes from './themes.json';
+import { validateTheme } from './themes';
+import themeStudio from './themes-page';
+import { uploadsStore } from './uploads';
 import storage from './storage';
 import { send } from './http';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
@@ -15,6 +17,7 @@ import { playlistCreate, playlistPicker, playlistStore, playlistView, sharedPlay
 const STORAGE_KEY = 'magnetite.theme';
 const DEFAULT_THEME = 'terminal'; // keep the :root fallbacks in app.css in step
 const VARS_KEY = 'magnetite.vars';
+const CUSTOM_KEY = 'magnetite.themes'; // the themes this browser added (imported or edited)
 const MAX_SAVED_QUEUE = 500; // tracks kept for the restore after a reload
 /** A 404 means the saved track is gone for good; other failures (offline, server busy) keep the saved state for next time. */
 function forgetIf(status, forget) {
@@ -30,6 +33,20 @@ function safeStorage(fn) {
         return null;
     }
 }
+
+/** The built-in themes, then the ones saved in this browser (checked again: the file can be edited by hand). */
+function loadThemes() {
+    const list = [...builtinThemes];
+    const saved = safeStorage((s) => JSON.parse(s.getItem(CUSTOM_KEY) ?? '[]'));
+    for (const raw of Array.isArray(saved) ? saved : []) {
+        const { theme } = validateTheme(raw, list.map((t) => t.id));
+        if (theme) list.push({ ...theme, custom: true });
+    }
+
+    return list;
+}
+
+const themes = loadThemes();
 
 function applyTheme(theme) {
     const root = document.documentElement;
@@ -55,8 +72,8 @@ function readColors() {
     };
 }
 
-Alpine.data('uploader', uploader);
 Alpine.data('dense', dense);
+Alpine.data('themeStudio', themeStudio);
 Alpine.data('storage', storage);
 Alpine.store('playlists', playlistStore);
 Alpine.data('playlistPicker', playlistPicker);
@@ -104,6 +121,7 @@ Alpine.store('dialog', {
 });
 
 /** The user's interface choices (info level, meter tint). */
+Alpine.store('uploads', uploadsStore(window.magnetite?.uploads ?? null));
 Alpine.store('ui', uiStore(window.magnetite?.ui, !!window.magnetite?.signedIn));
 
 Alpine.store('player', {
@@ -220,6 +238,34 @@ Alpine.store('player', {
             // Read by the inline script in the layout's <head> to avoid a flash on full reloads.
             s.setItem(VARS_KEY, JSON.stringify({ colors: theme.colors, radius: theme.radius, font: theme.font }));
         });
+    },
+
+    /** Add a checked theme of this browser (see themes.js), and keep it. */
+    addTheme(theme) {
+        this.themes.push({ ...theme, custom: true });
+        this.saveCustom();
+    },
+
+    /** Replace a custom theme by its id; when it is the one in use, show the change. */
+    replaceTheme(theme) {
+        const i = this.themes.findIndex((t) => t.id === theme.id && t.custom);
+        if (i < 0) return;
+        this.themes.splice(i, 1, { ...theme, custom: true });
+        this.saveCustom();
+        if (this.themeId === theme.id) this.setTheme(theme.id);
+    },
+
+    /** Delete a custom theme; the one in use falls back to the default. */
+    removeTheme(id) {
+        const i = this.themes.findIndex((t) => t.id === id && t.custom);
+        if (i < 0) return;
+        this.themes.splice(i, 1);
+        this.saveCustom();
+        if (this.themeId === id) this.setTheme(DEFAULT_THEME);
+    },
+
+    saveCustom() {
+        safeStorage((s) => s.setItem(CUSTOM_KEY, JSON.stringify(this.themes.filter((t) => t.custom).map(({ custom, ...t }) => t))));
     },
 
     /** The meters this theme gives a look to (palette tweaks for one meter); it does not choose which meters show. */

@@ -15,6 +15,7 @@ export const COMMANDS = [
     ['new', 'new folder: new NAME (N)'],
     ['rename', 'rename the folder: rename NAME (r)'],
     ['delete', 'delete the selection (d)'],
+    ['upload', 'upload zips: the upload panel (U)'],
     ['share', 'share the selection (S)'],
     ['unshare', 'stop sharing the selection'],
     ['library', 'your own library (w cycles Library, Shared, Playlists)'],

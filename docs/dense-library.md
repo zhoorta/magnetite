@@ -142,3 +142,7 @@ No feature flag and no second layout: the dense view is built straight into `/li
 ## Flat list
 
 `z` (or the button left of the toolbar, or `:flat`) shows the albums as one list without folders, in the chosen order (`s`); each row carries the path of its folder in a faint hint. It applies to the library and to Shared (where the people are the folders), not to playlists. The choice is `users.ui.flat`. `buildRows(..., flat)` in `rows.js` does it; the folder actions simply find no folder row.
+
+## Upload
+
+`U` (also `:upload`, the upload icon in the toolbar, and the "Upload a zip" link of an empty library) opens the upload panel as a dialog; the page `/upload` shows the same panel (`components/upload-panel.blade.php`). Drop zips anywhere on the library and they start at once. The upload and the scan that follows live in the `uploads` store (`uploads.js`), so they go on while you browse; the status line at the bottom shows them (`Uploading 45%`, `Scanning… 120 files`, `Library updated: 7 new`), and when the scan finishes the library reloads in place. In the panel: `c` choose, `Enter` upload, `x` clear, `Esc` close.

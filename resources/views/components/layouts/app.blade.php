@@ -4,7 +4,8 @@
     <x-layouts.head :title="$title ?? 'Magnetite'" />
 </head>
 @php
-    $maxWidth = ($wide ?? false) === 'full' ? 'max-w-7xl' : (($wide ?? false) ? 'max-w-5xl' : 'max-w-3xl');
+    // The bar, the pages and the player share one left edge; only the landing page is narrower and centred.
+    $maxWidth = ($wide ?? false) === true ? 'max-w-5xl' : 'max-w-7xl';
 @endphp
 <body class="min-h-screen bg-bg text-text antialiased">
     {{-- The top bar, as in the mockup: small, on the surface colour, the page you are on underlined. --}}
@@ -12,7 +13,7 @@
         $link = fn (string $route) => request()->routeIs($route) ? 'border-b border-accent text-text' : 'text-muted hover:text-accent';
     @endphp
     <header class="border-b border-white/15 bg-surface" x-data="{ menu: false }" @keydown.escape.window="menu = false">
-        <nav class="mx-auto flex {{ $maxWidth }} flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 text-xs sm:flex-nowrap">
+        <nav class="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 text-xs sm:flex-nowrap">
             <a href="{{ route('welcome') }}" wire:navigate class="font-bold text-accent">Magnetite</a>
             <button type="button" class="-mr-1 ml-auto rounded-theme p-1.5 text-muted hover:text-accent sm:hidden" aria-label="Menu" :aria-expanded="menu" @click="menu = ! menu">
                 <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true">
@@ -22,11 +23,16 @@
             </button>
             <div :class="menu ? 'flex' : 'hidden'" class="basis-full -mx-2 flex-col gap-1 sm:contents [&_a]:block [&_a]:rounded-theme [&_a]:px-2 [&_a]:py-2 [&_a:hover]:bg-white/10 sm:[&_a]:p-0 sm:[&_a]:rounded-none sm:[&_a:hover]:bg-transparent [&_button]:rounded-theme [&_button]:px-2 [&_button]:py-2 [&_button:hover]:bg-white/10 sm:[&_button]:p-0 sm:[&_button:hover]:bg-transparent">
                 <a href="{{ route('library') }}" wire:navigate class="{{ request()->routeIs('library', 'shared', 'playlists*') ? 'border-b border-accent text-text' : 'text-muted hover:text-accent' }}">Library</a>
-                <a href="{{ route('themes') }}" wire:navigate class="{{ $link('themes') }}">Themes</a>
                 @auth
                     <a href="{{ route('upload') }}" wire:navigate class="{{ $link('upload') }}">Upload</a>
+                @endauth
+                <a href="{{ route('themes') }}" wire:navigate class="{{ $link('themes') }}">Themes</a>
+                @auth
                     <a href="{{ route('storage') }}" wire:navigate class="{{ $link('storage') }}">Storage</a>
-                    <form method="POST" action="{{ route('logout') }}" class="sm:ml-auto">
+                @endauth
+                <div class="sm:ml-auto"><x-themes-menu /></div>
+                @auth
+                    <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="text-muted hover:text-accent">Sign out</button>
                     </form>
@@ -136,6 +142,7 @@
                                 's · o' => 'Order (title, year, DR) · only files with findings',
                                 '⌫' => 'Back: from an album to its folder, from a folder to the one above',
                                 'w · W' => 'Source: Library, Shared, Playlists (or :shared, :playlists)',
+                                'U' => 'Upload zips (or drop them on the library)',
                                 'z' => 'Flat list: all albums without folders, again to go back',
                                 'y' => 'Copy the selected shared album or track to your library, or a shared playlist to yours',
                                 'J K (playlist)' => 'Move the selected track down or up; d removes it; N a new playlist',

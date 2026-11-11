@@ -41,6 +41,8 @@ export default function dense(data) {
         own: null, // your library while another source is shown: { folders, albums, loose, shares }
         cache: {}, // what was fetched of the other sources, shown at once when they are opened again
         cursors: {}, // the selected row of each source
+        uploadOpen: false, // the upload dialog
+        fileDrag: false, // files are being dragged over the page
         libraryStale: false, // something changed the library from another source (a copy): reload it when it is shown again
         trashOnly: data.trash_only,
 
@@ -107,6 +109,8 @@ export default function dense(data) {
             this.$nextTick(() => this.focusRoot()); // the keys work as soon as the page is there
             this.onReveal = () => this.revealPlaying();
             window.addEventListener('magnetite:reveal', this.onReveal);
+            this.onScanned = () => (this.source === 'library' ? this.reload() : (this.libraryStale = true)); // an upload's scan finished: the new albums appear
+            window.addEventListener('magnetite:scanned', this.onScanned);
             if (this.$store.player.reveal) this.$nextTick(() => this.revealPlaying());
             this.$store.player.libraryKeys = true; // the ? list shows the library's keys while this page is open
 
@@ -153,6 +157,7 @@ export default function dense(data) {
             this.layoutObserver?.disconnect();
             window.removeEventListener('resize', this.measure);
             window.removeEventListener('magnetite:reveal', this.onReveal);
+            window.removeEventListener('magnetite:scanned', this.onScanned);
             this.sortable?.destroy();
             document.documentElement.style.removeProperty('--status-h');
             document.documentElement.style.removeProperty('--panes-top');
@@ -536,6 +541,7 @@ export default function dense(data) {
         },
 
         run(action) {
+            if (action === 'upload') return this.openUpload();
             if (action === 'source') return this.cycleSource(1);
             if (action === 'source-back') return this.cycleSource(-1);
             if (this.mode === 'search') return this.runSearch(action);
@@ -774,6 +780,31 @@ export default function dense(data) {
         // ---- moving ----
 
         /** The albums to move (marked, else the selected one) or the selected folder. */
+        /** U / :upload: the upload panel as a dialog (the page /upload is the same panel). */
+        openUpload() {
+            this.uploadOpen = true;
+            this.$store.uploads.watch();
+            this.$nextTick(() => this.libraryRoot.querySelector('[data-upload-panel]')?.focus());
+        },
+
+        closeUpload() {
+            this.uploadOpen = false;
+            this.focusRoot();
+        },
+
+        /** Zips dropped anywhere on the page start uploading at once (a drag of an album inside the library has no files in it). */
+        isFileDrag(e) {
+            return [...(e.dataTransfer?.types ?? [])].includes('Files');
+        },
+
+        dropFiles(e) {
+            if (!this.isFileDrag(e)) return;
+            e.preventDefault();
+            this.fileDrag = false;
+            if (this.$store.uploads.pick(e.dataTransfer.files)) this.$store.uploads.send();
+            else this.say(this.$store.uploads.error ?? 'Drop zip files to upload them');
+        },
+
         openMover() {
             this.focusRoot(); // the list is driven from the keyboard, also when it was opened with the mouse
             const r = this.row;
@@ -1202,6 +1233,7 @@ export default function dense(data) {
                     return this.say(`info level ${level}`);
                 }
                 case 'flat': return this.toggleFlat();
+                case 'upload': return this.openUpload();
                 case 'tint': return ui.toggleTint();
                 case 'hints': ui.toggleHints(); return this.say(ui.hints ? 'key hints on' : 'key hints off');
                 case 'theme': {

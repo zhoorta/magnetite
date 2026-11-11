@@ -7,7 +7,9 @@
     <script type="application/json" id="library-data">{!! json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) !!}</script>
     <div x-data="dense(JSON.parse(document.getElementById('library-data').textContent))" tabindex="0" @keydown="onKey($event)" role="application" aria-label="Library"
          :aria-activedescendant="mode === 'tree' && rows[cur] ? 'row-' + rows[cur].key : null"
-         class="text-sm outline-none focus-visible:[&>.panes]:outline-none">
+         class="text-sm outline-none focus-visible:[&>.panes]:outline-none"
+         @dragenter.window="isFileDrag($event) && (fileDrag = true)" @dragover.window="isFileDrag($event) && $event.preventDefault()"
+         @dragleave.window="$event.relatedTarget === null && (fileDrag = false)" @drop.window="dropFiles($event)">
 
         {{-- The toolbar: what applies to the selection on the left (the rest is in the ⋯ menu, which also opens on a right-click), the views on the right as small icons. --}}
         <div class="mb-3 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Actions on the selection">
@@ -46,6 +48,7 @@
 
             {{-- The views and filters, as icons (the name and the key are in the tooltip). --}}
             <div class="ml-auto flex flex-wrap items-center gap-1.5">
+                <button type="button" class="{{ $btn }} inline-flex items-center" :class="($store.uploads.active || uploadOpen) && '!border-accent !text-accent'" title="Upload zips (U), or drop them on this page" aria-label="Upload" @click="uploadOpen ? closeUpload() : openUpload()"><x-icon name="upload" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'search' && '!border-accent !text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" aria-label="Search" @click="mode === 'search' ? closeView() : openSearch()"><x-icon name="search" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && ! onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && ! onlyProblems" title="Truth view: every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' && ! onlyProblems ? closeView() : openTruth(false); focusRoot()"><x-icon name="truth" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && onlyProblems" title="Findings view: only the files with a finding (o)" aria-label="Findings view" @click="mode === 'truth' && onlyProblems ? closeView() : openTruth(true); focusRoot()"><x-icon name="warn" /></button>
@@ -67,7 +70,7 @@
             </div>
         </div>
 
-        <p x-show="! hasAnything" x-cloak class="text-muted">Nothing here yet. <a href="{{ route('upload') }}" wire:navigate class="text-accent">Upload a zip</a> of your music, or ask the person who runs this server to put it in your folder and scan it.</p>
+        <p x-show="! hasAnything" x-cloak class="text-muted">Nothing here yet. <a href="{{ route('upload') }}" wire:navigate class="text-accent" @click.prevent="openUpload()">Upload a zip</a> of your music, or ask the person who runs this server to put it in your folder and scan it.</p>
 
         <div x-show="hasAnything" class="panes grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
             {{-- Folders and albums --}}
@@ -331,14 +334,25 @@
             <span><kbd class="text-accent2">A</kbd> analyse</span>
             <span><kbd class="text-accent2">/</kbd> search</span>
             <span><kbd class="text-accent2">Esc</kbd> back</span>
-            <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
+<button type="button" x-show="$store.uploads.note" x-cloak class="shrink-0 text-accent hover:underline" title="Upload (U)" @click="openUpload()" x-text="$store.uploads.note"></button>
+                        <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
         </div>
         <div x-show="! cmd && mode === 'tree'" class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted">
             <template x-for="h in hintList" :key="h[0]"><span><kbd class="text-accent2" x-text="h[0]"></kbd> <span x-text="h[1]"></span></span></template>
             <button type="button" class="hover:text-accent" :title="$store.ui.hints ? 'Show only ? keys (command: hints)' : 'Show the key hints (command: hints)'" @click="$store.ui.toggleHints(); focusRoot()" x-text="$store.ui.hints ? 'hide hints' : 'hints'"></button>
-            <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
+<button type="button" x-show="$store.uploads.note" x-cloak class="shrink-0 text-accent hover:underline" title="Upload (U)" @click="openUpload()" x-text="$store.uploads.note"></button>
+                        <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
         </div>
         </div>
+
+        {{-- Upload: the same panel as the page /upload. Esc closes it; an upload goes on in the background and shows in the status line. --}}
+        <div x-show="uploadOpen" x-cloak x-transition.opacity @keydown.escape.window="uploadOpen && ! $store.dialog.open && closeUpload()"
+             class="fixed inset-0 z-30 flex items-start justify-center bg-black/60 p-4 pt-24" @click.self="closeUpload()" role="dialog" aria-modal="true" aria-label="Upload">
+            <x-upload-panel data-upload-panel class="w-full max-w-2xl bg-surface">
+                <button type="button" class="text-accent underline" @click="closeUpload()">Close</button>
+            </x-upload-panel>
+        </div>
+        <div x-show="fileDrag" x-cloak class="pointer-events-none fixed inset-3 z-40 flex items-center justify-center rounded-theme border-2 border-dashed border-accent bg-bg/80 text-lg text-accent">Drop zips to upload them</div>
 
         {{-- The right-click menu: the same actions as the ⋯ button, at the pointer. Esc, a click elsewhere or a choice closes it. --}}
         <div x-show="ctxMenu" x-cloak data-ctxmenu role="menu" aria-label="Actions" class="fixed z-40 w-60 rounded-theme border border-white/10 bg-surface py-1 text-sm shadow-lg shadow-black/40"
