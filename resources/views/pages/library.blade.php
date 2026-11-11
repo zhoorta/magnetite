@@ -24,7 +24,7 @@
                     </button>
                 </template>
             </div>
-            <button type="button" x-show="mode === 'tree' && source !== 'playlists'" class="{{ $btn }} inline-flex items-center" :class="flat && '!border-accent !text-accent'" :aria-pressed="flat" title="Albums as one list, without folders (z)" aria-label="Flat list" @click="toggleFlat(); focusRoot()"><x-icon name="flat" /></button>
+            <button type="button" x-show="mode === 'tree' && source !== 'playlists'" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="flat && '!border-accent !text-accent'" :aria-pressed="flat" title="Albums as one list, without folders (z)" aria-label="Flat list" @click="toggleFlat(); focusRoot()"><x-icon name="flat" /></button>
             <button type="button" x-show="mode !== 'tree'" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Back to the folders and albums (Esc)" aria-label="Back" @click="closeView()"><x-icon name="back" /></button>
 
             <button type="button" x-show="mode === 'tree' && tracks.length" x-cloak class="{{ $btn }} inline-flex items-center" :class="playHere && '!border-accent !text-accent'"
@@ -32,7 +32,7 @@
                     @click="$store.player.playing || playHere ? $store.player.toggle() : (pane === 'tracks' ? playTrack(tsel) : playTrack(0, false)); focusRoot()">
                 <x-icon name="play" x-show="! $store.player.playing" /><x-icon name="pause" x-show="$store.player.playing" x-cloak />
             </button>
-            <button type="button" x-show="mode === 'tree' && source === 'library'" class="{{ $btn }} inline-flex items-center gap-1.5" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x), again to finish" aria-label="Select" @click="toggleSelectMode()">
+            <button type="button" x-show="mode === 'tree' && source === 'library'" class="{{ $btn }} inline-flex items-center gap-1.5 max-md:hidden" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x), again to finish" aria-label="Select" @click="toggleSelectMode()">
                 <x-icon name="select" /><span x-show="marks.length" x-cloak x-text="marks.length"></span>
             </button>
             <button type="button" x-show="mode === 'tree' && (ctx === 'album' || ctx === 'folder')" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Move to a folder (v)" aria-label="Move" @click="openMover()"><x-icon name="move" /></button>
@@ -48,25 +48,27 @@
 
             {{-- The views and filters, as icons (the name and the key are in the tooltip). --}}
             <div class="ml-auto flex flex-wrap items-center gap-1.5">
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="($store.uploads.active || uploadOpen) && '!border-accent !text-accent'" title="Upload zips (U), or drop them on this page" aria-label="Upload" @click="uploadOpen ? closeUpload() : openUpload()"><x-icon name="upload" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="($store.uploads.active || uploadOpen) && '!border-accent !text-accent'" title="Upload zips (U), or drop them on this page" aria-label="Upload" @click="uploadOpen ? closeUpload() : openUpload()"><x-icon name="upload" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'search' && '!border-accent !text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" aria-label="Search" @click="mode === 'search' ? closeView() : openSearch()"><x-icon name="search" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && ! onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && ! onlyProblems" title="Truth view: every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' && ! onlyProblems ? closeView() : openTruth(false); focusRoot()"><x-icon name="truth" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'truth' && onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && onlyProblems" title="Findings view: only the files with a finding (o)" aria-label="Findings view" @click="mode === 'truth' && onlyProblems ? closeView() : openTruth(true); focusRoot()"><x-icon name="warn" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center gap-1.5" :class="$store.ui.info > 0 && 'text-accent'" title="How much to show about the files: all, DR only, nothing (I)" :aria-label="$store.ui.label()" @click="$store.ui.cycleInfo(); focusRoot()"><x-icon name="info" /><span class="hidden text-xs sm:inline" x-text="['off', 'DR', 'all'][$store.ui.info]"></span></button>
-                <x-menu label="Meters" width="w-56">
-                    <x-slot:trigger>
-                        <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" class="{{ $btn }} inline-flex items-center gap-1.5" :class="$store.player.panels.length && 'text-accent'" title="Choose the meters: up to 4 (m changes the active one, + and - add and remove)" aria-label="Meters"><x-icon name="meters" /><span class="text-xs tabular-nums" x-text="$store.player.panels.length"></span></button>
-                    </x-slot:trigger>
-                    <p class="px-3 pb-1 pt-0.5 text-xs text-muted" x-text="'Up to ' + $store.player.maxPanels + ' at once'"></p>
-                    <template x-for="v in $store.player.visualizerList" :key="v.id">
-                        <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)" :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
-                                class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40" @click.stop="$store.player.toggleMeter(v.id)">
-                            <span class="w-4 text-accent" x-text="$store.player.hasMeter(v.id) ? '✓' : ''"></span><span x-text="v.label"></span>
-                        </button>
-                    </template>
-                </x-menu>
-                <button type="button" class="{{ $btn }} inline-flex items-center" title="Full screen (f)" aria-label="Full screen" @click="$store.player.expanded = true"><x-icon name="full" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="cmd && '!border-accent !text-accent'" :aria-pressed="!! cmd" title="Command line (:)" aria-label="Command line" @click="cmd ? closeCmd() : openCmd()"><x-icon name="command" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="mode === 'truth' && ! onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && ! onlyProblems" title="Truth view: every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' && ! onlyProblems ? closeView() : openTruth(false); focusRoot()"><x-icon name="truth" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="mode === 'truth' && onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && onlyProblems" title="Findings view: only the files with a finding (o)" aria-label="Findings view" @click="mode === 'truth' && onlyProblems ? closeView() : openTruth(true); focusRoot()"><x-icon name="warn" /></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center gap-1.5 max-md:hidden" :class="$store.ui.info > 0 && 'text-accent'" title="How much to show about the files: all, DR only, nothing (I)" :aria-label="$store.ui.label()" @click="$store.ui.cycleInfo(); focusRoot()"><x-icon name="info" /><span class="hidden text-xs sm:inline" x-text="['off', 'DR', 'all'][$store.ui.info]"></span></button>
+                <button type="button" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="cmd && '!border-accent !text-accent'" :aria-pressed="!! cmd" title="Command line (:)" aria-label="Command line" @click="cmd ? closeCmd() : openCmd()"><x-icon name="command" /></button>
+                            {{-- On a phone: the views and tools that do not fit in one row, in one menu (the keys are shown beside each). --}}
+                <div class="md:hidden">
+                    <x-menu label="Views and tools" width="w-60">
+                        <x-slot:trigger>
+                            <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" class="{{ $btn }} inline-flex items-center" title="Views and tools" aria-label="Views and tools"><x-icon name="menu" /></button>
+                        </x-slot:trigger>
+                        <x-menu.item x-show="mode === 'tree' && source !== 'playlists'" @click="toggleFlat(); focusRoot()"><span x-text="flat ? 'Folders' : 'Flat list (no folders)'"></span> <span class="ml-auto text-xs opacity-60">z</span></x-menu.item>
+                        <x-menu.item x-show="mode === 'tree' && source === 'library'" @click="toggleSelectMode()"><span x-text="selectMode ? 'Finish selecting' : 'Select albums'"></span><span x-show="marks.length" x-cloak x-text="'(' + marks.length + ')'"></span> <span class="ml-auto text-xs opacity-60">x</span></x-menu.item>
+                        <x-menu.item @click="mode === 'truth' && ! onlyProblems ? closeView() : openTruth(false); focusRoot()">Truth view <span class="ml-auto text-xs opacity-60">:truth</span></x-menu.item>
+                        <x-menu.item @click="mode === 'truth' && onlyProblems ? closeView() : openTruth(true); focusRoot()">Findings view <span class="ml-auto text-xs opacity-60">o</span></x-menu.item>
+                        <x-menu.item @click="$store.ui.cycleInfo(); focusRoot()">Info: <span x-text="['off', 'DR only', 'all'][$store.ui.info]"></span> <span class="ml-auto text-xs opacity-60">I</span></x-menu.item>
+                        <x-menu.item @click="uploadOpen ? closeUpload() : openUpload()">Upload <span class="ml-auto text-xs opacity-60">U</span></x-menu.item>
+                        <x-menu.item @click="cmd ? closeCmd() : openCmd()">Command line <span class="ml-auto text-xs opacity-60">:</span></x-menu.item>
+                    </x-menu>
+                </div>
             </div>
         </div>
 
@@ -78,12 +80,22 @@
                 <span class="absolute -top-2.5 left-3 max-w-[90%] truncate bg-bg px-1.5" :class="mode !== 'tree' || pane === 'tree' ? 'text-accent' : 'text-muted'"
                       x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? (onlyProblems ? 'Findings · ' : 'Truth · ') + truth.length + ' files · ' + truthSort : sourceLabels[source] + ' · ' + albums.length + (source === 'playlists' ? (albums.length === 1 ? ' playlist' : ' playlists') : albums.length === 1 ? ' album' : ' albums')"></span>
 
+                {{-- The search box is here, at the top of the results, on every screen size (easier to see than a bar at the bottom, and on a phone the keyboard would cover the list). It is always in the page (hidden from sight while closed) so a tap on the search button can focus it at once, which is what makes Safari open the keyboard. --}}
+                <div :class="mode === 'search' ? 'mx-2 mb-1 mt-1 flex items-center gap-2 border-b border-accent2 pb-1.5 text-sm' : 'sr-only'">
+                    <span class="text-accent2" aria-hidden="true">/</span>
+                    <input type="text" x-ref="searchInputTop" x-model="search.q" @input.debounce.250ms="searchTyped()" @keydown="searchKey($event)" @focus="typing = true"
+                           :tabindex="mode === 'search' ? 0 : -1" spellcheck="false" autocomplete="off" autocapitalize="off" enterkeyhint="search" aria-label="Search"
+                           class="min-w-0 flex-1 bg-transparent text-base outline-none md:text-sm" placeholder="words, year:1983, dr:<8, codec:flac, artist:bowie, album:heroes">
+                    <span class="hidden shrink-0 text-xs text-muted md:inline" x-text="typing ? 'Enter: results · Esc: close' : '/ : edit · Enter: play or open · Esc: close'"></span>
+                    <button type="button" class="shrink-0 rounded-theme border border-white/15 px-2 py-0.5 text-muted pointer-coarse:min-h-9" aria-label="Close search" @click="closeView()">✕</button>
+                </div>
+
                 {{-- Search results: the albums, then the tracks. A track plays, an album of yours opens in the tree. --}}
                 <ul x-show="mode === 'search'" x-cloak data-list="search" aria-label="Search results" class="h-[34dvh] min-h-48 overflow-y-auto pb-1 md:h-[calc(100dvh_-_var(--panes-top,10rem)_-_var(--dock-h,13rem)_-_var(--status-h,2rem)_-_1.25rem)] md:min-h-56">
                     <li x-show="! searchList.length" class="px-2 py-1 text-muted" x-text="search.loading ? 'Searching…' : search.error || (search.q.trim().length < 2 ? 'Type two letters or more. Filters: year:1983  year:1960..1969  dr:<8  codec:flac  artist:bowie  album:heroes' : 'Nothing found')"></li>
                     <template x-for="(it, i) in searchList" :key="it.key">
                         <li :data-selected="i === scur && ! typing" class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
-                            :class="i === scur && ! typing ? 'bg-accent text-bg' : 'hover:bg-white/5'" @click="scur = i; typing = false; focusRoot()" @dblclick="enterHit()">
+                            :class="i === scur && ! typing ? 'bg-accent text-bg' : 'hover:bg-white/5'" @click="scur = i; typing = false; focusRoot(); isTouch($event) && enterHit()" @dblclick="enterHit()">
                             <span class="w-12 shrink-0 text-xs opacity-70" x-text="it.kind === 'album' ? 'album' : 'track'"></span>
                             <span class="min-w-0 flex-1 truncate" x-text="it.kind === 'album' ? it.album.title : it.track.title"></span>
                             <span class="hidden min-w-0 max-w-[40%] shrink truncate text-xs opacity-70 sm:inline" x-text="it.kind === 'album' ? it.album.artist : [it.track.artist, it.track.album].filter(Boolean).join(' · ')"></span>
@@ -100,7 +112,7 @@
                     <li x-show="! truth.length" class="px-2 py-1 text-muted">Nothing to show. Analyse the library (A) to measure the files.</li>
                     <template x-for="(r, i) in truthShown" :key="r.track.id">
                         <li :data-selected="i === tcur" class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
-                            :class="i === tcur ? 'bg-accent text-bg' : 'hover:bg-white/5'" @click="tcur = i; focusRoot()" @dblclick="playTruth(i)">
+                            :class="i === tcur ? 'bg-accent text-bg' : 'hover:bg-white/5'" @click="tcur = i; focusRoot(); isTouch($event) && playTruth(i)" @dblclick="playTruth(i)">
                             <span class="w-5 shrink-0 text-center text-xs font-bold" :class="i === tcur ? '' : 'text-amber-500'" x-text="flagCount(r.track) ? flagCount(r.track) + '!' : ''"></span>
                             <span class="min-w-0 flex-1 truncate" :class="$store.player.current?.id === r.track.id && 'font-bold'">
                                 <span x-text="r.track.title"></span>
@@ -135,7 +147,6 @@
                                     <x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3" />
                                 </span>
                                 <span x-show="r.kind === 'album' && isShared('albums', r.id)" x-cloak class="ml-1 inline-flex align-middle opacity-70" title="Shared with everyone who has an account"><x-icon name="people" class="size-3" role="img" aria-label="Shared" /></span>
-                                <span x-show="flat && r.path" x-cloak class="ml-1 text-xs opacity-60" x-text="r.path"></span>
                                 <span x-show="r.kind === 'album' && analysisNote(r.id)" x-cloak class="ml-1 text-xs opacity-70" x-text="analysisNote(r.id)"></span>
                             </span>
                             <span class="hidden min-w-0 max-w-[32%] shrink truncate text-right text-xs opacity-70 sm:inline" x-show="r.kind === 'album'" x-text="r.album?.artist"></span>
@@ -237,7 +248,7 @@
                             <li :data-selected="pane === 'tracks' && i === tsel"
                                 class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                                 :class="[pane === 'tracks' && i === tsel ? 'bg-accent text-bg' : 'hover:bg-white/5', t.open === false && 'opacity-40']"
-                                @click="trackClick(i)" @dblclick="playTrack(i)" @contextmenu.prevent="openContext($event, 'track', i)">
+                                @click="trackClick(i, $event)" @dblclick="playTrack(i)" @contextmenu.prevent="openContext($event, 'track', i)">
                                 <span x-show="shown?.loose && source === 'library'" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
                                 <span x-show="canReorder" x-cloak data-handle class="w-3 shrink-0 cursor-grab touch-none select-none text-center opacity-60" title="Drag to reorder (Shift+J, Shift+K)" aria-hidden="true">⠿</span>
                                 {{-- the number, or on the loaded track the play (playing) or pause (paused) icon, both amber: one column, flush left --}}
@@ -307,14 +318,6 @@
 
         {{-- Under the player, as in the mockup: the search box, the command line or the key hints. Fixed to the bottom; the player and the page make room for it (--status-h). --}}
         <div x-ref="statusBar" x-show="! $store.player.expanded" class="fixed inset-x-0 bottom-0 z-20 bg-bg px-[max(1rem,calc((100vw-80rem)/2+1rem))] pb-1">
-        {{-- The search box: / opens it. Results come as you type; Enter goes to them, Esc closes. --}}
-        <div x-show="mode === 'search'" x-cloak class="mt-2 border-t border-accent2 pt-1.5 text-sm">
-            <div class="flex items-baseline gap-2"><span class="text-accent2">/</span>
-                <input type="text" x-ref="searchInput" x-model="search.q" @input.debounce.250ms="searchTyped()" @keydown="searchKey($event)" @focus="typing = true" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Search"
-                       class="min-w-0 flex-1 bg-transparent outline-none" placeholder="words, year:1983, dr:<8, codec:flac, artist:bowie, album:heroes">
-                <span class="shrink-0 text-xs text-muted" x-text="typing ? 'Enter: results · Esc: close' : '/ : edit · Enter: play or open · Esc: close'"></span></div>
-        </div>
-
         {{-- The command line: : opens it, Tab completes, Enter runs, Esc closes. --}}
         <div x-show="cmd" x-cloak class="mt-2 border-t border-accent2 pt-1.5 text-sm">
             <template x-if="cmd">
@@ -326,20 +329,20 @@
                 </div>
             </template>
         </div>
-        <div x-show="! cmd && mode === 'truth'" x-cloak class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted">
-            <span><kbd class="text-accent2">j k</kbd> move</span>
-            <span><kbd class="text-accent2">Enter</kbd> play from here</span>
-            <span><kbd class="text-accent2">s</kbd> order</span>
-            <span><kbd class="text-accent2">o</kbd> <span x-text="onlyProblems ? 'every file' : 'only findings'"></span></span>
-            <span><kbd class="text-accent2">A</kbd> analyse</span>
-            <span><kbd class="text-accent2">/</kbd> search</span>
-            <span><kbd class="text-accent2">Esc</kbd> back</span>
+        <div x-show="! cmd && mode === 'truth'" x-cloak class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted max-md:mt-0 max-md:border-0 max-md:pt-0">
+            <span class="max-md:hidden"><kbd class="text-accent2">j k</kbd> move</span>
+            <span class="max-md:hidden"><kbd class="text-accent2">Enter</kbd> play from here</span>
+            <span class="max-md:hidden"><kbd class="text-accent2">s</kbd> order</span>
+            <span class="max-md:hidden"><kbd class="text-accent2">o</kbd> <span x-text="onlyProblems ? 'every file' : 'only findings'"></span></span>
+            <span class="max-md:hidden"><kbd class="text-accent2">A</kbd> analyse</span>
+            <span class="max-md:hidden"><kbd class="text-accent2">/</kbd> search</span>
+            <span class="max-md:hidden"><kbd class="text-accent2">Esc</kbd> back</span>
 <button type="button" x-show="$store.uploads.note" x-cloak class="shrink-0 text-accent hover:underline" title="Upload (U)" @click="openUpload()" x-text="$store.uploads.note"></button>
                         <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
         </div>
-        <div x-show="! cmd && mode === 'tree'" class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted">
-            <template x-for="h in hintList" :key="h[0]"><span><kbd class="text-accent2" x-text="h[0]"></kbd> <span x-text="h[1]"></span></span></template>
-            <button type="button" class="hover:text-accent" :title="$store.ui.hints ? 'Show only ? keys (command: hints)' : 'Show the key hints (command: hints)'" @click="$store.ui.toggleHints(); focusRoot()" x-text="$store.ui.hints ? 'hide hints' : 'hints'"></button>
+        <div x-show="! cmd && mode === 'tree'" class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted max-md:mt-0 max-md:border-0 max-md:pt-0">
+            <template x-for="h in hintList" :key="h[0]"><span class="max-md:hidden"><kbd class="text-accent2" x-text="h[0]"></kbd> <span x-text="h[1]"></span></span></template>
+            <button type="button" class="hover:text-accent max-md:hidden" :title="$store.ui.hints ? 'Show only ? keys (command: hints)' : 'Show the key hints (command: hints)'" @click="$store.ui.toggleHints(); focusRoot()" x-text="$store.ui.hints ? 'hide hints' : 'hints'"></button>
 <button type="button" x-show="$store.uploads.note" x-cloak class="shrink-0 text-accent hover:underline" title="Upload (U)" @click="openUpload()" x-text="$store.uploads.note"></button>
                         <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
         </div>

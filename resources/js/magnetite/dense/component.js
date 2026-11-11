@@ -747,10 +747,22 @@ export default function dense(data) {
             clearTimeout(this.holdTimer);
         },
 
-        trackClick(i) {
+        /**
+         * A finger, not a mouse. Touch browsers (Safari on the iPad above all) do not send `dblclick` for rows that are
+         * `touch-action: manipulation`, so on touch a tap has to do what a double click does on a mouse.
+         */
+        isTouch(ev) {
+            const type = ev?.pointerType;
+            if (type === 'touch') return true;
+            if (type) return false; // a mouse or a pen: the double click works
+            return !!window.matchMedia?.('(pointer: coarse)').matches;
+        },
+
+        trackClick(i, ev) {
             this.focusRoot();
             this.pane = 'tracks';
             this.tsel = i;
+            if (this.isTouch(ev)) this.playTrack(i);
         },
 
         dragStart(ev, i) {
@@ -1134,7 +1146,11 @@ export default function dense(data) {
 
         openCmd(text = '') {
             this.cmd = { text, list: complete(text, this.cmdContext), index: 0 };
-            this.afterUpdate((root) => root.querySelector('[x-ref="cmdInput"]')?.focus());
+            // The box is made by x-if in the same update: ask again a moment later if it was not there yet (as the search box does).
+            this.afterUpdate((root) => {
+                const input = root.querySelector('[x-ref="cmdInput"]');
+                if (input && document.activeElement !== input) input.focus();
+            }, 60);
         },
 
         closeCmd() {
@@ -1571,18 +1587,23 @@ export default function dense(data) {
         },
 
         openSearch(text = '') {
+            // The box is already in the page (hidden from sight while closed): focus it right here, inside the click or tap. Safari
+            // only opens the keyboard for a focus() made by the gesture itself, never for one made after a delay.
+            this.libraryRoot.querySelector('[x-ref="searchInputTop"]')?.focus({ preventScroll: true });
             this.useLibrary(); // the search shows your library's rows
             this.mode = 'search';
             this.typing = true;
             if (text) this.search.q = text;
             this.focusSearch();
+            // on a phone the list must be at the top of the screen, above the keyboard
+            if (!window.matchMedia('(min-width: 768px)').matches) this.afterUpdate((root) => root.querySelector('.panes')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 80);
             if (text) this.afterUpdate(() => this.searchTyped());
         },
 
         /** The box is shown by x-show in the same update that changes the mode: ask again a moment later if it was not there yet. */
         focusSearch() {
             this.afterUpdate((root) => {
-                const input = root.querySelector('[x-ref="searchInput"]');
+                const input = root.querySelector('[x-ref="searchInputTop"]');
                 if (input && document.activeElement !== input) input.focus();
             }, 60);
         },

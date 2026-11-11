@@ -26,6 +26,7 @@
         @case('flat') <path d="M2.5 4h11M2.5 8h11M2.5 12h11"/> @break
         @case('palette') <path d="M8 2.5a5.5 5.5 0 1 0 0 11c1 0 1.4-.7 1-1.5-.4-.9.2-1.7 1.2-1.7H12a2 2 0 0 0 2-2A5.5 5.5 0 0 0 8 2.5z"/><circle cx="5" cy="7.3" r=".8" fill="currentColor" stroke="none"/><circle cx="7.6" cy="5" r=".8" fill="currentColor" stroke="none"/><circle cx="10.6" cy="6.3" r=".8" fill="currentColor" stroke="none"/> @break
         @case('upload') <path d="M8 10.5V3M5 5.8L8 3l3 2.8M3 10v3h10v-3"/> @break
+        @case('menu') <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/> @break
         @case('command') <path d="M3 4.5L7 8l-4 3.5M8.5 12h4.5"/> @break
     @endswitch
 </svg>
