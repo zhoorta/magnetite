@@ -19,6 +19,7 @@ use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\PrefetchController;
 use App\Http\Controllers\ScanController;
+use App\Http\Controllers\SceneController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\StorageController;
@@ -56,6 +57,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/copy/{kind}/{id}', [CopyController::class, 'store'])->whereIn('kind', ['albums', 'tracks'])->whereNumber('id')->name('copy.store');
 
     Route::put('/settings/meters', [MeterSettingController::class, 'update'])->name('settings.meters');
+    Route::get('/scenes', fn () => view('pages.scenes'))->name('scenes');
+    Route::post('/scenes', [SceneController::class, 'store'])->middleware('throttle:20,1')->name('scenes.store');
+    Route::get('/scenes/{scene}/image', [SceneController::class, 'image'])->whereNumber('scene')->name('scenes.image');
+    Route::patch('/scenes/{scene}', [SceneController::class, 'update'])->whereNumber('scene')->name('scenes.update');
+    Route::delete('/scenes/{scene}', [SceneController::class, 'destroy'])->whereNumber('scene')->name('scenes.destroy');
     Route::put('/settings/ui', [UiSettingController::class, 'update'])->name('settings.ui');
 
     Route::get('/device', [DeviceController::class, 'create'])->name('device');
