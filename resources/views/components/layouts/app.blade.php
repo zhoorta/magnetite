@@ -173,10 +173,6 @@
                         <div class="min-w-0 leading-snug">
                             <p class="truncate">
                                 <span x-text="$store.player.expanded && $store.player.current ? [$store.player.current.artist, $store.player.current.album, $store.player.current.title].filter(Boolean).join(' / ') : ($store.player.current?.title ?? 'Nothing playing')" class="font-bold" :class="[$store.player.expanded && '!font-normal text-muted', $store.player.current?.album_id && 'cursor-pointer hover:text-accent']" :title="$store.player.current?.album_id ? 'Show in the library' : null" @click="$store.player.showInLibrary()"></span>
-                                <span x-show="$store.player.current" class="ml-1 inline-flex align-middle" role="img" :aria-label="$store.player.playing ? 'Playing' : 'Paused'">
-                                    <x-icon name="play" x-show="$store.player.playing" class="size-3 text-amber-500" />
-                                    <x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3 text-amber-500" />
-                                </span>
                             </p>
                             <p x-show="$store.player.current?.artist && ! $store.player.expanded" x-text="$store.player.current?.artist" class="truncate text-accent"></p>
                             <p x-show="$store.player.current?.album && ! $store.player.expanded" class="truncate text-xs text-muted" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" @click="$store.player.showInLibrary()" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
