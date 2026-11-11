@@ -2,6 +2,7 @@ import { Livewire } from '../../../../vendor/livewire/livewire/dist/livewire.esm
 import { send } from '../http';
 import { actionFor, isTextTarget } from './keymap';
 import { complete, parse, pick } from './commands';
+import { folderStats, folderTiles, summaryLine } from './folder';
 import { findings, hasProblem } from './info';
 import { appendPage, emptySearch, queueFrom, searchItems, wantsMore } from './search';
 import { TRUTH_SORT_NAMES, nextTruthSort, truthRows } from './truth';
@@ -40,7 +41,9 @@ export default function dense(data) {
         selectMode: false, // tap rows to mark them (touch)
         cur: 0, // selected row of the tree
         tsel: 0, // selected track of the shown album
-        pane: 'tree',
+        pane: 'tree', // 'tree', 'tracks' or 'grid' (the tiles of a selected folder)
+        gsel: 0, // selected tile
+        gridLimit: 60, // tiles drawn: more are added as the selection nears the end
         sort: 'library',
         onlyProblems: false, // the truth view lists only the files with a finding (the Findings view); off: every file (the Truth view)
         detail: false, // the measurements of the selected track, under the list
@@ -161,6 +164,23 @@ export default function dense(data) {
             return null;
         },
 
+        /** The tiles of the selected folder: its subfolders, then its albums. */
+        get tiles() {
+            const r = this.row;
+
+            return r?.kind === 'folder' ? folderTiles(this.folders, this.albums, r.id, this.sort) : [];
+        },
+
+        get tilesShown() {
+            return this.tiles.slice(0, this.gridLimit);
+        },
+
+        get folderSummary() {
+            const r = this.row;
+
+            return r?.kind === 'folder' ? summaryLine(folderStats(this.folders, this.albums, r.id), this.$store.ui.info) : '';
+        },
+
         get tracks() {
             return this.shown?.tracks ?? [];
         },
@@ -226,6 +246,8 @@ export default function dense(data) {
                 this.pane = 'tree';
                 this.cur = i;
                 this.tsel = 0;
+                this.gsel = 0;
+                this.gridLimit = 60;
             }
             this.ctxMenu = { x: ev.clientX, y: ev.clientY };
             this.afterUpdate((root) => {
@@ -249,6 +271,85 @@ export default function dense(data) {
         stepContext(d) {
             const items = [...this.libraryRoot.querySelectorAll('[data-ctxmenu] [role=menuitem]')].filter((el) => el.offsetParent !== null && !el.disabled);
             if (items.length) items[(items.indexOf(document.activeElement) + d + items.length) % items.length].focus();
+        },
+
+        // ---- the tiles of a selected folder ----
+
+        /** How many tiles fit in a row: what the browser made of the grid. */
+        gridCols() {
+            const g = this.libraryRoot.querySelector('[data-list="grid"]');
+
+            return g ? Math.max(1, getComputedStyle(g).gridTemplateColumns.split(' ').length) : 1;
+        },
+
+        runGrid(action) {
+            const n = this.tiles.length;
+            const cols = this.gridCols();
+            const move = (to) => {
+                this.gsel = clamp(this.tiles, to);
+                if (this.gsel >= this.gridLimit - cols) this.gridLimit = Math.min(n, this.gsel + 60);
+                this.scrollToSelection();
+            };
+            switch (action) {
+                case 'left': return move(this.gsel - 1);
+                case 'right': return move(this.gsel + 1);
+                case 'up': return move(this.gsel - cols);
+                case 'down': return move(this.gsel + cols);
+                case 'top': return move(0);
+                case 'bottom': return move(n - 1);
+                case 'open': return this.openTile(this.gsel);
+                case 'mark': return this.markTile(this.gsel);
+                case 'move': return this.openMover();
+                case 'tree': this.pane = 'tree'; return;
+                case 'command': return this.openCmd();
+            }
+        },
+
+        /** An album tile opens the album in the tree (its tracks on the right); a folder tile opens that folder. */
+        openTile(i) {
+            const t = this.tiles[i];
+            if (!t) return;
+            if (t.kind === 'album') return this.goToAlbum(t.album.id);
+            this.setOpen(t.folder.id, true);
+            this.cur = Math.max(0, this.rows.findIndex((r) => r.key === t.key));
+            this.pane = 'tree';
+            this.gsel = 0;
+            this.gridLimit = 60;
+            this.scrollToSelection();
+        },
+
+        markTile(i) {
+            const t = this.tiles[i];
+            if (t?.kind !== 'album') return this.say('Mark albums, not folders');
+            this.marks = this.isMarked(t.album.id) ? this.marks.filter((id) => id !== t.album.id) : [...this.marks, t.album.id];
+            this.gsel = clamp(this.tiles, i + 1);
+        },
+
+        tileClick(ev, i) {
+            this.focusRoot();
+            const t = this.tiles[i];
+            if (t?.kind === 'album' && (this.selectMode || ev.ctrlKey || ev.metaKey)) {
+                this.pane = 'grid';
+                this.gsel = i;
+                this.marks = this.isMarked(t.album.id) ? this.marks.filter((id) => id !== t.album.id) : [...this.marks, t.album.id];
+
+                return;
+            }
+            this.openTile(i);
+        },
+
+        tileDblClick(i) {
+            const t = this.tiles[i];
+            if (t?.kind !== 'album') return;
+            this.goToAlbum(t.album.id);
+            this.playTrack(0, false);
+        },
+
+        tileContext(ev, i) {
+            const t = this.tiles[i];
+            if (t?.kind !== 'album') return this.openTile(i);
+            this.goToAlbum(t.album.id);
+            this.openContext(ev, 'row', this.cur);
         },
 
         get hasAnything() {
@@ -296,11 +397,14 @@ export default function dense(data) {
             if (this.mode === 'search') return this.runSearch(action);
             if (this.mode === 'truth') return this.runTruth(action);
             if (action === 'search') return this.openSearch();
+            if (this.pane === 'grid') return this.runGrid(action);
             const tree = this.pane === 'tree';
             const move = (to) => {
                 if (tree) {
                     this.cur = clamp(this.rows, to);
                     this.tsel = 0;
+                    this.gsel = 0;
+                    this.gridLimit = 60;
                 } else this.tsel = clamp(this.tracks, to);
                 this.scrollToSelection();
             };
@@ -382,7 +486,14 @@ export default function dense(data) {
         },
 
         toTracks() {
-            if (!this.tracks.length) return this.say(this.row?.kind === 'folder' ? 'Open the folder with l and pick an album' : 'No tracks here');
+            if (this.row?.kind === 'folder') {
+                if (!this.tiles.length) return this.say('This folder is empty');
+                this.pane = 'grid';
+                this.gsel = clamp(this.tiles, this.gsel);
+
+                return;
+            }
+            if (!this.tracks.length) return this.say('No tracks here');
             this.pane = 'tracks';
             this.tsel = clamp(this.tracks, this.tsel);
         },
@@ -441,6 +552,8 @@ export default function dense(data) {
             this.pane = 'tree';
             this.cur = i;
             this.tsel = 0;
+            this.gsel = 0;
+            this.gridLimit = 60;
             const r = this.rows[i];
             if (r.kind === 'folder') this.setOpen(r.id, !this.openIds.includes(r.id));
             else if (r.kind === 'album' && (this.selectMode || ev.ctrlKey || ev.metaKey)) {
@@ -1372,6 +1485,8 @@ export default function dense(data) {
             this.rebuild();
             this.cur = Math.max(0, rowOfAlbum(this.rows, id));
             this.tsel = 0;
+            this.gsel = 0;
+            this.gridLimit = 60;
             this.pane = 'tree';
             this.focusRoot();
             this.scrollToSelection();

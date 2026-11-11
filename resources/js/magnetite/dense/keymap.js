@@ -53,6 +53,22 @@ export const TRACKS = {
     '/': 'search',
 };
 
+/** The tiles of a selected folder (Tab from the tree): move, open an album or a subfolder, mark, move the marked, back. */
+export const GRID = {
+    h: 'left', ArrowLeft: 'left',
+    l: 'right', ArrowRight: 'right',
+    j: 'down', ArrowDown: 'down',
+    k: 'up', ArrowUp: 'up',
+    g: 'top', Home: 'top',
+    G: 'bottom', End: 'bottom',
+    Enter: 'open',
+    x: 'mark',
+    v: 'move',
+    Tab: 'tree', Escape: 'tree',
+    ':': 'command',
+    '/': 'search',
+};
+
 /** The search results (after Enter in the box): move, play or open, back to the box, close. */
 export const SEARCH = {
     j: 'down', ArrowDown: 'down',
@@ -82,11 +98,11 @@ export const TRUTH = {
     Escape: 'close',
 };
 
-/** The action for a key event in a pane ('tree' | 'tracks' | 'search' | 'truth'), or null when the key is not ours (or has a modifier of the browser's). */
+/** The action for a key event in a pane ('tree' | 'tracks' | 'grid' | 'search' | 'truth'), or null when the key is not ours (or has a modifier of the browser's). */
 export function actionFor(pane, e) {
     if (e.ctrlKey || e.metaKey || e.altKey) return null;
     if (e.key === 'Tab' && e.shiftKey) return null; // Shift+Tab leaves the library, to the toolbar above it
-    const table = { tree: TREE, tracks: TRACKS, search: SEARCH, truth: TRUTH }[pane] ?? TREE;
+    const table = { tree: TREE, tracks: TRACKS, grid: GRID, search: SEARCH, truth: TRUTH }[pane] ?? TREE;
 
     return Object.hasOwn(table, e.key) ? table[e.key] : null;
 }

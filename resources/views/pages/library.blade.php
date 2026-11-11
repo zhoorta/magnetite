@@ -129,8 +129,8 @@
             </div>
 
             {{-- The tracks of the selected album, and under them the measurements of the selected track (l) --}}
-            <div class="relative rounded-theme border pt-3" :class="mode === 'tree' && pane === 'tracks' ? 'border-accent' : 'border-white/15'">
-                <span class="absolute -top-2.5 left-3 max-w-[85%] truncate bg-bg px-1.5" :class="mode === 'tree' && pane === 'tracks' ? 'text-accent' : 'text-muted'" x-text="paneTitle"></span>
+            <div class="relative rounded-theme border pt-3" :class="mode === 'tree' && (pane === 'tracks' || pane === 'grid') ? 'border-accent' : 'border-white/15'">
+                <span class="absolute -top-2.5 left-3 max-w-[85%] truncate bg-bg px-1.5" :class="mode === 'tree' && (pane === 'tracks' || pane === 'grid') ? 'text-accent' : 'text-muted'" x-text="paneTitle"></span>
                 <div class="flex h-[34dvh] min-h-48 flex-col md:h-[calc(100dvh_-_var(--panes-top,10rem)_-_var(--dock-h,13rem)_-_var(--status-h,2rem)_-_1.25rem)] md:min-h-56">
                     <div x-show="shown" class="flex items-center gap-2 px-2 pb-1">
                         <div x-show="shown && ! shown.loose" class="size-12 shrink-0 overflow-hidden rounded-theme bg-white/5">
@@ -169,7 +169,33 @@
                         </template>
                     </div>
                     <p x-show="mode === 'search' && ! shown && hit" x-cloak class="px-2 py-1 text-muted" x-text="hit?.kind === 'track' ? [hit.track.artist, hit.track.album, hit.track.year].filter(Boolean).join(' · ') + (hit.track.mine ? '' : ' · shared by someone else') : (hit?.album.mine ? '' : 'Shared by someone else: Enter opens the shared page')"></p>
-                    <p x-show="mode === 'tree' && row?.kind === 'folder'" x-cloak class="px-2 py-1 text-muted" x-text="row?.kind === 'folder' ? row.count + (row.count === 1 ? ' album' : ' albums') + ' in this folder and below. l opens it, Enter opens or closes it.' : ''"></p>
+                    {{-- A selected folder: what is in it, as tiles (Tab goes in, arrows move, Enter opens), and the totals of everything below it. --}}
+                    <div x-show="mode === 'tree' && row?.kind === 'folder'" x-cloak class="flex min-h-0 flex-1 flex-col">
+                        <p class="truncate px-2 pb-1 text-xs text-muted" x-text="folderSummary"></p>
+                        <p x-show="! tiles.length" class="px-2 py-1 text-muted">Empty. Move albums here with Move or by dragging them onto the folder.</p>
+                        <div data-list="grid" class="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto px-2 pb-2" style="grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr))">
+                            <template x-for="(t, i) in tilesShown" :key="t.key">
+                                <div :data-selected="pane === 'grid' && i === gsel" class="cursor-pointer select-none rounded-theme border p-1.5"
+                                     :class="pane === 'grid' && i === gsel ? 'border-accent bg-white/10' : 'border-white/10 hover:border-white/30'"
+                                     @click="tileClick($event, i)" @dblclick="tileDblClick(i)" @contextmenu.prevent="tileContext($event, i)">
+                                    <div class="relative flex aspect-square items-center justify-center overflow-hidden rounded-theme bg-white/5 text-muted">
+                                        <img x-show="t.kind === 'album' && t.album.cover" :src="t.kind === 'album' ? t.album.cover : null" alt="" loading="lazy" class="size-full object-cover">
+                                        <span x-show="t.kind === 'album' && ! t.album.cover" class="px-1 text-center text-xs leading-tight" x-text="t.kind === 'album' ? t.album.title : ''"></span>
+                                        <x-icon name="folder" x-show="t.kind === 'folder'" class="size-10" />
+                                        <span x-show="t.kind === 'album' && isMarked(t.album.id)" x-cloak class="absolute left-1 top-0.5 text-accent2">●</span>
+                                        <span x-show="t.kind === 'album' && t.album.id === playingAlbumId" x-cloak class="absolute right-1 top-1 inline-flex rounded-theme bg-bg/70 p-0.5 text-amber-500" :title="$store.player.playing ? 'Playing from here' : 'Paused here'"><x-icon name="play" x-show="$store.player.playing" class="size-3" /><x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3" /></span>
+                                    </div>
+                                    <p class="mt-1 truncate text-sm" :class="t.kind === 'folder' && 'font-semibold'" x-text="t.kind === 'folder' ? t.folder.name : t.album.title"></p>
+                                    <p class="truncate text-xs text-muted" x-text="t.kind === 'folder' ? t.count + (t.count === 1 ? ' album' : ' albums') : [t.album.artist, t.album.year].filter(Boolean).join(' · ')"></p>
+                                    <p x-show="t.kind === 'album' && $store.ui.info > 0 && (t.album?.dr != null || problemCount(t.album) > 0)" x-cloak class="flex gap-2 text-xs">
+                                        <span x-show="t.album?.dr != null" :class="drClass(t.album?.dr_class)" x-text="'DR' + t.album?.dr"></span>
+                                        <span x-show="$store.ui.info >= 2 && problemCount(t.album) > 0" class="font-bold text-amber-500" :title="problemCount(t.album) + ' track(s) with findings'">!</span>
+                                    </p>
+                                </div>
+                            </template>
+                            <button type="button" x-show="tiles.length > gridLimit" x-cloak class="col-span-full rounded-theme border border-white/15 px-2 py-1 text-xs hover:border-accent hover:text-accent" @click="gridLimit += 60; focusRoot()" x-text="'Show more (' + (tiles.length - gridLimit) + ' left)'"></button>
+                        </div>
+                    </div>
                     <ul aria-label="Tracks" data-list="tracks" class="min-h-0 flex-1 overflow-y-auto pb-1" :class="shown ? '' : 'hidden'">
                         <template x-for="(t, i) in tracks" :key="t.id">
                             <li :data-selected="pane === 'tracks' && i === tsel"
