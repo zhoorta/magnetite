@@ -236,10 +236,14 @@
 
                 {{-- Previous, play or pause, next: as in the mockup. --}}
                 <div class="flex items-center justify-center gap-2 text-sm">
-                    <button type="button" class="rounded-theme border border-white/15 px-4 py-0.5 hover:border-accent hover:text-accent" title="Previous (p)" aria-label="Previous" @click="$store.player.prev()">⏮</button>
-                    <button type="button" class="rounded-theme border px-4 py-0.5 hover:border-accent hover:text-accent" :class="$store.player.playing ? 'border-accent text-accent' : 'border-white/15'"
-                            :title="$store.player.playing ? 'Pause (space)' : 'Play (space)'" :aria-label="$store.player.playing ? 'Pause' : 'Play'" :aria-pressed="$store.player.playing" @click="$store.player.toggle()">⏯</button>
-                    <button type="button" class="rounded-theme border border-white/15 px-4 py-0.5 hover:border-accent hover:text-accent" title="Next (n)" aria-label="Next" @click="$store.player.next()">⏭</button>
+                    <button type="button" class="inline-flex items-center rounded-theme border border-white/15 px-4 py-1 hover:border-accent hover:text-accent" title="Previous (p)" aria-label="Previous" @click="$store.player.prev()"><x-icon name="prev" /></button>
+                    {{-- Shows the state, like the icons in the lists: the play icon while it plays, the pause icon (in amber) while it is paused. --}}
+                    <button type="button" class="inline-flex items-center rounded-theme border px-4 py-1 hover:border-accent hover:text-accent" :class="$store.player.playing ? 'border-accent text-accent' : 'border-amber-500 text-amber-500'"
+                            :title="$store.player.playing ? 'Pause (space)' : 'Play (space)'" :aria-label="$store.player.playing ? 'Pause' : 'Play'" :aria-pressed="$store.player.playing" @click="$store.player.toggle()">
+                        <x-icon name="play" x-show="$store.player.playing" />
+                        <x-icon name="pause" x-show="! $store.player.playing" x-cloak />
+                    </button>
+                    <button type="button" class="inline-flex items-center rounded-theme border border-white/15 px-4 py-1 hover:border-accent hover:text-accent" title="Next (n)" aria-label="Next" @click="$store.player.next()"><x-icon name="next" /></button>
                 </div>
             </div>
             </div>
