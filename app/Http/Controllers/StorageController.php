@@ -29,6 +29,7 @@ class StorageController extends Controller
             'address' => $remote ? $store->url() : null,
             'folder' => $remote ? null : $user->libraryPath(),
             'tracks' => $user->tracks()->count(),
+            'libraryBytes' => (int) $user->tracks()->sum('size'),
             'scan' => ScanStatus::get($user->id),
             'cache' => FerriteStore::cacheStats(),
             'cacheMaxBytes' => (int) (config('magnetite.ferrite.cache_max_gb') * 1024 ** 3),

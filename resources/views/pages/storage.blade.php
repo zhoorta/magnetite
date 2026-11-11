@@ -26,6 +26,9 @@
             <dt class="text-muted">Tracks</dt>
             <dd>{{ $tracks }}</dd>
 
+            <dt class="text-muted">Library size</dt>
+            <dd>{{ number_format($libraryBytes / 1024 ** 2, 1, '.', ' ') }} MB</dd>
+
             <dt class="text-muted">Last scan</dt>
             <dd>
                 @if ($scan['state'] === 'done')

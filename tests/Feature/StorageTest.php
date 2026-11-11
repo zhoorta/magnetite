@@ -29,6 +29,15 @@ it('shows a local library with its folder and no cache section', function () {
         ->assertDontSee('Clear cache');
 });
 
+it('shows the total size of the library in MB', function () {
+    $user = makeLibrary(fixtures: false);
+    foreach ([1572864, 2097152] as $i => $bytes) {
+        $user->tracks()->create(['path' => "t{$i}.flac", 'title' => "T{$i}", 'mime' => 'audio/flac', 'size' => $bytes, 'mtime' => 1]);
+    }
+
+    $this->actingAs($user)->get(route('storage'))->assertOk()->assertSee('Library size')->assertSee('3.5 MB');
+});
+
 it('shows a Ferrite library with its address, never the token', function () {
     $this->actingAs($this->ferrite)->get(route('storage'))
         ->assertOk()
