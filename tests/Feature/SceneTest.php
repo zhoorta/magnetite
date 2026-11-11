@@ -54,8 +54,8 @@ it('hands the player only your own scenes', function () {
 it('stores only the settings that are known and in range', function () {
     $id = $this->actingAs($this->alice)->postJson(route('scenes.store'), ['image' => picture(300, 200)])->json('id');
 
-    $this->patchJson(route('scenes.update', $id), ['settings' => ['bloom' => 0.3, 'glowColor' => 'picture', 'fit' => 'cover', 'evil' => 'x']])->assertOk();
-    expect(Scene::find($id)->settings)->toEqualCanonicalizing(['bloom' => 0.3, 'glowColor' => 'picture', 'fit' => 'cover']);
+    $this->patchJson(route('scenes.update', $id), ['settings' => ['bloom' => 0.3, 'backdrop' => 0, 'glowColor' => 'picture', 'fit' => 'cover', 'evil' => 'x']])->assertOk();
+    expect(Scene::find($id)->settings)->toEqualCanonicalizing(['bloom' => 0.3, 'backdrop' => 0, 'glowColor' => 'picture', 'fit' => 'cover']);
 
     $this->patchJson(route('scenes.update', $id), ['settings' => ['bloom' => 9]])->assertStatus(422);
     $this->patchJson(route('scenes.update', $id), ['settings' => ['glowColor' => 'url(x)']])->assertStatus(422);
@@ -82,4 +82,20 @@ it('deletes the scene and its file, but keeps a file another scene still uses', 
 
     $this->deleteJson(route('scenes.destroy', Scene::first()->id))->assertOk();
     Storage::disk('local')->assertMissing("scenes/{$file}");
+});
+
+it('stores hotspots in range and refuses the rest', function () {
+    $id = $this->actingAs($this->alice)->postJson(route('scenes.store'), ['image' => picture(300, 200)])->json('id');
+    $spot = ['x' => 0.5, 'y' => 0.4, 'w' => 0.2, 'h' => 0.3, 'role' => 'kick'];
+
+    $this->patchJson(route('scenes.update', $id), ['hotspots' => [$spot]])->assertOk()->assertJsonPath('hotspots.0.role', 'kick');
+    expect(Scene::find($id)->hotspots)->toHaveCount(1);
+
+    $this->patchJson(route('scenes.update', $id), ['hotspots' => [[...$spot, 'x' => 3]]])->assertStatus(422);
+    $this->patchJson(route('scenes.update', $id), ['hotspots' => [[...$spot, 'role' => 'x']]])->assertStatus(422);
+    $this->patchJson(route('scenes.update', $id), ['hotspots' => [[...$spot, 'evil' => 1]]])->assertStatus(422);
+    $this->patchJson(route('scenes.update', $id), ['hotspots' => array_fill(0, 13, $spot)])->assertStatus(422);
+
+    $this->patchJson(route('scenes.update', $id), ['hotspots' => []])->assertOk();
+    expect(Scene::find($id)->hotspots)->toBe([]);
 });

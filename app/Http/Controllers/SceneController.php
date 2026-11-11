@@ -17,8 +17,9 @@ class SceneController extends Controller
 
     /** Numeric settings and their allowed range; the player clamps again, this keeps junk out of the database. */
     public const NUMBERS = [
-        'focus' => [0, 1], 'bloom' => [0, 1], 'zoom' => [0, 0.2], 'drift' => [0, 1], 'attack' => [0, 2], 'release' => [0, 2],
+        'focus' => [0, 1], 'backdrop' => [0, 1], 'bloom' => [0, 1], 'zoom' => [0, 0.2], 'drift' => [0, 1], 'attack' => [0, 2], 'release' => [0, 2],
         'kickGain' => [0, 3], 'bandGain' => [0, 3], 'glowGain' => [0, 4], 'dim' => [0, 1], 'saturation' => [0, 1],
+        'hueShift' => [0, 360], 'hueFollow' => [0, 360], 'hueSpin' => [0, 180], 'hueKick' => [0, 180], 'brightPulse' => [0, 2], 'invertKick' => [0, 1], 'wash' => [0, 1],
         'kickThreshold' => [0, 20], 'kickCooldown' => [0, 2], 'vignette' => [0, 1],
     ];
 
@@ -64,6 +65,13 @@ class SceneController extends Controller
 
         $rules = [
             'name' => ['sometimes', 'string', 'min:1', 'max:80'],
+            'hotspots' => ['sometimes', 'array', 'max:12'],
+            'hotspots.*' => ['array:x,y,w,h,role'],
+            'hotspots.*.x' => ['required', 'numeric', 'between:0,1'],
+            'hotspots.*.y' => ['required', 'numeric', 'between:0,1'],
+            'hotspots.*.w' => ['required', 'numeric', 'between:0.02,1'],
+            'hotspots.*.h' => ['required', 'numeric', 'between:0.02,1'],
+            'hotspots.*.role' => ['required', Rule::in(['kick', 'band'])],
             'settings' => ['sometimes', 'array'],
             'settings.fit' => ['sometimes', Rule::in(['contain', 'cover'])],
             'settings.glowColor' => ['sometimes', 'nullable', 'string', 'regex:/^(picture|accent|#[0-9a-fA-F]{6})$/'],
@@ -77,6 +85,9 @@ class SceneController extends Controller
         if ($request->has('settings')) {
             // Only known keys are kept; an empty array means "all auto".
             $data['settings'] = array_intersect_key($data['settings'] ?? [], array_flip(['fit', 'glowColor', 'tint', ...array_keys(self::NUMBERS)]));
+        }
+        if ($request->has('hotspots')) {
+            $data['hotspots'] = array_map(fn ($h) => array_map(fn ($v) => is_numeric($v) ? round((float) $v, 4) : $v, $h), array_values($data['hotspots'] ?? []));
         }
         $scene->update($data);
 
@@ -99,6 +110,7 @@ class SceneController extends Controller
             'name' => $scene->name,
             'url' => route('scenes.image', $scene),
             'settings' => (object) ($scene->settings ?? []),
+            'hotspots' => $scene->hotspots ?? [],
         ];
     }
 }

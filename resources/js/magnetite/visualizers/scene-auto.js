@@ -217,3 +217,23 @@ export function suggest(m, found, { color = null } = {}) {
 
     return out;
 }
+
+export const MAX_HOTSPOTS = 12;
+
+/**
+ * Hotspots are ellipses a person drew on the picture: `{x, y, w, h}` as fractions of it (centre and size) and a `role`
+ * ('kick' for the one that answers the bass, anything else is a band). Junk is dropped, values are kept inside the picture,
+ * only the first kick stays, and the bands are ordered left to right (bass to treble) like the automatic ones.
+ */
+export function cleanHotspots(list) {
+    const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : NaN);
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const spots = (Array.isArray(list) ? list : [])
+        .map((s) => ({ x: clamp(n(s?.x), 0, 1), y: clamp(n(s?.y), 0, 1), w: clamp(n(s?.w), 0, 1), h: clamp(n(s?.h), 0, 1), role: s?.role === 'kick' ? 'kick' : 'band' }))
+        .filter((s) => [s.x, s.y, s.w, s.h].every(Number.isFinite) && s.w >= 0.02 && s.h >= 0.02)
+        .slice(0, MAX_HOTSPOTS);
+    const kick = spots.find((s) => s.role === 'kick') ?? null;
+    const bands = spots.filter((s) => s !== kick).map((s) => ({ ...s, role: 'band' })).sort((a, b) => a.x - b.x);
+
+    return { kick, bands };
+}

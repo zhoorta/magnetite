@@ -118,3 +118,22 @@ test('suggest: a picture with a colour glows in it', () => {
     assert.equal(suggest({ mean: 0.4, contrast: 0.3, sat: 0.5 }, { kick: {}, bands: [{}] }, { color: 'hsl(120, 90%, 60%)' }).glowColor, 'picture');
     assert.equal(suggest({ mean: 0.4, contrast: 0.3, sat: 0.5 }, { kick: {}, bands: [{}] }).glowColor, undefined);
 });
+
+import { cleanHotspots } from '../../resources/js/magnetite/visualizers/scene-auto.js';
+
+test('hotspots: junk dropped, values kept inside, one kick, bands left to right', () => {
+    const r = cleanHotspots([
+        { x: 0.8, y: 0.5, w: 0.2, h: 0.2, role: 'band' },
+        { x: 0.3, y: 0.5, w: 0.2, h: 0.2, role: 'kick' },
+        { x: 0.5, y: 0.5, w: 0.2, h: 0.2, role: 'kick' }, // a second kick becomes a band
+        { x: 0.1, y: 0.5, w: 0.001, h: 0.2 }, // too small
+        { x: 'a', y: 0, w: 0.3, h: 0.3 }, // not a number
+        { x: 2, y: -1, w: 0.5, h: 5, role: 'band' }, // clamped
+    ]);
+    assert.equal(r.kick.x, 0.3);
+    assert.deepEqual(r.bands.map((b) => b.x), [0.5, 0.8, 1]);
+    assert.ok(r.bands.every((b) => b.role === 'band'));
+    assert.equal(r.bands[2].y, 0);
+    assert.equal(r.bands[2].h, 1);
+    assert.deepEqual(cleanHotspots(null), { kick: null, bands: [] });
+});

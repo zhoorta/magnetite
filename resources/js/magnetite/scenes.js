@@ -11,10 +11,12 @@ export function registerScene(scene) {
     if (known) {
         known.label = `Scene: ${scene.name}`;
         known.settings = { ...scene.settings };
+        known.hotspots = scene.hotspots ?? [];
 
         return;
     }
     visualizers[id] = createScene(id, `Scene: ${scene.name}`, { image: scene.url }, { ...scene.settings });
+    visualizers[id].hotspots = scene.hotspots ?? [];
 }
 
 /** The person's pictures: `list` is what the server sent, meters are registered as they arrive. */
@@ -49,8 +51,12 @@ export function scenesStore(initial, player) {
                 this.list.push(data);
                 registerScene(data);
                 sync();
+
+                return data;
             } catch (e) {
                 this.error = e.message;
+
+                return null;
             } finally {
                 this.busy = false;
             }
@@ -65,12 +71,13 @@ export function scenesStore(initial, player) {
             }
             scene.settings = settings;
             if (patch.name) scene.name = patch.name;
+            if (patch.hotspots) scene.hotspots = patch.hotspots;
             registerScene(scene); // the player picks it up on the next frame
             sync();
 
             clearTimeout(scene.saving);
             scene.saving = setTimeout(async () => {
-                const r = await send('PATCH', `/scenes/${scene.id}`, { name: scene.name, settings: scene.settings });
+                const r = await send('PATCH', `/scenes/${scene.id}`, { name: scene.name, settings: scene.settings, hotspots: scene.hotspots ?? [] });
                 this.error = r.ok ? null : 'Could not save that setting.';
             }, 500);
         },
