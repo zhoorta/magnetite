@@ -29,6 +29,11 @@
             <dt class="text-muted">Library size</dt>
             <dd>{{ number_format($libraryBytes / 1024 ** 2, 1, '.', ' ') }} MB</dd>
 
+            @if ($allUsers)
+                <dt class="text-muted">All users</dt>
+                <dd>{{ number_format($allUsers['bytes'] / 1024 ** 2, 1, '.', ' ') }} MB, {{ $allUsers['tracks'] }} {{ $allUsers['tracks'] === 1 ? 'track' : 'tracks' }}, {{ $allUsers['users'] }} {{ $allUsers['users'] === 1 ? 'user' : 'users' }}</dd>
+            @endif
+
             <dt class="text-muted">Last scan</dt>
             <dd>
                 @if ($scan['state'] === 'done')

@@ -38,6 +38,18 @@ it('shows the total size of the library in MB', function () {
     $this->actingAs($user)->get(route('storage'))->assertOk()->assertSee('Library size')->assertSee('3.5 MB');
 });
 
+it('shows the size of every library to administrators only', function () {
+    $user = makeLibrary(fixtures: false);
+    $other = User::factory()->create(['username' => 'other']);
+    $user->tracks()->create(['path' => 'a.flac', 'title' => 'A', 'mime' => 'audio/flac', 'size' => 1048576, 'mtime' => 1]);
+    $other->tracks()->create(['path' => 'b.flac', 'title' => 'B', 'mime' => 'audio/flac', 'size' => 3145728, 'mtime' => 1]);
+
+    $this->actingAs($user)->get(route('storage'))->assertOk()->assertSee('1.0 MB')->assertDontSee('All users');
+
+    $user->forceFill(['is_admin' => true])->save();
+    $this->actingAs($user->fresh())->get(route('storage'))->assertOk()->assertSee('All users')->assertSee('4.0 MB, 2 tracks, '.User::count().' users');
+});
+
 it('shows a Ferrite library with its address, never the token', function () {
     $this->actingAs($this->ferrite)->get(route('storage'))
         ->assertOk()

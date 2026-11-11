@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Track;
+use App\Models\User;
 use App\Services\FerriteException;
 use App\Services\FerriteStore;
 use App\Support\ScanStatus;
@@ -30,6 +32,8 @@ class StorageController extends Controller
             'folder' => $remote ? null : $user->libraryPath(),
             'tracks' => $user->tracks()->count(),
             'libraryBytes' => (int) $user->tracks()->sum('size'),
+            // Only for administrators: the whole server, every user's library together.
+            'allUsers' => $user->is_admin ? ['users' => User::count(), 'tracks' => Track::count(), 'bytes' => (int) Track::sum('size')] : null,
             'scan' => ScanStatus::get($user->id),
             'cache' => FerriteStore::cacheStats(),
             'cacheMaxBytes' => (int) (config('magnetite.ferrite.cache_max_gb') * 1024 ** 3),
