@@ -121,3 +121,5 @@ No feature flag and no second layout: the dense view is built straight into `/li
 - **Truth and Findings are two views (2026-11-10):** the Truth button lists every file (worst first), the Findings button (the warning icon, `o`, `:problems`) lists only the files with a finding; only the button of the view you are in is lit, clicking the lit one leaves the view, and `o` inside switches between the two. The old tree filter ("only albums with findings") is gone: it was the same idea in a different place.
 
 - **Transport icons (2026-11-11):** previous, play/pause and next are drawn icons (`prev`, `next`, `play`, `pause` in `components/icon.blade.php`); the middle button shows the state like the icons in the lists (the play icon while it plays, in the accent colour; the pause icon, in amber, while it is paused), not the action a press would do.
+
+- **Lists flush left (2026-11-11):** the folder and album list reserves no column for marks unless you are marking (select mode or marked albums); the track list has one left-aligned column for the track number, which the play or pause icon replaces on the loaded track, and a mark column only for tracks without an album.

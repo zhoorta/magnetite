@@ -113,7 +113,7 @@
                             @click="rowClick($event, i)" @dblclick="rowDblClick(i)" @contextmenu.prevent="rowContext(i)"
                             @pointerdown="holdStart($event, i)" @pointerup="holdEnd()" @pointercancel="holdEnd()" @pointerleave="holdEnd()"
                             @dragstart="dragStart($event, i)" @dragover="dragOver($event, i)" @dragleave="dropOn = null" @drop="drop($event, i)">
-                            <span class="w-3 shrink-0 text-center" :class="i === cur && pane === 'tree' ? '' : 'text-accent2'" x-text="r.kind === 'album' ? (isMarked(r.id) ? '●' : selectMode ? '○' : '') : ''"></span>
+                            <span x-show="selectMode || marks.length" x-cloak class="w-3 shrink-0 text-center" :class="i === cur && pane === 'tree' ? '' : 'text-accent2'" x-text="r.kind === 'album' ? (isMarked(r.id) ? '●' : selectMode ? '○' : '') : ''"></span>
                             <span class="min-w-0 flex-1 truncate" :style="'padding-left:' + (r.depth * 1.2) + 'rem'">
                                 <span x-show="r.kind === 'folder'" class="mr-1 inline-block w-3 opacity-70" x-text="openIds.includes(r.id) ? '▾' : '▸'"></span>
                                 <span :class="r.kind !== 'album' && 'font-semibold'" x-text="r.kind === 'folder' ? r.folder.name : r.kind === 'album' ? r.album.title : 'Without album tag'"></span>
@@ -185,13 +185,14 @@
                                 class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                                 :class="pane === 'tracks' && i === tsel ? 'bg-accent text-bg' : 'hover:bg-white/5'"
                                 @click="trackClick(i)" @dblclick="playTrack(i)">
-                                <span class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="shown?.loose && trackMarks.includes(t.id) ? '●' : ''"></span>
-                                {{-- playing (the play icon) or paused (the pause icon): the same amber in every list --}}
-                                <span class="inline-flex w-4 shrink-0 justify-center self-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-amber-500'" role="img" :aria-label="$store.player.current?.id !== t.id ? null : $store.player.playing ? 'Playing' : 'Paused'">
+                                <span x-show="shown?.loose" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
+                                {{-- the number, or on the loaded track the play (playing) or pause (paused) icon, both amber: one column, flush left --}}
+                                <span class="inline-flex w-5 shrink-0 items-center text-xs tabular-nums" :class="$store.player.current?.id === t.id ? (pane === 'tracks' && i === tsel ? '' : 'text-amber-500') : 'opacity-70'"
+                                      :aria-label="$store.player.current?.id !== t.id ? null : $store.player.playing ? 'Playing' : 'Paused'">
                                     <x-icon name="play" x-show="$store.player.current?.id === t.id && $store.player.playing" x-cloak class="size-3" />
                                     <x-icon name="pause" x-show="$store.player.current?.id === t.id && ! $store.player.playing" x-cloak class="size-3" />
+                                    <span x-show="$store.player.current?.id !== t.id" x-text="i + 1"></span>
                                 </span>
-                                <span class="w-6 shrink-0 text-right text-xs tabular-nums opacity-70" x-text="i + 1"></span>
                                 <span class="min-w-0 flex-1 truncate" :class="$store.player.current?.id === t.id && 'font-bold'">
                                     <span x-text="t.title"></span>
                                     <span x-show="isShared('tracks', t.id)" x-cloak class="ml-1 text-xs opacity-70" title="Shared on its own">shared</span>
