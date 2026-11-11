@@ -25,6 +25,7 @@
                 <x-slot:trigger>
                     <button type="button" x-show="mode === 'tree'" data-actions x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" class="{{ $btn }} inline-flex items-center gap-1.5" title="More actions for the selection"><x-icon name="dots" /><span class="sr-only">Actions</span></button>
                 </x-slot:trigger>
+                <x-menu.item x-show="ctx === 'track'" @click="playTrack(tsel); focusRoot()">Play <span class="ml-auto text-xs opacity-60">Enter</span></x-menu.item>
                 <x-menu.item x-show="ctx === 'album' || ctx === 'track'" @click="editSelected()">Edit… <span class="ml-auto text-xs opacity-60">e</span></x-menu.item>
                 <x-menu.item x-show="ctx === 'album' || ctx === 'loose'" title="Look the album up online: release date, label, track titles" @click="openDetails()"><span x-text="ctx === 'loose' ? 'Suggest albums…' : 'Look up online…'"></span> <span class="ml-auto text-xs opacity-60">i</span></x-menu.item>
                 <x-menu.item x-show="ctx === 'album'" @click="findCover(); focusRoot()">Find cover <span class="ml-auto text-xs opacity-60">C</span></x-menu.item>
@@ -32,7 +33,7 @@
                 <x-menu.item x-show="ctx === 'album' || ctx === 'track'" @click="shareSelected(); focusRoot()"><span x-text="(ctx === 'track' ? tracks[tsel] && isShared('tracks', tracks[tsel].id) : row?.kind === 'album' && isShared('albums', row.id)) ? 'Stop sharing' : 'Share'"></span> <span class="ml-auto text-xs opacity-60">S</span></x-menu.item>
                 <x-menu.item x-show="ctx === 'loose'" @click="openGroup()">Name an album… <span class="ml-auto text-xs opacity-60">:group</span></x-menu.item>
                 <hr class="my-1 border-white/10" x-show="ctx !== null">
-                <x-menu.item @click="newFolder()">New folder <span class="ml-auto text-xs opacity-60">N</span></x-menu.item>
+                <x-menu.item x-show="ctx !== 'track'" @click="newFolder()">New folder <span class="ml-auto text-xs opacity-60">N</span></x-menu.item>
                 <x-menu.item x-show="ctx === 'folder'" @click="renameFolder()">Rename folder <span class="ml-auto text-xs opacity-60">r</span></x-menu.item>
                 <x-menu.item danger x-show="ctx === 'album' || ctx === 'folder' || ctx === 'track'" @click="deleteSelected()">Delete <span class="ml-auto text-xs opacity-60">d</span></x-menu.item>
             </x-menu>
@@ -184,7 +185,7 @@
                             <li :data-selected="pane === 'tracks' && i === tsel"
                                 class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                                 :class="pane === 'tracks' && i === tsel ? 'bg-accent text-bg' : 'hover:bg-white/5'"
-                                @click="trackClick(i)" @dblclick="playTrack(i)">
+                                @click="trackClick(i)" @dblclick="playTrack(i)" @contextmenu.prevent="trackContext(i)">
                                 <span x-show="shown?.loose" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
                                 {{-- the number, or on the loaded track the play (playing) or pause (paused) icon, both amber: one column, flush left --}}
                                 <span class="inline-flex w-5 shrink-0 items-center text-xs tabular-nums" :class="$store.player.current?.id === t.id ? (pane === 'tracks' && i === tsel ? '' : 'text-amber-500') : 'opacity-70'"

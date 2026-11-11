@@ -215,6 +215,14 @@ export default function dense(data) {
             return r ? r.kind : null;
         },
 
+        /** Right-click on a track: select it and open the actions menu (for the track). */
+        trackContext(i) {
+            this.focusRoot();
+            this.pane = 'tracks';
+            this.tsel = i;
+            this.afterUpdate((root) => root.querySelector('[data-actions]')?.click());
+        },
+
         /** Right-click on a row: select it and open the actions menu. */
         rowContext(i) {
             this.focusRoot();

@@ -123,3 +123,5 @@ No feature flag and no second layout: the dense view is built straight into `/li
 - **Transport icons (2026-11-11):** previous, play/pause and next are drawn icons (`prev`, `next`, `play`, `pause` in `components/icon.blade.php`); the middle button shows the state like the icons in the lists (the play icon while it plays, in the accent colour; the pause icon, in amber, while it is paused), not the action a press would do.
 
 - **Lists flush left (2026-11-11):** the folder and album list reserves no column for marks unless you are marking (select mode or marked albums); the track list has one left-aligned column for the track number, which the play or pause icon replaces on the loaded track, and a mark column only for tracks without an album.
+
+- **Track context menu (2026-11-11):** right-click on a track selects it and opens the actions menu for it (Play, Edit, Analyse, Share, Delete; the folder and cover entries are left out), as a right-click on a folder or album row does.
