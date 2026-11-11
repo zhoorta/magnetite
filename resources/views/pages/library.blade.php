@@ -25,17 +25,7 @@
                 <x-slot:trigger>
                     <button type="button" x-show="mode === 'tree'" data-actions x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" class="{{ $btn }} inline-flex items-center gap-1.5" title="More actions for the selection"><x-icon name="dots" /><span class="sr-only">Actions</span></button>
                 </x-slot:trigger>
-                <x-menu.item x-show="ctx === 'track'" @click="playTrack(tsel); focusRoot()">Play <span class="ml-auto text-xs opacity-60">Enter</span></x-menu.item>
-                <x-menu.item x-show="ctx === 'album' || ctx === 'track'" @click="editSelected()">Edit… <span class="ml-auto text-xs opacity-60">e</span></x-menu.item>
-                <x-menu.item x-show="ctx === 'album' || ctx === 'loose'" title="Look the album up online: release date, label, track titles" @click="openDetails()"><span x-text="ctx === 'loose' ? 'Suggest albums…' : 'Look up online…'"></span> <span class="ml-auto text-xs opacity-60">i</span></x-menu.item>
-                <x-menu.item x-show="ctx === 'album'" @click="findCover(); focusRoot()">Find cover <span class="ml-auto text-xs opacity-60">C</span></x-menu.item>
-                <x-menu.item x-show="ctx === 'album' || ctx === 'folder' || ctx === 'track'" @click="analyseSelected(); focusRoot()">Analyse <span class="ml-auto text-xs opacity-60">A</span></x-menu.item>
-                <x-menu.item x-show="ctx === 'album' || ctx === 'track'" @click="shareSelected(); focusRoot()"><span x-text="(ctx === 'track' ? tracks[tsel] && isShared('tracks', tracks[tsel].id) : row?.kind === 'album' && isShared('albums', row.id)) ? 'Stop sharing' : 'Share'"></span> <span class="ml-auto text-xs opacity-60">S</span></x-menu.item>
-                <x-menu.item x-show="ctx === 'loose'" @click="openGroup()">Name an album… <span class="ml-auto text-xs opacity-60">:group</span></x-menu.item>
-                <hr class="my-1 border-white/10" x-show="ctx !== null">
-                <x-menu.item x-show="ctx !== 'track'" @click="newFolder()">New folder <span class="ml-auto text-xs opacity-60">N</span></x-menu.item>
-                <x-menu.item x-show="ctx === 'folder'" @click="renameFolder()">Rename folder <span class="ml-auto text-xs opacity-60">r</span></x-menu.item>
-                <x-menu.item danger x-show="ctx === 'album' || ctx === 'folder' || ctx === 'track'" @click="deleteSelected()">Delete <span class="ml-auto text-xs opacity-60">d</span></x-menu.item>
+                @include('pages.partials.library-actions')
             </x-menu>
 
             {{-- The views and filters, as icons (the name and the key are in the tooltip). --}}
@@ -111,7 +101,7 @@
                             class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                             :class="[i === cur ? (pane === 'tree' ? 'bg-accent text-bg' : 'bg-white/15') : 'hover:bg-white/5', dropOn === i && 'outline-dashed outline-1 -outline-offset-1 outline-accent2']"
                             :draggable="r.kind === 'album'"
-                            @click="rowClick($event, i)" @dblclick="rowDblClick(i)" @contextmenu.prevent="rowContext(i)"
+                            @click="rowClick($event, i)" @dblclick="rowDblClick(i)" @contextmenu.prevent="openContext($event, 'row', i)"
                             @pointerdown="holdStart($event, i)" @pointerup="holdEnd()" @pointercancel="holdEnd()" @pointerleave="holdEnd()"
                             @dragstart="dragStart($event, i)" @dragover="dragOver($event, i)" @dragleave="dropOn = null" @drop="drop($event, i)">
                             <span x-show="selectMode || marks.length" x-cloak class="w-3 shrink-0 text-center" :class="i === cur && pane === 'tree' ? '' : 'text-accent2'" x-text="r.kind === 'album' ? (isMarked(r.id) ? '●' : selectMode ? '○' : '') : ''"></span>
@@ -185,7 +175,7 @@
                             <li :data-selected="pane === 'tracks' && i === tsel"
                                 class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                                 :class="pane === 'tracks' && i === tsel ? 'bg-accent text-bg' : 'hover:bg-white/5'"
-                                @click="trackClick(i)" @dblclick="playTrack(i)" @contextmenu.prevent="trackContext(i)">
+                                @click="trackClick(i)" @dblclick="playTrack(i)" @contextmenu.prevent="openContext($event, 'track', i)">
                                 <span x-show="shown?.loose" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
                                 {{-- the number, or on the loaded track the play (playing) or pause (paused) icon, both amber: one column, flush left --}}
                                 <span class="inline-flex w-5 shrink-0 items-center text-xs tabular-nums" :class="$store.player.current?.id === t.id ? (pane === 'tracks' && i === tsel ? '' : 'text-amber-500') : 'opacity-70'"
@@ -300,6 +290,18 @@
             <span><kbd class="text-accent2">?</kbd> keys</span>
             <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
         </div>
+        </div>
+
+        {{-- The right-click menu: the same actions as the ⋯ button, at the pointer. Esc, a click elsewhere or a choice closes it. --}}
+        <div x-show="ctxMenu" x-cloak data-ctxmenu role="menu" aria-label="Actions" class="fixed z-40 w-60 rounded-theme border border-white/10 bg-surface py-1 text-sm shadow-lg shadow-black/40"
+             :style="ctxMenu ? 'left: ' + ctxMenu.x + 'px; top: ' + ctxMenu.y + 'px' : ''"
+             @click.outside="closeContext(false)"
+             @contextmenu.window="ctxMenu && ! $event.target.closest('[role=treeitem], [data-list=tracks] li') && closeContext(false)"
+             @click="if ($event.target.closest('[role=menuitem]')) closeContext()"
+             @keydown.escape.stop.prevent="closeContext()"
+             @keydown.arrow-down.prevent="stepContext(1)" @keydown.arrow-up.prevent="stepContext(-1)"
+             @keydown.j.prevent="stepContext(1)" @keydown.k.prevent="stepContext(-1)">
+            @include('pages.partials.library-actions')
         </div>
 
         {{-- Where to move the album(s) or the folder: j k and Enter, or a click. --}}

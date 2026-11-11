@@ -59,6 +59,7 @@ export default function dense(data) {
         truthLimit: 300, // rows drawn: 12,000 files would take seconds to draw at once; more are added as the selection nears the end
         spectra: {}, // average spectra fetched for the measurements panel: { trackId: { spectrum, step_hz } }
         tcur: 0, // selected row of the truth view
+        ctxMenu: null, // the right-click menu: { x, y } in window pixels
         cmd: null, // the command line: { text, list, index }
         table: null, // the edit table
         titles: null, // details found online for an album
@@ -215,21 +216,39 @@ export default function dense(data) {
             return r ? r.kind : null;
         },
 
-        /** Right-click on a track: select it and open the actions menu (for the track). */
-        trackContext(i) {
+        /** Right-click on a row of the tree (`kind` 'row') or a track ('track'): select it and show the actions at the pointer. */
+        openContext(ev, kind, i) {
             this.focusRoot();
-            this.pane = 'tracks';
-            this.tsel = i;
-            this.afterUpdate((root) => root.querySelector('[data-actions]')?.click());
+            if (kind === 'track') {
+                this.pane = 'tracks';
+                this.tsel = i;
+            } else {
+                this.pane = 'tree';
+                this.cur = i;
+                this.tsel = 0;
+            }
+            this.ctxMenu = { x: ev.clientX, y: ev.clientY };
+            this.afterUpdate((root) => {
+                const menu = root.querySelector('[data-ctxmenu]');
+                if (!menu) return;
+                // keep the menu inside the window: flip to the other side of the pointer when it would run out
+                const r = menu.getBoundingClientRect();
+                const x = Math.max(4, Math.min(this.ctxMenu.x, window.innerWidth - r.width - 4));
+                const y = this.ctxMenu.y + r.height > window.innerHeight - 4 ? Math.max(4, this.ctxMenu.y - r.height) : this.ctxMenu.y;
+                this.ctxMenu = { x, y };
+                menu.querySelector('[role=menuitem]:not([disabled])')?.focus();
+            });
         },
 
-        /** Right-click on a row: select it and open the actions menu. */
-        rowContext(i) {
-            this.focusRoot();
-            this.pane = 'tree';
-            this.cur = i;
-            this.tsel = 0;
-            this.afterUpdate((root) => root.querySelector('[data-actions]')?.click());
+        closeContext(back = true) {
+            if (!this.ctxMenu) return;
+            this.ctxMenu = null;
+            if (back) this.focusRoot();
+        },
+
+        stepContext(d) {
+            const items = [...this.libraryRoot.querySelectorAll('[data-ctxmenu] [role=menuitem]')].filter((el) => el.offsetParent !== null && !el.disabled);
+            if (items.length) items[(items.indexOf(document.activeElement) + d + items.length) % items.length].focus();
         },
 
         get hasAnything() {
