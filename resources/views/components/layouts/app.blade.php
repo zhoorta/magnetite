@@ -166,31 +166,32 @@
                  class="flex flex-col gap-2">
                 <div class="flex min-h-10 items-center justify-between text-sm">
                     <div x-show="$store.player.panels.length || ! $store.player.expanded" class="flex min-w-0 items-center gap-3">
-                        <div :class="$store.player.expanded ? 'h-16 w-16' : 'h-24 w-24'" class="shrink-0 overflow-hidden rounded-theme bg-surface">
+                        {{-- Full screen has no small cover: the meters, or the big cover when there are none, already fill the screen. --}}
+                        <div x-show="! $store.player.expanded" class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
                             <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
                         </div>
                         <div class="min-w-0 leading-snug">
                             <p class="truncate">
-                                <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-bold" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" :title="$store.player.current?.album_id ? 'Show in the library' : null" @click="$store.player.showInLibrary()"></span>
+                                <span x-text="$store.player.expanded && $store.player.current ? [$store.player.current.artist, $store.player.current.album, $store.player.current.title].filter(Boolean).join(' / ') : ($store.player.current?.title ?? 'Nothing playing')" class="font-bold" :class="[$store.player.expanded && '!font-normal text-muted', $store.player.current?.album_id && 'cursor-pointer hover:text-accent']" :title="$store.player.current?.album_id ? 'Show in the library' : null" @click="$store.player.showInLibrary()"></span>
                                 <span x-show="$store.player.current" class="ml-1 inline-flex align-middle" role="img" :aria-label="$store.player.playing ? 'Playing' : 'Paused'">
                                     <x-icon name="pause" x-show="$store.player.playing" class="size-3 text-amber-500" />
                                     <x-icon name="play" x-show="! $store.player.playing" x-cloak class="size-3 text-amber-500" />
                                 </span>
                             </p>
-                            <p x-show="$store.player.current?.artist" x-text="$store.player.current?.artist" class="truncate text-accent"></p>
-                            <p x-show="$store.player.current?.album" class="truncate text-xs text-muted" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" @click="$store.player.showInLibrary()" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
+                            <p x-show="$store.player.current?.artist && ! $store.player.expanded" x-text="$store.player.current?.artist" class="truncate text-accent"></p>
+                            <p x-show="$store.player.current?.album && ! $store.player.expanded" class="truncate text-xs text-muted" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" @click="$store.player.showInLibrary()" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
                             {{-- Format, DR and loudness (info level 1 and up), then the findings (level 2): see dense/info.js --}}
-                            <p x-show="$store.player.dock.line" class="truncate text-xs" x-text="$store.player.dock.line"></p>
+                            <p x-show="$store.player.dock.line && ! $store.player.expanded" class="truncate text-xs" x-text="$store.player.dock.line"></p>
                             <p x-show="$store.player.note" x-cloak x-text="$store.player.note" class="truncate text-xs text-accent2" aria-live="polite"></p>
-                            <p x-show="$store.player.dock.findings.length" class="truncate text-xs">
+                            <p x-show="$store.player.dock.findings.length && ! $store.player.expanded" class="truncate text-xs">
                                 <template x-for="f in $store.player.dock.findings" :key="f.code">
                                     <span class="mr-3" :title="f.detail"><span :class="f.level === 'problem' ? 'text-red-500' : 'text-amber-500'">!</span> <span x-text="f.label"></span></span>
                                 </template>
                             </p>
                         </div>
                     </div>
-                    {{-- The mockup's dock has no buttons: on the library page the meters and full screen are in its toolbar and on keys. Other pages keep them, and full screen shows them (to get out of it). --}}
-                    <div x-show="$store.player.expanded || ! $store.player.libraryKeys" class="ml-auto flex items-center gap-2">
+                    {{-- The meters and full screen are always in the dock (on the library page too, and on phones). The shortcuts open with the ? key. --}}
+                    <div class="ml-auto flex shrink-0 items-center gap-2">
                         <x-menu up label="Meters" width="w-56">
                             <x-slot:trigger>
                                 <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu"
@@ -223,9 +224,6 @@
                                 <path x-show="$store.player.expanded" x-cloak d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"/>
                             </svg>
                         </button>
-                        <button type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
-                                class="hidden rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent sm:block"
-                                @click="$store.player.helpOpen = true">?</button>
                     </div>
                 </div>
 

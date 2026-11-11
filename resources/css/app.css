@@ -58,14 +58,14 @@ input[type='range'].seek::-webkit-slider-thumb {
     width: 0.75rem;
     height: 0.75rem;
     margin-top: -4px;
-    border-radius: var(--radius, 0);
+    border-radius: 50%;
     background: var(--c-accent);
     border: 0;
 }
 input[type='range'].seek::-moz-range-thumb {
     width: 0.75rem;
     height: 0.75rem;
-    border-radius: var(--radius, 0);
+    border-radius: 50%;
     background: var(--c-accent);
     border: 0;
 }
