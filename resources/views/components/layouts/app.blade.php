@@ -173,8 +173,8 @@
                             <p class="truncate">
                                 <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-bold" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" :title="$store.player.current?.album_id ? 'Show in the library' : null" @click="$store.player.showInLibrary()"></span>
                                 <span x-show="$store.player.current" class="ml-1 inline-flex align-middle" role="img" :aria-label="$store.player.playing ? 'Playing' : 'Paused'">
-                                    <x-icon name="play" x-show="$store.player.playing" class="size-3 text-amber-500" />
-                                    <x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3 text-amber-500" />
+                                    <x-icon name="pause" x-show="$store.player.playing" class="size-3 text-amber-500" />
+                                    <x-icon name="play" x-show="! $store.player.playing" x-cloak class="size-3 text-amber-500" />
                                 </span>
                             </p>
                             <p x-show="$store.player.current?.artist" x-text="$store.player.current?.artist" class="truncate text-accent"></p>
@@ -251,8 +251,8 @@
                     {{-- Shows the state, like the icons in the lists: the play icon while it plays, the pause icon (in amber) while it is paused. --}}
                     <button type="button" class="inline-flex items-center rounded-theme border px-4 py-1 hover:border-accent hover:text-accent" :class="$store.player.playing ? 'border-accent text-accent' : 'border-amber-500 text-amber-500'"
                             :title="$store.player.playing ? 'Pause (space)' : 'Play (space)'" :aria-label="$store.player.playing ? 'Pause' : 'Play'" :aria-pressed="$store.player.playing" @click="$store.player.toggle()">
-                        <x-icon name="play" x-show="$store.player.playing" />
-                        <x-icon name="pause" x-show="! $store.player.playing" x-cloak />
+                        <x-icon name="pause" x-show="$store.player.playing" />
+                        <x-icon name="play" x-show="! $store.player.playing" x-cloak />
                     </button>
                     <button type="button" class="inline-flex items-center rounded-theme border border-white/15 px-4 py-1 hover:border-accent hover:text-accent" title="Next (n)" aria-label="Next" @click="$store.player.next()"><x-icon name="next" /></button>
                 </div>
