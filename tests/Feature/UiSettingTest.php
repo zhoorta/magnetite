@@ -47,3 +47,10 @@ it('keeps each user\'s choices to themselves and hands them to the page', functi
     $this->get(route('themes'))->assertSee('"ui":{"info":1}', false);
     $this->actingAs($this->bob)->get(route('themes'))->assertSee('"ui":null', false);
 });
+
+it('saves whether the key hints are shown', function () {
+    $this->actingAs($this->alice)->putJson(route('settings.ui'), ['hints' => false])->assertOk()->assertJson(['ui' => ['hints' => false]]);
+    $this->putJson(route('settings.ui'), ['hints' => 'maybe'])->assertUnprocessable();
+
+    expect($this->alice->fresh()->ui)->toBe(['hints' => false]);
+});

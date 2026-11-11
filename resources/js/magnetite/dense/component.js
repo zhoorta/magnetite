@@ -89,6 +89,9 @@ export default function dense(data) {
             this.rebuild();
             if (album) this.cur = Math.max(0, rowOfAlbum(this.rows, album.id));
             this.$nextTick(() => this.focusRoot()); // the keys work as soon as the page is there
+            this.onReveal = () => this.revealPlaying();
+            window.addEventListener('magnetite:reveal', this.onReveal);
+            if (this.$store.player.reveal) this.$nextTick(() => this.revealPlaying());
             this.$store.player.libraryKeys = true; // the ? list shows the library's keys while this page is open
 
             // The key hints, the search box and the command line sit under the player: the player and the page leave room for them.
@@ -133,6 +136,7 @@ export default function dense(data) {
             this.statusObserver?.disconnect();
             this.layoutObserver?.disconnect();
             window.removeEventListener('resize', this.measure);
+            window.removeEventListener('magnetite:reveal', this.onReveal);
             document.documentElement.style.removeProperty('--status-h');
             document.documentElement.style.removeProperty('--panes-top');
         },
@@ -179,6 +183,65 @@ export default function dense(data) {
             const r = this.row;
 
             return r?.kind === 'folder' ? summaryLine(folderStats(this.folders, this.albums, r.id), this.$store.ui.info) : '';
+        },
+
+        /** The folder the shown album lives in (null for loose tracks and albums at the top level). */
+        get albumFolder() {
+            const a = this.shown;
+
+            return a && !a.loose && a.folder_id != null ? this.folders.find((f) => f.id === a.folder_id) ?? null : null;
+        },
+
+        /** The player's title or album was clicked: show that album with the tracks pane on the playing track. */
+        revealPlaying() {
+            const want = this.$store.player.reveal;
+            this.$store.player.reveal = null;
+            if (!want) return;
+            this.goToAlbum(want.album_id);
+            if (this.row?.kind !== 'album' || this.row.id !== want.album_id) return;
+            this.toTracks();
+            this.tsel = Math.max(0, this.tracks.findIndex((t) => t.id === want.id));
+            this.scrollToSelection();
+        },
+
+        /** Back from an album: the tiles of its folder, with the album's tile selected. */
+        toFolder() {
+            const f = this.albumFolder;
+            if (!f) return this.row?.kind === 'folder' ? this.toParentFolder() : this.say('This album is not in a folder');
+            const albumId = this.shown.id;
+            this.detail = false;
+            this.cur = Math.max(0, this.rows.findIndex((r) => r.key === `f${f.id}`));
+            this.pane = 'grid';
+            this.gridLimit = 60;
+            this.gsel = Math.max(0, this.tiles.findIndex((t) => t.kind === 'album' && t.album.id === albumId));
+            this.gridLimit = Math.max(60, this.gsel + 60);
+            this.focusRoot();
+            this.scrollToSelection();
+        },
+
+        /** Back from a folder: its parent folder (the tree's cursor moves there and the right pane shows its tiles). */
+        toParentFolder() {
+            const id = this.folders.find((f) => f.id === this.row?.id)?.parent_id;
+            if (id == null) return this.say('Already at the top');
+            this.cur = Math.max(0, this.rows.findIndex((r) => r.key === `f${id}`));
+            this.pane = 'tree';
+            this.gsel = 0;
+            this.gridLimit = 60;
+            this.focusRoot();
+            this.scrollToSelection();
+        },
+
+        /** The key hints for what has the cursor: the keys that do something here, not all of them (`?` lists everything). */
+        get hintList() {
+            if (!this.$store.ui.hints) return [['?', 'keys']];
+            const common = [['/', 'search'], [':', 'command'], ['?', 'keys']];
+            if (this.pane === 'grid') return [['h j k l', 'move'], ['Enter', 'open'], ['x', 'mark'], ['v', 'move to'], ['⌫', 'up'], ['Tab', 'tree'], ...common];
+            if (this.pane === 'tracks') return [['j k', 'move'], ['Enter', 'play'], ['l', 'details'], ['e', 'edit'], ['A', 'analyse'], ['o', 'problems'], ['⌫', 'back'], ['Esc', 'tree'], ...common];
+            const r = this.row;
+            if (r?.kind === 'folder') return [['j k', 'move'], ['h l', 'fold'], ['Tab', 'tiles'], ['N', 'new folder'], ['r', 'rename'], ['v', 'move'], ['d', 'delete'], ['⌫', 'up'], ...common];
+            if (r?.kind === 'album') return [['j k', 'move'], ['Enter', 'play'], ['Tab', 'tracks'], ['x', 'mark'], ['v', 'move'], ['e', 'edit'], ['i', 'look up'], ['A', 'analyse'], ['S', 'share'], ['⌫', 'folder'], ...common];
+
+            return [['j k', 'move'], ['Enter', 'play'], ['Tab', 'tracks'], ...common];
         },
 
         get tracks() {
@@ -301,6 +364,7 @@ export default function dense(data) {
                 case 'mark': return this.markTile(this.gsel);
                 case 'move': return this.openMover();
                 case 'tree': this.pane = 'tree'; return;
+                case 'folder': return this.toParentFolder();
                 case 'command': return this.openCmd();
             }
         },
@@ -310,7 +374,7 @@ export default function dense(data) {
             const t = this.tiles[i];
             if (!t) return;
             if (t.kind === 'album') return this.goToAlbum(t.album.id);
-            this.setOpen(t.folder.id, true);
+            if (t.kind !== 'up') this.setOpen(t.folder.id, true);
             this.cur = Math.max(0, this.rows.findIndex((r) => r.key === t.key));
             this.pane = 'tree';
             this.gsel = 0;
@@ -444,6 +508,7 @@ export default function dense(data) {
                     if (this.detail) this.detail = false;
                     else this.pane = 'tree';
                     return;
+                case 'folder': return this.toFolder();
                 case 'detail': return this.toggleDetail();
                 case 'problems': return this.toggleProblems();
                 case 'play': return this.playTrack(this.tsel);
@@ -1039,6 +1104,7 @@ export default function dense(data) {
                     return this.say(`info level ${level}`);
                 }
                 case 'tint': return ui.toggleTint();
+                case 'hints': ui.toggleHints(); return this.say(ui.hints ? 'key hints on' : 'key hints off');
                 case 'theme': {
                     const ids = player.themes.map((t) => t.id);
                     const names = player.themes.map((t) => t.name);

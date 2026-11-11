@@ -20,6 +20,7 @@ export const TREE = {
     s: 'sort',
     o: 'problems',
     Tab: 'tracks',
+    Backspace: 'folder',
     A: 'analyse',
     e: 'edit',
     S: 'share',
@@ -40,6 +41,7 @@ export const TRACKS = {
     Enter: 'play',
     l: 'detail', ArrowRight: 'detail',
     h: 'back', ArrowLeft: 'back', Escape: 'back',
+    Backspace: 'folder',
     Tab: 'tree',
     o: 'problems',
     d: 'delete',
@@ -65,6 +67,7 @@ export const GRID = {
     x: 'mark',
     v: 'move',
     Tab: 'tree', Escape: 'tree',
+    Backspace: 'folder',
     ':': 'command',
     '/': 'search',
 };

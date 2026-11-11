@@ -10,13 +10,15 @@ class UiSettingController extends Controller
 {
     /**
      * `info`: how much the lists and the player show about the files (0 none, 1 DR, 2 DR and findings).
-     * `tint`: meter colours from the playing cover. Only the keys sent change.
+     * `tint`: meter colours from the playing cover. `hints`: the key hints under the player (off leaves only `? keys`).
+     * Only the keys sent change.
      */
     public function update(Request $request): JsonResponse
     {
         $data = $request->validate([
             'info' => ['sometimes', 'integer', 'between:0,2'],
             'tint' => ['sometimes', 'boolean'],
+            'hints' => ['sometimes', 'boolean'],
         ]);
 
         $ui = array_merge($request->user()->ui ?? [], $data);

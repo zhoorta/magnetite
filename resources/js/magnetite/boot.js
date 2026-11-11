@@ -125,6 +125,15 @@ Alpine.store('player', {
     signingOut: false,
     prefetched: null, // id of the track the server was last asked to fetch ahead (Ferrite libraries), so it is asked once
     savedAt: 0, // performance.now() of the last save of the playback state
+    reveal: null, // { album_id, id }: what the library should show when it opens (set by showInLibrary)
+    /** Clicking the playing track or album in the player: the library opens on its album, with the tracks pane on that track. */
+    showInLibrary() {
+        const c = this.current;
+        if (!c?.album_id) return;
+        this.reveal = { album_id: c.album_id, id: c.id };
+        if (window.location.pathname === '/library') window.dispatchEvent(new CustomEvent('magnetite:reveal'));
+        else Livewire.navigate('/library');
+    },
     libraryKeys: false, // the library page is open (the ? list then shows its keys)
     activePanel: 0, // the meter the m keys change
     note: '', // a few words about what a key just did, shown in the bar

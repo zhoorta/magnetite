@@ -160,14 +160,14 @@
                         </div>
                         <div class="min-w-0 leading-snug">
                             <p class="truncate">
-                                <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-bold"></span>
+                                <span x-text="$store.player.current?.title ?? 'Nothing playing'" class="font-bold" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" :title="$store.player.current?.album_id ? 'Show in the library' : null" @click="$store.player.showInLibrary()"></span>
                                 <span x-show="$store.player.current" class="ml-1 inline-flex align-middle" role="img" :aria-label="$store.player.playing ? 'Playing' : 'Paused'">
                                     <x-icon name="play" x-show="$store.player.playing" class="size-3 text-amber-500" />
                                     <x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3 text-amber-500" />
                                 </span>
                             </p>
                             <p x-show="$store.player.current?.artist" x-text="$store.player.current?.artist" class="truncate text-accent"></p>
-                            <p x-show="$store.player.current?.album" class="truncate text-xs text-muted" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
+                            <p x-show="$store.player.current?.album" class="truncate text-xs text-muted" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" @click="$store.player.showInLibrary()" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
                             {{-- Format, DR and loudness (info level 1 and up), then the findings (level 2): see dense/info.js --}}
                             <p x-show="$store.player.dock.line" class="truncate text-xs" x-text="$store.player.dock.line"></p>
                             <p x-show="$store.player.note" x-cloak x-text="$store.player.note" class="truncate text-xs text-accent2" aria-live="polite"></p>

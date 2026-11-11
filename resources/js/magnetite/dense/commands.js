@@ -24,6 +24,7 @@ export const COMMANDS = [
     ['tree', 'back to the folders and albums'],
     ['info', 'info 0, 1 or 2 (I)'],
     ['tint', 'meter colours from the cover (c)'],
+    ['hints', 'show or hide the key hints at the bottom'],
     ['theme', 'theme NAME (t)'],
     ['full', 'full screen (f)'],
     ['help', 'the keys (?)'],

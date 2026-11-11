@@ -21,10 +21,17 @@ test('a folder shows its subfolders first, then its own albums', () => {
     assert.equal(tiles[0].count, 2);
 });
 
+test('a folder with a parent starts with a back tile to that parent', () => {
+    const tiles = folderTiles(folders, albums, 2);
+    assert.equal(tiles[0].kind, 'up');
+    assert.equal(tiles[0].folder.id, 1);
+    assert.equal(folderTiles(folders, albums, 1)[0].kind, 'folder');
+});
+
 test('the albums follow the chosen order', () => {
-    assert.deepEqual(folderTiles(folders, albums, 2, 'year').map((t) => t.key), ['a11', 'a10']);
-    assert.deepEqual(folderTiles(folders, albums, 2, 'dr').map((t) => t.key), ['a11', 'a10']);
-    assert.deepEqual(folderTiles(folders, albums, 2, 'title').map((t) => t.key), ['a11', 'a10']);
+    assert.deepEqual(folderTiles(folders, albums, 2, 'year').map((t) => t.key), ['f1', 'a11', 'a10']);
+    assert.deepEqual(folderTiles(folders, albums, 2, 'dr').map((t) => t.key), ['f1', 'a11', 'a10']);
+    assert.deepEqual(folderTiles(folders, albums, 2, 'title').map((t) => t.key), ['f1', 'a11', 'a10']);
     assert.deepEqual(folderTiles(folders, [], 3), []);
 });
 

@@ -5,10 +5,10 @@ import { send } from '../http';
 
 /**
  * The user's interface choices (`users.ui`), shared by the library and the player bar: how much detail the lists and the
- * player show (`info`: 0 none, 1 DR, 2 DR and findings) and whether the meters take their colours from the cover (`tint`).
+ * player show (`info`: 0 none, 1 DR, 2 DR and findings) and whether the meters take their colours from the cover (`tint`), and whether the key hints under the player are shown (`hints`).
  * Saved with the account when someone is signed in; a guest keeps them until the page is reloaded.
  *
- * @param {{ info?: number, tint?: boolean } | null} saved what the server sent
+ * @param {{ info?: number, tint?: boolean, hints?: boolean } | null} saved what the server sent
  * @param {boolean} signedIn
  */
 export function uiStore(saved, signedIn) {
@@ -22,6 +22,8 @@ export function uiStore(saved, signedIn) {
         info: Number.isInteger(saved?.info) ? Math.max(0, Math.min(INFO_LEVELS - 1, saved.info)) : 2,
         tint: saved?.tint === true, // meters take their colours from the playing cover (off until chosen)
 
+        hints: saved?.hints !== false, // the key hints under the player (on until switched off)
+
         cycleInfo() {
             this.info = (this.info + INFO_LEVELS - 1) % INFO_LEVELS; // 2, 1, 0, 2 ...
             this.save({ info: this.info });
@@ -30,6 +32,11 @@ export function uiStore(saved, signedIn) {
         toggleTint() {
             this.tint = !this.tint;
             this.save({ tint: this.tint });
+        },
+
+        toggleHints() {
+            this.hints = !this.hints;
+            this.save({ hints: this.hints });
         },
 
         /**

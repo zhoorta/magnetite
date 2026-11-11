@@ -6,12 +6,16 @@ import { hasProblem } from './info.js';
  * No DOM; Node tests it.
  */
 
-/** Tiles of a folder: the subfolders first (as the tree lists them), then its own albums in the chosen order. */
+/** Tiles of a folder: the back tile (to the parent folder), the subfolders (as the tree lists them), then its own albums in the chosen order. */
 export function folderTiles(folders, albums, folderId, sort = 'library') {
     const subfolders = folders.filter((f) => f.parent_id === folderId).map((folder) => ({ kind: 'folder', key: `f${folder.id}`, folder, count: albumCount(folders, albums, folder.id) }));
     const own = sortAlbums(albums.filter((a) => a.folder_id === folderId), sort).map((album) => ({ kind: 'album', key: `a${album.id}`, album }));
 
-    return [...subfolders, ...own];
+    // A "back" tile first when the folder has a parent: it opens that parent.
+    const parent = folders.find((f) => f.id === folderId)?.parent_id;
+    const up = parent != null && folders.some((f) => f.id === parent) ? [{ kind: 'up', key: `f${parent}`, folder: folders.find((f) => f.id === parent) }] : [];
+
+    return [...up, ...subfolders, ...own];
 }
 
 /** Totals for a folder and everything below it: albums, tracks, seconds, the mean DR of the measured albums, tracks with a finding. */

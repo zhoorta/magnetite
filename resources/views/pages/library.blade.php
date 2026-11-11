@@ -118,11 +118,14 @@
                                 <span x-show="r.kind === 'album' && isShared('albums', r.id)" x-cloak class="ml-1 text-xs opacity-70" title="Shared with everyone who has an account">shared</span>
                                 <span x-show="r.kind === 'album' && analysisNote(r.id)" x-cloak class="ml-1 text-xs opacity-70" x-text="analysisNote(r.id)"></span>
                             </span>
-                            <span class="hidden min-w-0 max-w-[32%] shrink truncate text-xs opacity-70 sm:inline" x-show="r.kind === 'album'" x-text="r.album?.artist"></span>
-                            <span class="w-4 shrink-0 text-center text-xs font-bold text-amber-500" :class="i === cur && pane === 'tree' && '!text-bg'" x-show="$store.ui.info >= 2 && r.kind === 'album' && problemCount(r.album) > 0" x-cloak
-                                  :title="problemCount(r.album) + ' track(s) with findings'">!</span>
-                            <span class="w-11 shrink-0 text-right text-xs font-medium tabular-nums" x-show="$store.ui.info > 0 && ((r.kind === 'album' && r.album.dr !== null) || (r.kind === 'folder' && r.dr !== null))" x-cloak
-                                  :class="i === cur && pane === 'tree' ? '' : (r.kind === 'album' ? drClass(r.album?.dr_class) : 'opacity-70')" x-text="'DR' + (r.kind === 'album' ? r.album?.dr : r.dr)"></span>
+                            <span class="hidden min-w-0 max-w-[32%] shrink truncate text-right text-xs opacity-70 sm:inline" x-show="r.kind === 'album'" x-text="r.album?.artist"></span>
+                            {{-- DR, with the findings mark hanging in the gap to its left, so no column is reserved for it --}}
+                            <span class="relative w-9 shrink-0" x-show="$store.ui.info > 0" x-cloak>
+                            <span class="block text-right text-xs font-medium tabular-nums" 
+                                  :class="[i === cur && pane === 'tree' ? '' : (r.kind === 'album' ? drClass(r.album?.dr_class) : 'opacity-70'), ! ((r.kind === 'album' && r.album.dr !== null) || (r.kind === 'folder' && r.dr !== null)) && 'invisible']" x-text="'DR' + (r.kind === 'album' ? r.album?.dr : r.dr)"></span>
+                                <span class="absolute right-full top-0 pr-1 text-xs font-bold text-amber-500" :class="i === cur && pane === 'tree' && '!text-bg'" x-show="$store.ui.info >= 2 && r.kind === 'album' && problemCount(r.album) > 0" x-cloak
+                                      :title="problemCount(r.album) + ' track(s) with findings'">!</span>
+                            </span>
                         </li>
                     </template>
                 </ul>
@@ -182,11 +185,12 @@
                                         <img x-show="t.kind === 'album' && t.album.cover" :src="t.kind === 'album' ? t.album.cover : null" alt="" loading="lazy" class="size-full object-cover">
                                         <span x-show="t.kind === 'album' && ! t.album.cover" class="px-1 text-center text-xs leading-tight" x-text="t.kind === 'album' ? t.album.title : ''"></span>
                                         <x-icon name="folder" x-show="t.kind === 'folder'" class="size-10" />
+                                        <span x-show="t.kind === 'up'" x-cloak class="text-3xl">↰</span>
                                         <span x-show="t.kind === 'album' && isMarked(t.album.id)" x-cloak class="absolute left-1 top-0.5 text-accent2">●</span>
                                         <span x-show="t.kind === 'album' && t.album.id === playingAlbumId" x-cloak class="absolute right-1 top-1 inline-flex rounded-theme bg-bg/70 p-0.5 text-amber-500" :title="$store.player.playing ? 'Playing from here' : 'Paused here'"><x-icon name="play" x-show="$store.player.playing" class="size-3" /><x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3" /></span>
                                     </div>
-                                    <p class="mt-1 truncate text-sm" :class="t.kind === 'folder' && 'font-semibold'" x-text="t.kind === 'folder' ? t.folder.name : t.album.title"></p>
-                                    <p class="truncate text-xs text-muted" x-text="t.kind === 'folder' ? t.count + (t.count === 1 ? ' album' : ' albums') : [t.album.artist, t.album.year].filter(Boolean).join(' · ')"></p>
+                                    <p class="mt-1 truncate text-sm" :class="t.kind === 'folder' && 'font-semibold'" x-text="t.kind === 'up' ? 'Back' : t.kind === 'folder' ? t.folder.name : t.album.title"></p>
+                                    <p class="truncate text-xs text-muted" x-text="t.kind === 'up' ? t.folder.name : t.kind === 'folder' ? t.count + (t.count === 1 ? ' album' : ' albums') : [t.album.artist, t.album.year].filter(Boolean).join(' · ')"></p>
                                     <p x-show="t.kind === 'album' && $store.ui.info > 0 && (t.album?.dr != null || problemCount(t.album) > 0)" x-cloak class="flex gap-2 text-xs">
                                         <span x-show="t.album?.dr != null" :class="drClass(t.album?.dr_class)" x-text="'DR' + t.album?.dr"></span>
                                         <span x-show="$store.ui.info >= 2 && problemCount(t.album) > 0" class="font-bold text-amber-500" :title="problemCount(t.album) + ' track(s) with findings'">!</span>
@@ -196,6 +200,7 @@
                             <button type="button" x-show="tiles.length > gridLimit" x-cloak class="col-span-full rounded-theme border border-white/15 px-2 py-1 text-xs hover:border-accent hover:text-accent" @click="gridLimit += 60; focusRoot()" x-text="'Show more (' + (tiles.length - gridLimit) + ' left)'"></button>
                         </div>
                     </div>
+                    <button type="button" x-show="albumFolder" x-cloak class="flex shrink-0 items-center gap-2 border-y border-white/5 px-2 py-0.5 text-left text-xs text-muted hover:bg-white/5 hover:text-accent" :title="'Back to ' + (albumFolder?.name ?? '') + ' (Backspace)'" @click="toFolder()"><span class="w-6 shrink-0 text-right">↰</span><span class="min-w-0 flex-1 truncate" x-text="albumFolder?.name"></span><kbd class="text-[10px] opacity-60">⌫</kbd></button>
                     <ul aria-label="Tracks" data-list="tracks" class="min-h-0 flex-1 overflow-y-auto pb-1" :class="shown ? '' : 'hidden'">
                         <template x-for="(t, i) in tracks" :key="t.id">
                             <li :data-selected="pane === 'tracks' && i === tsel"
@@ -298,22 +303,8 @@
             <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
         </div>
         <div x-show="! cmd && mode === 'tree'" class="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-white/10 pt-1.5 text-xs text-muted">
-            <span><kbd class="text-accent2">j k</kbd> move</span>
-            <span><kbd class="text-accent2">h l</kbd> folder</span>
-            <span><kbd class="text-accent2">Enter</kbd> play</span>
-            <span><kbd class="text-accent2">x</kbd> mark</span>
-            <span><kbd class="text-accent2">v</kbd> move</span>
-            <span><kbd class="text-accent2">N</kbd> new folder</span>
-            <span><kbd class="text-accent2">A</kbd> analyse</span>
-            <span><kbd class="text-accent2">e</kbd> edit</span>
-            <span><kbd class="text-accent2">i</kbd> look up</span>
-            <span><kbd class="text-accent2">/</kbd> search</span>
-            <span><kbd class="text-accent2">:</kbd> command</span>
-            <span><kbd class="text-accent2">o</kbd> problems</span>
-            <span><kbd class="text-accent2">l</kbd> in tracks: details</span>
-            <span><kbd class="text-accent2">I</kbd> info</span>
-            <span><kbd class="text-accent2">Tab</kbd> pane</span>
-            <span><kbd class="text-accent2">?</kbd> keys</span>
+            <template x-for="h in hintList" :key="h[0]"><span><kbd class="text-accent2" x-text="h[0]"></kbd> <span x-text="h[1]"></span></span></template>
+            <button type="button" class="hover:text-accent" :title="$store.ui.hints ? 'Show only ? keys (command: hints)' : 'Show the key hints (command: hints)'" @click="$store.ui.toggleHints(); focusRoot()" x-text="$store.ui.hints ? 'hide hints' : 'hints'"></button>
             <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
         </div>
         </div>
