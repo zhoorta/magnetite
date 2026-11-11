@@ -161,24 +161,35 @@ describe('sharing', function () {
         SharedItem::create(['user_id' => $this->bob->id, 'album_id' => $bobAlbum->id]);
         SharedItem::create(['user_id' => $this->bob->id, 'track_id' => Track::where('user_id', $this->bob->id)->where('title', 'no tags')->value('id')]);
 
-        $this->actingAs($this->alice)->get(route('shared'))
-            ->assertOk()
-            ->assertSee('Test Album')->assertSee('shared by you')
-            ->assertSee('Mixtape')->assertSee('shared by bob')
-            ->assertSee('no tags')
-            ->assertSee('Unshare');
+        $shared = $this->actingAs($this->alice)->getJson(route('sources', 'shared'))->assertOk()->json();
+        $owner = collect($shared['folders'])->pluck('name', 'id');
+
+        expect(collect($shared['albums'])->pluck('title')->sort()->values()->all())->toBe(['Mixtape', 'Test Album'])
+            ->and($owner[collect($shared['albums'])->firstWhere('title', 'Test Album')['folder_id']])->toBe('You')
+            ->and($owner[collect($shared['albums'])->firstWhere('title', 'Mixtape')['folder_id']])->toBe('bob')
+            ->and(collect($shared['albums'])->firstWhere('title', 'Test Album')['mine'])->toBeTrue()
+            ->and(collect($shared['albums'])->firstWhere('title', 'Mixtape')['mine'])->toBeFalse()
+            ->and(collect($shared['loose'])->pluck('title')->all())->toBe(['no tags']);
+
+        // /shared is the library page opened on that source, and the library's own data stays apart from it
+        $this->get(route('shared'))->assertOk()->assertSee('"source":"shared"', false);
+        $library = $this->getJson(route('library'))->assertOk()->json();
+        expect(collect($library['albums'])->pluck('id')->all())->not->toContain($bobAlbum->id);
     });
 
     it('offers no Unshare and no file-truth findings for other people\'s music', function () {
         SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->aliceAlbum->id]);
         $this->aliceTrack->forceFill(['analysis' => ['loudness' => ['integrated' => -9.0]], 'dr' => 5])->save();
 
-        $this->actingAs($this->bob)->get(route('shared'))
-            ->assertOk()
-            ->assertSee('shared by alice')
-            ->assertDontSee('Unshare')
-            ->assertDontSee('DR5')
-            ->assertDontSee('LUFS');
+        $json = $this->actingAs($this->bob)->getJson(route('sources', 'shared'))->assertOk();
+        $album = $json->json('albums.0');
+
+        expect($album['mine'])->toBeFalse()
+            ->and($album['dr'])->toBeNull()
+            ->and(collect($album['tracks'])->every(fn ($t) => $t['truth'] === ['analyzed' => false, 'flags' => []]))->toBeTrue();
+        // no measurement of the file anywhere in the answer, nor in the page
+        expect($json->getContent())->not->toContain('lufs')->not->toContain('integrated');
+        $this->get(route('shared'))->assertOk()->assertDontSee('integrated');
     });
 
     it('keeps duplicate detection to your own library', function () {

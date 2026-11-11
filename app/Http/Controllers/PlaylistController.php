@@ -6,6 +6,8 @@ use App\Models\Album;
 use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
+use App\Services\AlbumIdentifier;
+use App\Support\Sources;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,34 +15,29 @@ use Illuminate\View\View;
 
 class PlaylistController extends Controller
 {
-    public function index(Request $request): View
+    /** Your playlists: the library page opened on its Playlists source. */
+    public function index(Request $request, AlbumIdentifier $identifier): View
     {
-        $playlists = $request->user()->playlists()->withCount('tracks')->with('share')->orderBy('name')->get();
-
-        return view('pages.playlists', ['playlists' => $playlists]);
+        return $this->page($request, $identifier, null);
     }
 
-    /** Your own playlist to edit, or a shared one to play (read only). Anything else is a 404. */
-    public function show(Request $request, Playlist $playlist): View
+    /** Your own playlist to edit, or a shared one to play (read only), selected in the Playlists source. Anything else is a 404. */
+    public function show(Request $request, AlbumIdentifier $identifier, Playlist $playlist): View
     {
-        $me = $request->user();
-        abort_unless($me->can('view', $playlist), 404);
+        abort_unless($request->user()->can('view', $playlist), 404);
 
-        $tracks = $playlist->tracksFor($me);
+        return $this->page($request, $identifier, $playlist->id);
+    }
 
-        if ($playlist->user_id === $me->id) {
-            // `closed`: the owner's own track that nobody else can play yet (what the share warning counts).
-            $closed = $playlist->unsharedOwnTracks()->pluck('tracks.id');
+    private function page(Request $request, AlbumIdentifier $identifier, ?int $select): View
+    {
+        $data = app(LibraryController::class)->pageData($request, $identifier) + [
+            'source' => 'playlists',
+            'select' => $select,
+            'sources' => ['playlists' => Sources::playlists($request->user())],
+        ];
 
-            return view('pages.playlist', [
-                'playlist' => $playlist,
-                'tracks' => $tracks->where('open', true)->values()->map(fn ($t) => $t->toPlayer() + ['closed' => $closed->contains($t->id)]),
-                'hidden' => $tracks->where('open', false)->count(),
-                'shared' => $playlist->share()->exists(),
-            ]);
-        }
-
-        return view('pages.shared-playlist', ['playlist' => $playlist->load('user'), 'tracks' => $tracks]);
+        return view('pages.library', ['data' => $data]);
     }
 
     /** Create a playlist, optionally with a first track (the "new playlist" entry of the add menu). */

@@ -88,11 +88,11 @@ it('copies the cover image that sits beside the music', function () {
     expect(File::glob($this->music.'/users/bob/From alice/'.($folder === '.' ? '' : $folder.'/').'cover.*'))->toHaveCount(1);
 });
 
-it('offers the copy in the + menu of other people\'s shared music, and not of your own', function () {
+it('marks other people\'s shared albums as copyable (`mine` is false), and your own as yours', function () {
     SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->album->id]);
 
-    $this->actingAs($this->bob)->get(route('shared'))->assertOk()->assertSee('Copy to my library')->assertSee("copy(&#039;albums&#039;, {$this->album->id})", false);
-    $this->actingAs($this->alice)->get(route('shared'))->assertOk()->assertDontSee('Copy to my library');
+    $this->actingAs($this->bob)->getJson(route('sources', 'shared'))->assertOk()->assertJsonPath('albums.0.id', $this->album->id)->assertJsonPath('albums.0.mine', false);
+    $this->actingAs($this->alice)->getJson(route('sources', 'shared'))->assertOk()->assertJsonPath('albums.0.mine', true);
 });
 
 it('copies the cover an album shows even when no cover file sits beside the music', function () {

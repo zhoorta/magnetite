@@ -78,6 +78,6 @@ it('lists albums and untagged tracks on the library page', function () {
     $this->get(route('library'))
         ->assertOk()
         ->assertSee('Test Album')
-        ->assertSee('The Testers')
-        ->assertSee('Without album tag');
+        ->assertSee('The Testers');
+    expect($this->getJson(route('library'))->json('loose'))->not->toBeEmpty();
 });

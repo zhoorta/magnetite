@@ -122,3 +122,29 @@ test('rowOfAlbum finds an album row, or -1 while its folder is closed', () => {
     assert.equal(rowOfAlbum(buildRows(lib, new Set([1, 2])), 10), 2);
     assert.equal(rowOfAlbum(buildRows(lib, new Set()), 10), -1);
 });
+
+test('flat: every album in one list, no folder rows, each with the path of its folder', () => {
+    const rows = buildRows(lib, new Set(), 'title', null, true);
+    assert.deepEqual(keys(rows), ['a14', 'a11', 'a13', 'a12', 'a10', 'loose']);
+    assert.equal(rows.find((r) => r.id === 10).path, 'Rock / New Wave');
+    assert.equal(rows.find((r) => r.id === 14).path, '');
+    assert.ok(rows.every((r) => r.kind !== 'folder' && r.depth === 0));
+});
+
+test('flat follows the sort and the filter', () => {
+    assert.deepEqual(keys(buildRows(lib, new Set(), 'year', null, true)).slice(0, 3), ['a13', 'a11', 'a10']);
+    assert.deepEqual(keys(buildRows(lib, new Set(), 'library', (a) => a.year && a.year < 1981, true)), ['a10', 'a11', 'a13', 'loose']);
+});
+
+test('flat: every album in one list, no folder rows, each with the path of its folder', () => {
+    const rows = buildRows(lib, new Set(), 'title', null, true);
+    assert.deepEqual(keys(rows), ['a14', 'a11', 'a13', 'a12', 'a10', 'loose']);
+    assert.equal(rows.find((r) => r.id === 10).path, 'Rock / New Wave');
+    assert.equal(rows.find((r) => r.id === 14).path, '');
+    assert.ok(rows.every((r) => r.kind !== 'folder' && r.depth === 0));
+});
+
+test('flat follows the sort and the filter', () => {
+    assert.deepEqual(keys(buildRows(lib, new Set(), 'year', null, true)).slice(0, 3), ['a13', 'a11', 'a10']);
+    assert.deepEqual(keys(buildRows(lib, new Set(), 'library', (a) => a.year && a.year < 1981, true)), ['a10', 'a11', 'a13', 'loose']);
+});

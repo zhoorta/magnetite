@@ -1,6 +1,6 @@
 {{-- A 16 px line icon in the current text colour. `name` picks the drawing. Always give the button around it a title and an aria-label. --}}
 @props(['name'])
-<svg width="16" height="16" {{ $attributes->merge(['class' => 'shrink-0']) }} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<svg width="16" height="16" {{ $attributes->merge(['class' => 'shrink-0']) }} viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" @unless ($attributes->has('role')) aria-hidden="true" @endunless>
     @switch($name)
         @case('play') <path d="M5 3.5v9l7-4.5z" fill="currentColor" stroke="none"/> @break
         @case('pause') <rect x="4" y="3.5" width="3" height="9" fill="currentColor" stroke="none"/><rect x="9" y="3.5" width="3" height="9" fill="currentColor" stroke="none"/> @break
@@ -18,6 +18,12 @@
         @case('info') <circle cx="8" cy="8" r="5.5"/><path d="M8 7.5v3.5M8 5.2v.1"/> @break
         @case('meters') <rect x="2" y="8" width="3" height="6" rx=".5"/><rect x="6.5" y="2" width="3" height="12" rx=".5"/><rect x="11" y="5" width="3" height="9" rx=".5"/> @break
         @case('full') <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/> @break
+        @case('library') <circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.5"/> @break
+        @case('people') <circle cx="6" cy="6" r="2.2"/><path d="M2 13c0-2.3 1.8-3.7 4-3.7s4 1.4 4 3.7"/><path d="M10.5 3.9a2.2 2.2 0 0 1 0 4.2M12 9.6c1.2.5 2 1.6 2 3.4"/> @break
+        @case('playlist') <path d="M2.5 4h8M2.5 7.5h8M2.5 11h4"/><path d="M13 4.5v6.2"/><circle cx="11.6" cy="10.8" r="1.4"/> @break
+        @case('unshared') <circle cx="6" cy="6" r="2.2"/><path d="M2 13c0-2.3 1.8-3.7 4-3.7s4 1.4 4 3.7"/><path d="M2 2l12 12"/> @break
+        @case('lock') <rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/> @break
+        @case('flat') <path d="M2.5 4h11M2.5 8h11M2.5 12h11"/> @break
         @case('command') <path d="M3 4.5L7 8l-4 3.5M8.5 12h4.5"/> @break
     @endswitch
 </svg>

@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Album;
 use App\Models\AlbumSuggestion;
 use App\Models\Folder;
-use App\Models\Playlist;
 use App\Models\SharedItem;
 use App\Models\Track;
 use App\Services\AlbumIdentifier;
@@ -13,6 +12,7 @@ use App\Services\FerriteStore;
 use App\Services\TrackAnalyzer;
 use App\Support\FileTruth;
 use App\Support\FolderTree;
+use App\Support\Sources;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -21,6 +21,14 @@ class LibraryController extends Controller
 {
     /** The signed-in user's own albums and tracks, and nobody else's; shared music from others is on /shared. */
     public function library(Request $request, AlbumIdentifier $identifier): View|JsonResponse
+    {
+        $data = $this->pageData($request, $identifier);
+
+        return $request->wantsJson() ? response()->json($data) : view('pages.library', ['data' => $data]);
+    }
+
+    /** What the page draws, as plain data: the dense library renders it in the browser, and the same JSON answers a background refresh. */
+    public function pageData(Request $request, AlbumIdentifier $identifier): array
     {
         $me = $request->user();
 
@@ -47,8 +55,7 @@ class LibraryController extends Controller
 
         $rows = fn ($tracks) => $tracks->map(fn (Track $t) => $t->toLibrary($copies[$t->id] ?? []))->values();
 
-        // Everything the page draws, as plain data: the dense library renders it in the browser, and the same JSON answers a background refresh.
-        $data = [
+        return [
             'folders' => $tree->list,
             'albums' => $albums->map(fn (Album $a) => [
                 'id' => $a->id,
@@ -71,8 +78,6 @@ class LibraryController extends Controller
             'to_identify' => $toIdentify,
             'trash_only' => $me->store() instanceof FerriteStore,
         ];
-
-        return $request->wantsJson() ? response()->json($data) : view('pages.library', ['data' => $data]);
     }
 
     /** The average spectrum of one of the user's own tracks (the library sends the rest of its measurements, but not this long curve). */
@@ -84,15 +89,19 @@ class LibraryController extends Controller
         return response()->json(['spectrum' => $s['db'] ?? [], 'step_hz' => $s['step_hz'] ?? 500]);
     }
 
-    /** Everything in the shared area, from all users (yours included), with the name of who shares it. No findings here. */
-    public function shared(Request $request): View
+    /** The shared area: the library page opened on its Shared source (the data is already in the page; the library loads in the same data). */
+    public function shared(Request $request, AlbumIdentifier $identifier): View
     {
-        $albums = Album::with('tracks')->shared()->get()
-            ->each(fn (Album $a) => $a->tracks->each->setRelation('album', $a));
+        $data = $this->pageData($request, $identifier) + ['source' => 'shared', 'sources' => ['shared' => Sources::shared($request->user())]];
 
-        $singles = Track::sharedSingles()->get();
-        $playlists = Playlist::shared()->get();
+        return view('pages.library', ['data' => $data]);
+    }
 
-        return view('pages.shared', ['albums' => $albums, 'singles' => $singles, 'playlists' => $playlists, 'me' => $request->user()]);
+    /** The library page's other sources as JSON, fetched when a source is first opened and again when it is revisited. */
+    public function source(Request $request, string $name): JsonResponse
+    {
+        $me = $request->user();
+
+        return response()->json($name === 'shared' ? Sources::shared($me) : Sources::playlists($me));
     }
 }

@@ -30,6 +30,9 @@ export const TREE = {
     ':': 'command',
     '/': 'search',
     Escape: 'clear',
+    w: 'source', W: 'source-back',
+    y: 'copy',
+    z: 'flat',
 };
 
 export const TRACKS = {
@@ -51,6 +54,9 @@ export const TRACKS = {
     i: 'details',
     C: 'cover',
     x: 'mark-track',
+    J: 'shift-down', K: 'shift-up',
+    w: 'source', W: 'source-back',
+    y: 'copy',
     ':': 'command',
     '/': 'search',
 };
@@ -68,6 +74,8 @@ export const GRID = {
     v: 'move',
     Tab: 'tree', Escape: 'tree',
     Backspace: 'folder',
+    w: 'source', W: 'source-back',
+    y: 'copy',
     ':': 'command',
     '/': 'search',
 };

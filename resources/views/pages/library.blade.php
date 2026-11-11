@@ -2,7 +2,7 @@
 @php
     $btn = 'shrink-0 rounded-theme border border-white/15 px-2.5 py-0.5 text-sm hover:border-accent hover:text-accent disabled:opacity-40 disabled:hover:border-white/15 disabled:hover:text-text pointer-coarse:min-h-11 pointer-coarse:px-3.5';
 @endphp
-<x-layouts.app title="Library · Magnetite" wide="full">
+<x-layouts.app :title="($data['source'] ?? 'library') === 'shared' ? 'Shared · Magnetite' : (($data['source'] ?? 'library') === 'playlists' ? 'Playlists · Magnetite' : 'Library · Magnetite')" wide="full">
     {{-- The page data as JSON in a script block: in an attribute every quote would be escaped and the page twice as big. --}}
     <script type="application/json" id="library-data">{!! json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) !!}</script>
     <div x-data="dense(JSON.parse(document.getElementById('library-data').textContent))" tabindex="0" @keydown="onKey($event)" role="application" aria-label="Library"
@@ -11,13 +11,29 @@
 
         {{-- The toolbar: what applies to the selection on the left (the rest is in the ⋯ menu, which also opens on a right-click), the views on the right as small icons. --}}
         <div class="mb-3 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Actions on the selection">
-            <button type="button" x-show="mode !== 'tree'" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Back to the folders and albums (Esc)" @click="closeView()"><x-icon name="back" /> Back</button>
+            {{-- The sources: your library, what everybody shares, playlists (w cycles them). --}}
+            <div x-show="mode === 'tree'" class="flex shrink-0 rounded-theme border border-white/15 p-px" role="group" aria-label="Source">
+                <template x-for="name in ['library', 'shared', 'playlists']" :key="name">
+                    <button type="button" class="inline-flex items-center rounded-theme px-2 py-1 text-sm pointer-coarse:min-h-11 pointer-coarse:px-3" :class="source === name ? 'bg-accent text-bg' : 'text-muted hover:text-accent'" :aria-pressed="source === name"
+                            :aria-label="sourceLabels[name]" :title="sourceLabels[name] + (name === 'library' ? ' (your own music)' : name === 'shared' ? ' (what everybody shares)' : ' (yours and the shared ones)') + ' (w cycles)'" @click="setSource(name)">
+                        <span x-show="name === 'library'"><x-icon name="library" /></span>
+                        <span x-show="name === 'shared'" x-cloak><x-icon name="people" /></span>
+                        <span x-show="name === 'playlists'" x-cloak><x-icon name="playlist" /></span>
+                    </button>
+                </template>
+            </div>
+            <button type="button" x-show="mode === 'tree' && source !== 'playlists'" class="{{ $btn }} inline-flex items-center" :class="flat && '!border-accent !text-accent'" :aria-pressed="flat" title="Albums as one list, without folders (z)" aria-label="Flat list" @click="toggleFlat(); focusRoot()"><x-icon name="flat" /></button>
+            <button type="button" x-show="mode !== 'tree'" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Back to the folders and albums (Esc)" aria-label="Back" @click="closeView()"><x-icon name="back" /></button>
 
-            <button type="button" x-show="mode === 'tree' && tracks.length" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Play (Enter)" @click="pane === 'tracks' ? playTrack(tsel) : playTrack(0, false); focusRoot()"><x-icon name="play" /> Play</button>
-            <button type="button" x-show="mode === 'tree'" class="{{ $btn }} inline-flex items-center gap-1.5" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x)" @click="toggleSelectMode()">
-                <x-icon name="select" /><span x-show="marks.length" x-cloak x-text="marks.length"></span><span class="hidden sm:inline" x-text="selectMode ? 'Done' : 'Select'"></span>
+            <button type="button" x-show="mode === 'tree' && tracks.length" x-cloak class="{{ $btn }} inline-flex items-center" :class="playHere && '!border-accent !text-accent'"
+                    :title="$store.player.playing ? 'Pause (space)' : playHere ? 'Resume (space)' : 'Play the selection (Enter)'" :aria-label="$store.player.playing ? 'Pause' : playHere ? 'Resume' : 'Play'"
+                    @click="$store.player.playing || playHere ? $store.player.toggle() : (pane === 'tracks' ? playTrack(tsel) : playTrack(0, false)); focusRoot()">
+                <x-icon name="play" x-show="! $store.player.playing" /><x-icon name="pause" x-show="$store.player.playing" x-cloak />
             </button>
-            <button type="button" x-show="mode === 'tree' && (ctx === 'album' || ctx === 'folder')" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Move to a folder (v)" @click="openMover()"><x-icon name="move" /><span class="hidden sm:inline">Move</span></button>
+            <button type="button" x-show="mode === 'tree' && source === 'library'" class="{{ $btn }} inline-flex items-center gap-1.5" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x), again to finish" aria-label="Select" @click="toggleSelectMode()">
+                <x-icon name="select" /><span x-show="marks.length" x-cloak x-text="marks.length"></span>
+            </button>
+            <button type="button" x-show="mode === 'tree' && (ctx === 'album' || ctx === 'folder')" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Move to a folder (v)" aria-label="Move" @click="openMover()"><x-icon name="move" /></button>
             <div x-show="mode === 'tree' && playlistItem" x-cloak class="flex items-center rounded-theme border border-white/15 px-1 pointer-coarse:min-h-11"><x-playlist-menu item="playlistItem" label="Add to a playlist" /></div>
 
             {{-- Everything else, for what is selected: the key is shown beside each. Right-click a row opens it too. --}}
@@ -57,7 +73,7 @@
             {{-- Folders and albums --}}
             <div class="relative rounded-theme border pt-3" :class="mode !== 'tree' || pane === 'tree' ? 'border-accent' : 'border-white/15'">
                 <span class="absolute -top-2.5 left-3 max-w-[90%] truncate bg-bg px-1.5" :class="mode !== 'tree' || pane === 'tree' ? 'text-accent' : 'text-muted'"
-                      x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? (onlyProblems ? 'Findings · ' : 'Truth · ') + truth.length + ' files · ' + truthSort : 'Library · ' + albums.length + (albums.length === 1 ? ' album' : ' albums')"></span>
+                      x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? (onlyProblems ? 'Findings · ' : 'Truth · ') + truth.length + ' files · ' + truthSort : sourceLabels[source] + ' · ' + albums.length + (source === 'playlists' ? (albums.length === 1 ? ' playlist' : ' playlists') : albums.length === 1 ? ' album' : ' albums')"></span>
 
                 {{-- Search results: the albums, then the tracks. A track plays, an album of yours opens in the tree. --}}
                 <ul x-show="mode === 'search'" x-cloak data-list="search" aria-label="Search results" class="h-[34dvh] min-h-48 overflow-y-auto pb-1 md:h-[calc(100dvh_-_var(--panes-top,10rem)_-_var(--dock-h,13rem)_-_var(--status-h,2rem)_-_1.25rem)] md:min-h-56">
@@ -70,7 +86,7 @@
                             <span class="hidden min-w-0 max-w-[40%] shrink truncate text-xs opacity-70 sm:inline" x-text="it.kind === 'album' ? it.album.artist : [it.track.artist, it.track.album].filter(Boolean).join(' · ')"></span>
                             <span class="w-11 shrink-0 text-right text-xs tabular-nums" x-show="$store.ui.info > 0 && (it.kind === 'album' ? it.album.dr : it.track.dr) != null" x-cloak x-text="'DR' + (it.kind === 'album' ? it.album.dr : it.track.dr)"></span>
                             <span class="w-9 shrink-0 text-right text-xs tabular-nums opacity-70" x-text="(it.kind === 'album' ? it.album.year : it.track.year) ?? ''"></span>
-                            <span class="w-4 shrink-0 text-xs opacity-70" :title="(it.kind === 'album' ? it.album.mine : it.track.mine) ? '' : 'Shared by someone else'" x-text="(it.kind === 'album' ? it.album.mine : it.track.mine) ? '' : '⇆'"></span>
+                            <span class="w-4 shrink-0 text-xs opacity-70" :title="(it.kind === 'album' ? it.album.mine : it.track.mine) ? '' : 'Shared by someone else'"><x-icon name="people" class="size-3" x-show="! (it.kind === 'album' ? it.album.mine : it.track.mine)" x-cloak role="img" aria-label="Shared by someone else" /></span>
                         </li>
                     </template>
                     <li x-show="search.loading && searchList.length" class="px-2 py-1 text-xs text-muted">Searching…</li>
@@ -107,7 +123,7 @@
                             <span x-show="selectMode || marks.length" x-cloak class="w-3 shrink-0 text-center" :class="i === cur && pane === 'tree' ? '' : 'text-accent2'" x-text="r.kind === 'album' ? (isMarked(r.id) ? '●' : selectMode ? '○' : '') : ''"></span>
                             <span class="min-w-0 flex-1 truncate" :style="'padding-left:' + (r.depth * 1.2) + 'rem'">
                                 <span x-show="r.kind === 'folder'" class="mr-1 inline-block w-3 opacity-70" x-text="openIds.includes(r.id) ? '▾' : '▸'"></span>
-                                <span :class="r.kind !== 'album' && 'font-semibold'" x-text="r.kind === 'folder' ? r.folder.name : r.kind === 'album' ? r.album.title : 'Without album tag'"></span>
+                                <span :class="r.kind !== 'album' && 'font-semibold'" x-text="r.kind === 'folder' ? r.folder.name : r.kind === 'album' ? r.album.title : looseTitle"></span>
                                 {{-- playing (play icon) or paused (pause icon) from this album, or from an album inside this folder --}}
                                 <span class="ml-1 inline-flex align-middle" :class="i === cur && pane === 'tree' ? '' : 'text-amber-500'"
                                       x-show="(r.kind === 'album' && r.id === playingAlbumId) || (r.kind === 'folder' && holdsPlaying(r.id))" x-cloak
@@ -115,7 +131,8 @@
                                     <x-icon name="play" x-show="$store.player.playing" class="size-3" />
                                     <x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3" />
                                 </span>
-                                <span x-show="r.kind === 'album' && isShared('albums', r.id)" x-cloak class="ml-1 text-xs opacity-70" title="Shared with everyone who has an account">shared</span>
+                                <span x-show="r.kind === 'album' && isShared('albums', r.id)" x-cloak class="ml-1 inline-flex align-middle opacity-70" title="Shared with everyone who has an account"><x-icon name="people" class="size-3" role="img" aria-label="Shared" /></span>
+                                <span x-show="flat && r.path" x-cloak class="ml-1 text-xs opacity-60" x-text="r.path"></span>
                                 <span x-show="r.kind === 'album' && analysisNote(r.id)" x-cloak class="ml-1 text-xs opacity-70" x-text="analysisNote(r.id)"></span>
                             </span>
                             <span class="hidden min-w-0 max-w-[32%] shrink truncate text-right text-xs opacity-70 sm:inline" x-show="r.kind === 'album'" x-text="r.album?.artist"></span>
@@ -136,15 +153,25 @@
                 <span class="absolute -top-2.5 left-3 max-w-[85%] truncate bg-bg px-1.5" :class="mode === 'tree' && (pane === 'tracks' || pane === 'grid') ? 'text-accent' : 'text-muted'" x-text="paneTitle"></span>
                 <div class="flex h-[34dvh] min-h-48 flex-col md:h-[calc(100dvh_-_var(--panes-top,10rem)_-_var(--dock-h,13rem)_-_var(--status-h,2rem)_-_1.25rem)] md:min-h-56">
                     <div x-show="shown" class="flex items-center gap-2 px-2 pb-1">
-                        <div x-show="shown && ! shown.loose" class="size-12 shrink-0 overflow-hidden rounded-theme bg-white/5">
+                        <div x-show="shown && ! shown.loose && ! shown.playlist" class="size-12 shrink-0 overflow-hidden rounded-theme bg-white/5">
                             <img x-show="shown?.cover" :src="shown?.cover" alt="" class="size-full object-cover">
-                            <button type="button" x-show="! shown?.cover" class="flex size-full items-center justify-center p-0.5 text-center text-[10px] leading-tight text-muted hover:text-accent" title="Look a cover up online (C)" @click="findCover(); focusRoot()">Find cover</button>
+                            <button type="button" x-show="! shown?.cover && source === 'library'" class="flex size-full items-center justify-center p-0.5 text-center text-[10px] leading-tight text-muted hover:text-accent" title="Look a cover up online (C)" @click="findCover(); focusRoot()">Find cover</button>
                         </div>
                         <p class="min-w-0 truncate text-xs text-muted" x-text="shown ? [shown.artist, shown.year, shown.label, summary(tracks)].filter(Boolean).join(' · ') : ''"></p>
                     </div>
 
+                    {{-- Playlists: who it is from, what is private, and what you cannot play. --}}
+                    <div x-show="shown?.playlist" x-cloak class="space-y-1 px-2 pb-1 text-xs">
+                        <p x-show="! shown?.mine" class="text-muted" x-text="'A playlist shared by ' + shown?.artist + '. It changes when they change it. y copies it to your playlists (only the tracks you can play).'"></p>
+                        <p x-show="shown?.mine && shown?.shared && shown?.unshared > 0" class="flex flex-wrap items-center gap-2 rounded-theme border border-white/10 bg-surface px-2 py-1">
+                            <span class="text-muted" x-text="shown?.unshared + (shown?.unshared === 1 ? ' track is' : ' tracks are') + ' not shared, so others see them greyed out and cannot play them.'"></span>
+                            <button type="button" class="rounded-theme border border-white/10 px-2 py-0.5 hover:text-accent" @click="shareTracksToo(); focusRoot()">Share those tracks too</button>
+                        </p>
+                        <p x-show="shown?.mine && shown?.hidden > 0" class="text-muted" x-text="shown?.hidden + (shown?.hidden === 1 ? ' track' : ' tracks') + ' in this playlist can no longer be played by you, because they are not shared any more. They come back if shared again.'"></p>
+                    </div>
+
                     {{-- Tracks without an album tag: what the folder and file names and MusicBrainz suggest. Nothing changes until "Use this". --}}
-                    <div x-show="shown?.loose" x-cloak class="max-h-56 shrink-0 overflow-y-auto px-2 pb-2 text-xs">
+                    <div x-show="shown?.loose && source === 'library'" x-cloak class="max-h-56 shrink-0 overflow-y-auto px-2 pb-2 text-xs">
                         <div class="mb-1 flex items-center gap-2">
                             <button type="button" x-show="toIdentify > 0" class="rounded-theme border border-white/15 px-2 py-0.5 hover:border-accent hover:text-accent" :disabled="['queued', 'running'].includes(identify.state)" @click="findAlbums()" title="Look at the folders of untagged tracks: only guessed names are sent to MusicBrainz">Suggest albums (i)</button>
                             <span class="text-muted" x-text="identifyNote"></span>
@@ -171,6 +198,7 @@
                             </div>
                         </template>
                     </div>
+                    <p x-show="mode === 'tree' && rows.length === 0 && emptyNote" x-cloak class="px-2 py-1 text-muted" x-text="emptyNote"></p>
                     <p x-show="mode === 'search' && ! shown && hit" x-cloak class="px-2 py-1 text-muted" x-text="hit?.kind === 'track' ? [hit.track.artist, hit.track.album, hit.track.year].filter(Boolean).join(' · ') + (hit.track.mine ? '' : ' · shared by someone else') : (hit?.album.mine ? '' : 'Shared by someone else: Enter opens the shared page')"></p>
                     {{-- A selected folder: what is in it, as tiles (Tab goes in, arrows move, Enter opens), and the totals of everything below it. --}}
                     <div x-show="mode === 'tree' && row?.kind === 'folder'" x-cloak class="flex min-h-0 flex-1 flex-col">
@@ -201,13 +229,14 @@
                         </div>
                     </div>
                     <button type="button" x-show="albumFolder" x-cloak class="flex shrink-0 items-center gap-2 border-y border-white/5 px-2 py-0.5 text-left text-xs text-muted hover:bg-white/5 hover:text-accent" :title="'Back to ' + (albumFolder?.name ?? '') + ' (Backspace)'" @click="toFolder()"><span class="w-6 shrink-0 text-right">↰</span><span class="min-w-0 flex-1 truncate" x-text="albumFolder?.name"></span><kbd class="text-[10px] opacity-60">⌫</kbd></button>
-                    <ul aria-label="Tracks" data-list="tracks" class="min-h-0 flex-1 overflow-y-auto pb-1" :class="shown ? '' : 'hidden'">
+                    <ul aria-label="Tracks" data-list="tracks" class="min-h-0 flex-1 overflow-y-auto pb-1" :class="shown ? '' : 'hidden'" x-effect="syncSortable(canReorder)">
                         <template x-for="(t, i) in tracks" :key="t.id">
                             <li :data-selected="pane === 'tracks' && i === tsel"
                                 class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
-                                :class="pane === 'tracks' && i === tsel ? 'bg-accent text-bg' : 'hover:bg-white/5'"
+                                :class="[pane === 'tracks' && i === tsel ? 'bg-accent text-bg' : 'hover:bg-white/5', t.open === false && 'opacity-40']"
                                 @click="trackClick(i)" @dblclick="playTrack(i)" @contextmenu.prevent="openContext($event, 'track', i)">
-                                <span x-show="shown?.loose" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
+                                <span x-show="shown?.loose && source === 'library'" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
+                                <span x-show="canReorder" x-cloak data-handle class="w-3 shrink-0 cursor-grab touch-none select-none text-center opacity-60" title="Drag to reorder (Shift+J, Shift+K)" aria-hidden="true">⠿</span>
                                 {{-- the number, or on the loaded track the play (playing) or pause (paused) icon, both amber: one column, flush left --}}
                                 <span class="inline-flex w-5 shrink-0 items-center text-xs tabular-nums" :class="$store.player.current?.id === t.id ? (pane === 'tracks' && i === tsel ? '' : 'text-amber-500') : 'opacity-70'"
                                       :aria-label="$store.player.current?.id !== t.id ? null : $store.player.playing ? 'Playing' : 'Paused'">
@@ -217,8 +246,10 @@
                                 </span>
                                 <span class="min-w-0 flex-1 truncate" :class="$store.player.current?.id === t.id && 'font-bold'">
                                     <span x-text="t.title"></span>
-                                    <span x-show="isShared('tracks', t.id)" x-cloak class="ml-1 text-xs opacity-70" title="Shared on its own">shared</span>
-                                    <span x-show="! t.playable" x-cloak class="ml-1 text-xs opacity-70" title="This browser cannot decode ALAC and ffmpeg is not available to convert it">ALAC</span>
+                                    <span x-show="isShared('tracks', t.id)" x-cloak class="ml-1 inline-flex align-middle opacity-70" title="Shared on its own"><x-icon name="people" class="size-3" role="img" aria-label="Shared" /></span>
+                                    <span x-show="t.open === false" x-cloak class="ml-1 inline-flex align-middle opacity-70" title="This track is not shared with you"><x-icon name="unshared" class="size-3" role="img" aria-label="Not shared with you" /></span>
+                                    <span x-show="t.closed && shown?.shared" x-cloak class="ml-1 inline-flex align-middle opacity-70" title="Only you can play this track: it is not shared"><x-icon name="lock" class="size-3" role="img" aria-label="Private" /></span>
+                                    <span x-show="t.playable === false && t.open !== false" x-cloak class="ml-1 text-xs opacity-70" title="This browser cannot decode ALAC and ffmpeg is not available to convert it">ALAC</span>
                                 </span>
                                 <template x-if="$store.ui.info >= 2">
                                     <span class="hidden shrink-0 gap-2 text-xs sm:flex">
@@ -341,7 +372,7 @@
              class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="fd = null; focusRoot()"
              role="dialog" aria-modal="true" aria-label="Folder">
             <form class="w-full max-w-sm rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl" @submit.prevent="saveFd()">
-                <h2 class="mb-4 font-semibold" x-text="fd?.mode === 'rename' ? 'Rename folder' : 'New folder'"></h2>
+                <h2 class="mb-4 font-semibold" x-text="fd?.mode === 'rename' ? 'Rename folder' : fd?.mode === 'playlist-create' ? 'New playlist' : fd?.mode === 'playlist-rename' ? 'Rename playlist' : 'New folder'"></h2>
                 <template x-if="fd">
                     <label class="block"><span class="mb-1 block text-xs text-muted" x-text="fd.mode === 'create' ? 'Name (inside ' + (folders.find((f) => f.id === fd.parent_id)?.name ?? 'the top level') + ')' : 'Name'"></span>
                         <input type="text" x-ref="folderName" x-model="fd.name" required maxlength="100" placeholder="Jazz" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>

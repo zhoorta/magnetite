@@ -21,11 +21,7 @@
                 </svg>
             </button>
             <div :class="menu ? 'flex' : 'hidden'" class="basis-full -mx-2 flex-col gap-1 sm:contents [&_a]:block [&_a]:rounded-theme [&_a]:px-2 [&_a]:py-2 [&_a:hover]:bg-white/10 sm:[&_a]:p-0 sm:[&_a]:rounded-none sm:[&_a:hover]:bg-transparent [&_button]:rounded-theme [&_button]:px-2 [&_button]:py-2 [&_button:hover]:bg-white/10 sm:[&_button]:p-0 sm:[&_button:hover]:bg-transparent">
-                <a href="{{ route('library') }}" wire:navigate class="{{ $link('library') }}">Library</a>
-                @auth
-                    <a href="{{ route('shared') }}" wire:navigate class="{{ $link('shared') }}">Shared</a>
-                    <a href="{{ route('playlists') }}" wire:navigate class="{{ $link('playlists*') }}">Playlists</a>
-                @endauth
+                <a href="{{ route('library') }}" wire:navigate class="{{ request()->routeIs('library', 'shared', 'playlists*') ? 'border-b border-accent text-text' : 'text-muted hover:text-accent' }}">Library</a>
                 <a href="{{ route('themes') }}" wire:navigate class="{{ $link('themes') }}">Themes</a>
                 @auth
                     <a href="{{ route('upload') }}" wire:navigate class="{{ $link('upload') }}">Upload</a>
@@ -138,6 +134,11 @@
                                 'e · i · C' => 'Edit table · look up online · find a cover',
                                 'A · S' => 'Analyse · share',
                                 's · o' => 'Order (title, year, DR) · only files with findings',
+                                '⌫' => 'Back: from an album to its folder, from a folder to the one above',
+                                'w · W' => 'Source: Library, Shared, Playlists (or :shared, :playlists)',
+                                'z' => 'Flat list: all albums without folders, again to go back',
+                                'y' => 'Copy the selected shared album or track to your library, or a shared playlist to yours',
+                                'J K (playlist)' => 'Move the selected track down or up; d removes it; N a new playlist',
                                 'l (tracks)' => 'The measurements of a file',
                                 '/ · :' => 'Search (year: dr: codec: artist: album:) · command line, Tab completes',
                                 ':truth' => 'Every file, the worst first',

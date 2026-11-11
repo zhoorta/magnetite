@@ -38,7 +38,8 @@ it('creates, renames and deletes a playlist', function () {
     $this->patchJson(route('playlists.update', $id), ['name' => 'Night drive'])->assertOk();
     expect(Playlist::find($id)->name)->toBe('Night drive');
 
-    $this->get(route('playlists'))->assertOk()->assertSee('Night drive')->assertSee('0 tracks');
+    $this->get(route('playlists'))->assertOk()->assertSee('Night drive')->assertSee('"source":"playlists"', false);
+    $this->getJson(route('sources', 'playlists'))->assertOk()->assertJsonPath('albums.0.title', 'Night drive')->assertJsonPath('albums.0.tracks', []);
 
     $this->deleteJson(route('playlists.destroy', $id))->assertOk();
     expect(Playlist::count())->toBe(0);
@@ -105,14 +106,14 @@ it('hides tracks that stopped being shared, and brings them back when shared aga
     $playlist = $this->bob->playlists()->create(['name' => 'Bob']);
     $playlist->tracks()->attach([$this->one->id => ['position' => 1], $this->bobTrack->id => ['position' => 2]]);
 
-    $this->actingAs($this->bob)->get(route('playlists.show', $playlist))->assertOk()->assertDontSee('can no longer be played by you');
-    expect($playlist->playableBy($this->bob))->toHaveCount(2);
+    $mine = fn () => $this->actingAs($this->bob)->getJson(route('sources', 'playlists'))->assertOk()->json('albums.0');
+    expect($mine()['hidden'])->toBe(0)->and($playlist->playableBy($this->bob))->toHaveCount(2);
 
     $share->delete();
 
-    $page = $this->get(route('playlists.show', $playlist))->assertOk()->assertSee('can no longer be played by you');
     expect($playlist->playableBy($this->bob)->pluck('id')->all())->toBe([$this->bobTrack->id])
-        ->and($page->viewData('hidden'))->toBe(1);
+        ->and($mine()['hidden'])->toBe(1)
+        ->and(collect($mine()['tracks'])->pluck('id')->all())->toBe([$this->bobTrack->id]);
 
     // The stream is closed too, whatever the playlist says.
     $this->get(route('stream', $this->one))->assertNotFound();
@@ -168,7 +169,7 @@ describe('sharing a playlist', function () {
 
         SharedItem::create(['user_id' => $this->alice->id, 'playlist_id' => $this->playlist->id]);
 
-        $this->get(route('playlists.show', $this->playlist))->assertOk()->assertSee('Alice mix')->assertSee('shared by alice');
+        $this->get(route('playlists.show', $this->playlist))->assertOk()->assertSee('Alice mix')->assertSee('"select":'.$this->playlist->id, false);
         $this->patchJson(route('playlists.update', $this->playlist), ['name' => 'Hijacked'])->assertNotFound();
         $this->deleteJson(route('playlists.destroy', $this->playlist))->assertNotFound();
         $this->postJson(route('playlists.tracks.store', $this->playlist), ['track_id' => $this->bobTrack->id])->assertNotFound();
@@ -180,14 +181,18 @@ describe('sharing a playlist', function () {
         SharedItem::create(['user_id' => $this->alice->id, 'playlist_id' => $this->playlist->id]);
 
         $page = $this->actingAs($this->bob)->get(route('playlists.show', $this->playlist))->assertOk();
-        $tracks = $page->viewData('tracks');
+        $json = $this->getJson(route('sources', 'playlists'))->assertOk();
+        $tracks = collect($json->json('albums.0.tracks'));
 
-        expect($tracks->firstWhere('id', $this->one->id)->open)->toBeTrue()
-            ->and($tracks->firstWhere('id', $this->two->id)->open)->toBeFalse();
+        expect($tracks->firstWhere('id', $this->one->id)['open'])->toBeTrue()
+            ->and($tracks->firstWhere('id', $this->two->id)['open'])->toBeFalse()
+            ->and($json->json('albums.0.mine'))->toBeFalse();
 
-        // The page carries no stream url for the private track, and the stream stays closed.
-        $streams = fn (int $id) => preg_match('#stream\\\\*/'.$id.'(?!\d)#', $page->getContent()) === 1;
-        expect($streams($this->one->id))->toBeTrue()->and($streams($this->two->id))->toBeFalse();
+        // Neither the answer nor the page carries a stream url for the private track, and the stream stays closed.
+        $streams = fn (string $body, int $id) => preg_match('#stream\\\\*/'.$id.'(?!\\d)#', $body) === 1;
+        foreach ([$json->getContent(), $page->getContent()] as $body) {
+            expect($streams($body, $this->one->id))->toBeTrue()->and($streams($body, $this->two->id))->toBeFalse();
+        }
         $this->get(route('stream', $this->one))->assertOk();
         $this->get(route('stream', $this->two))->assertNotFound();
     });
@@ -196,8 +201,9 @@ describe('sharing a playlist', function () {
         $this->actingAs($this->alice);
         SharedItem::create(['user_id' => $this->alice->id, 'playlist_id' => $this->playlist->id]);
 
-        $page = $this->get(route('playlists.show', $this->playlist))->assertOk();
-        expect(collect($page->viewData('tracks'))->where('closed', true)->pluck('id')->all())->toBe([$this->two->id]);
+        $mine = $this->getJson(route('sources', 'playlists'))->assertOk()->json('albums.0');
+        expect(collect($mine['tracks'])->where('closed', true)->pluck('id')->all())->toBe([$this->two->id])
+            ->and($mine['unshared'])->toBe(1)->and($mine['shared'])->toBeTrue();
 
         $this->postJson(route('playlists.share-tracks', $this->playlist))->assertOk()->assertJson(['shared' => 1]);
         expect(SharedItem::where('track_id', $this->two->id)->exists())->toBeTrue();
@@ -209,9 +215,14 @@ describe('sharing a playlist', function () {
     it('lists shared playlists on /shared with who shares them, and Unshare only for the owner', function () {
         SharedItem::create(['user_id' => $this->alice->id, 'playlist_id' => $this->playlist->id]);
 
-        $this->actingAs($this->bob)->get(route('shared'))->assertOk()->assertSee('Alice mix')->assertSee('shared by alice')->assertDontSee('Unshare');
-        $this->actingAs($this->alice)->get(route('shared'))->assertOk()->assertSee('shared by you')->assertSee('Unshare');
-        $this->actingAs($this->alice)->get(route('playlists'))->assertSee('shared');
+        $seen = $this->actingAs($this->bob)->getJson(route('sources', 'playlists'))->assertOk()->json();
+        $alice = collect($seen['folders'])->firstWhere('name', 'alice');
+        expect($alice)->not->toBeNull()
+            ->and(collect($seen['albums'])->firstWhere('title', 'Alice mix'))->toMatchArray(['mine' => false, 'artist' => 'alice', 'folder_id' => $alice['id']]);
+
+        $own = $this->actingAs($this->alice)->getJson(route('sources', 'playlists'))->assertOk()->json();
+        expect(collect($own['albums'])->firstWhere('title', 'Alice mix'))->toMatchArray(['mine' => true, 'shared' => true])
+            ->and(collect($own['folders'])->firstWhere('id', $this->alice->id)['name'])->toBe('You');
     });
 
     it('copies a shared playlist with only the tracks the copier can play', function () {
@@ -301,6 +312,38 @@ describe('adding a whole album', function () {
         $this->actingAs($this->alice);
         // the library's toolbar adds the selected album; the shared page has a button on every album
         $this->get(route('library'))->assertOk()->assertSee('Add to a playlist');
-        $this->get(route('shared'))->assertOk()->assertSee('Add every track of this album to a playlist');
+        $this->get(route('shared'))->assertOk()->assertSee('Add to a playlist');
+    });
+});
+
+describe('the library sources', function () {
+    it('needs a signed-in user and knows only shared and playlists', function () {
+        auth()->logout();
+        $this->getJson(route('sources', 'shared'))->assertUnauthorized();
+        $this->actingAs($this->alice)->getJson('/sources/library')->assertNotFound();
+        $this->getJson('/sources/nonsense')->assertNotFound();
+    });
+
+    it('lists your playlists and the shared ones of others, never a private playlist of someone else', function () {
+        $this->alice->playlists()->create(['name' => 'Alice private']);
+        $shared = $this->alice->playlists()->create(['name' => 'Alice shared']);
+        SharedItem::create(['user_id' => $this->alice->id, 'playlist_id' => $shared->id]);
+        $this->bob->playlists()->create(['name' => 'Bob mix']);
+
+        $titles = fn ($user) => collect($this->actingAs($user)->getJson(route('sources', 'playlists'))->assertOk()->json('albums'))->pluck('title')->sort()->values()->all();
+
+        expect($titles($this->bob))->toBe(['Alice shared', 'Bob mix'])
+            ->and($titles($this->alice))->toBe(['Alice private', 'Alice shared']);
+    });
+
+    it('keeps a playlist track a viewer cannot play without a url, a title is all they get', function () {
+        $playlist = $this->alice->playlists()->create(['name' => 'Mix']);
+        $playlist->tracks()->attach([$this->one->id => ['position' => 1], $this->two->id => ['position' => 2]]);
+        SharedItem::create(['user_id' => $this->alice->id, 'playlist_id' => $playlist->id]);
+        SharedItem::create(['user_id' => $this->alice->id, 'track_id' => $this->one->id]);
+
+        $tracks = collect($this->actingAs($this->bob)->getJson(route('sources', 'playlists'))->json('albums.0.tracks'));
+
+        expect($tracks->firstWhere('id', $this->two->id))->not->toHaveKey('url')->and($tracks->firstWhere('id', $this->one->id))->toHaveKey('url');
     });
 });

@@ -54,3 +54,10 @@ it('saves whether the key hints are shown', function () {
 
     expect($this->alice->fresh()->ui)->toBe(['hints' => false]);
 });
+
+it('saves whether the library is shown as one flat list', function () {
+    $this->actingAs($this->alice)->putJson(route('settings.ui'), ['flat' => true])->assertOk()->assertJson(['ui' => ['flat' => true]]);
+    $this->putJson(route('settings.ui'), ['flat' => 'yes please'])->assertUnprocessable();
+
+    expect($this->alice->fresh()->ui)->toBe(['flat' => true]);
+});

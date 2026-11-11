@@ -42,6 +42,11 @@ export function ancestorIds(folders, id) {
     return ids;
 }
 
+/** "Jazz / ECM": the names of a folder and the ones around it, outermost first; empty at the top level. */
+export function folderPath(folders, id) {
+    return ancestorIds(folders, id).reverse().map((i) => folders.find((f) => f.id === i).name).join(' / ');
+}
+
 /** The mean DR of the measured albums in a folder and below, rounded; null when none is measured. */
 export function folderDr(folders, albums, id) {
     const ids = folderAndBelow(folders, id);
@@ -62,10 +67,17 @@ export function albumCount(folders, albums, id) {
  * @param {Set<number>} open ids of the open folders
  * @param {string} sort one of SORTS
  * @param {?function(object): boolean} only keep only the albums this accepts (and the folders that hold some)
+ * @param {boolean} flat no folders: every album in one list, in the chosen order (`path` says which folder it is in)
  * @returns {object[]} rows: { kind: 'folder' | 'album' | 'loose', key, id, depth, folder?, album?, count? }
  */
-export function buildRows({ folders, albums: all, loose = [] }, open, sort = 'library', only = null) {
+export function buildRows({ folders, albums: all, loose = [] }, open, sort = 'library', only = null, flat = false) {
     const albums = only ? all.filter(only) : all;
+    if (flat) {
+        const rows = sortAlbums(albums, sort).map((a) => ({ kind: 'album', key: `a${a.id}`, id: a.id, depth: 0, album: a, path: folderPath(folders, a.folder_id) }));
+        if (loose.length) rows.push({ kind: 'loose', key: 'loose', id: null, depth: 0, count: loose.length });
+
+        return rows;
+    }
     const childFolders = new Map();
     for (const f of folders) childFolders.set(f.parent_id ?? 0, [...(childFolders.get(f.parent_id ?? 0) ?? []), f]);
     const albumsIn = new Map();

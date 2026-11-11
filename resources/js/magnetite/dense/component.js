@@ -1,3 +1,4 @@
+import Sortable from 'sortablejs';
 import { Livewire } from '../../../../vendor/livewire/livewire/dist/livewire.esm';
 import { send } from '../http';
 import { actionFor, isTextTarget } from './keymap';
@@ -6,6 +7,8 @@ import { folderStats, folderTiles, summaryLine } from './folder';
 import { findings, hasProblem } from './info';
 import { appendPage, emptySearch, queueFrom, searchItems, wantsMore } from './search';
 import { TRUTH_SORT_NAMES, nextTruthSort, truthRows } from './truth';
+import { sourceMethods } from './source-methods';
+import { SOURCE_LABELS, playQueue } from './sources';
 import { titleCase } from './text';
 import { ancestorIds, buildRows, clamp, closeAction, folderAndBelow, folderChoices, nextSort, openAction, parentIndex, rowOfAlbum, targetAlbums } from './rows';
 
@@ -33,6 +36,12 @@ export default function dense(data) {
         albums: data.albums,
         loose: data.loose,
         shares: data.shared,
+        source: 'library', // 'library', 'shared' or 'playlists' (docs/dense-library.md, "Sources"): what the tree and the tracks show
+        sourceLabels: SOURCE_LABELS,
+        own: null, // your library while another source is shown: { folders, albums, loose, shares }
+        cache: {}, // what was fetched of the other sources, shown at once when they are opened again
+        cursors: {}, // the selected row of each source
+        libraryStale: false, // something changed the library from another source (a copy): reload it when it is shown again
         trashOnly: data.trash_only,
 
         rows: [],
@@ -81,13 +90,20 @@ export default function dense(data) {
         init() {
             // `$root` is the root of whichever x-data is running a handler: inside a menu it is the menu. The library's own root is kept here.
             this.libraryRoot = this.$el;
-            this.openIds = this.folders.filter((f) => storage((s) => s.getItem(OPEN_KEY(f.id))) === '1').map((f) => f.id);
+            this.own = { folders: this.folders, albums: this.albums, loose: this.loose, shares: this.shares };
+            this.openIds = this.folders.filter((f) => this.storedOpen(f.id)).map((f) => f.id);
             // Start on the album that is playing, if there is one, with the way to it open.
             const playing = this.$store.player.current?.album_id;
             const album = this.albums.find((a) => a.id === playing);
             if (album) this.reveal(album.folder_id, false);
             this.rebuild();
             if (album) this.cur = Math.max(0, rowOfAlbum(this.rows, album.id));
+            // /shared and /playlists open the same page on that source (the data came with the page); /playlists/{id} selects one playlist
+            if (data.source && data.sources?.[data.source]) {
+                this.cache[data.source] = data.sources[data.source];
+                this.useSource(data.source, this.cache[data.source], data.select ? `a${data.select}` : null);
+                if (data.select) this.toTracks();
+            }
             this.$nextTick(() => this.focusRoot()); // the keys work as soon as the page is there
             this.onReveal = () => this.revealPlaying();
             window.addEventListener('magnetite:reveal', this.onReveal);
@@ -137,14 +153,31 @@ export default function dense(data) {
             this.layoutObserver?.disconnect();
             window.removeEventListener('resize', this.measure);
             window.removeEventListener('magnetite:reveal', this.onReveal);
+            this.sortable?.destroy();
             document.documentElement.style.removeProperty('--status-h');
             document.documentElement.style.removeProperty('--panes-top');
         },
 
         // ---- what is shown ----
 
+        /** The tree as one list of albums, without folders (the person's choice; playlists are lists already). */
+        get flat() {
+            return this.$store.ui.flat && this.source !== 'playlists';
+        },
+
+        toggleFlat() {
+            if (this.source === 'playlists') return this.say('Playlists are lists already');
+            const id = this.row?.kind === 'album' ? this.row.id : null;
+            this.$store.ui.toggleFlat();
+            this.rebuild();
+            if (id !== null) this.cur = Math.max(0, rowOfAlbum(this.rows, id));
+            this.scrollToSelection();
+
+            return this.say(this.$store.ui.flat ? 'flat list: albums only (z goes back to folders)' : 'folders');
+        },
+
         rebuild() {
-            this.rows = buildRows({ folders: this.folders, albums: this.albums, loose: this.loose }, new Set(this.openIds), this.sort);
+            this.rows = buildRows({ folders: this.folders, albums: this.albums, loose: this.loose }, new Set(this.openIds), this.sort, null, this.flat);
             this.cur = clamp(this.rows, this.cur);
         },
 
@@ -163,7 +196,7 @@ export default function dense(data) {
             }
             const r = this.row;
             if (r?.kind === 'album') return r.album;
-            if (r?.kind === 'loose') return { id: null, title: 'Without album tag', artist: null, tracks: this.loose, loose: true };
+            if (r?.kind === 'loose') return { id: null, title: this.looseTitle, artist: null, tracks: this.loose, loose: true };
 
             return null;
         },
@@ -234,7 +267,17 @@ export default function dense(data) {
         /** The key hints for what has the cursor: the keys that do something here, not all of them (`?` lists everything). */
         get hintList() {
             if (!this.$store.ui.hints) return [['?', 'keys']];
-            const common = [['/', 'search'], [':', 'command'], ['?', 'keys']];
+            const common = [['w', 'source'], ['z', this.flat ? 'folders' : 'flat'], ['/', 'search'], [':', 'command'], ['?', 'keys']];
+            if (this.source !== 'library' && this.pane === 'grid') return [['h j k l', 'move'], ['Enter', 'open'], ['⌫', 'up'], ['Tab', 'tree'], ...common];
+            if (this.source === 'shared') return this.pane === 'tracks'
+                ? [['j k', 'move'], ['Enter', 'play'], ['y', 'copy'], ['S', 'stop sharing'], ['⌫', 'back'], ...common]
+                : [['j k', 'move'], ['h l', 'fold'], ['Enter', 'play'], ['Tab', 'tracks'], ['y', 'copy to my library'], ['S', 'stop sharing'], ...common];
+            if (this.source === 'playlists') {
+                const mine = !!this.shown?.mine;
+                if (this.pane === 'tracks') return [['j k', 'move'], ['Enter', 'play'], ...(mine ? [['J K', 'reorder'], ['d', 'remove']] : []), ['⌫', 'back'], ...common];
+
+                return [['j k', 'move'], ['Enter', 'play'], ['Tab', 'tracks'], ['N', 'new'], ...(mine ? [['r', 'rename'], ['S', 'share'], ['d', 'delete']] : [['y', 'copy']]), ...common];
+            }
             if (this.pane === 'grid') return [['h j k l', 'move'], ['Enter', 'open'], ['x', 'mark'], ['v', 'move to'], ['⌫', 'up'], ['Tab', 'tree'], ...common];
             if (this.pane === 'tracks') return [['j k', 'move'], ['Enter', 'play'], ['l', 'details'], ['e', 'edit'], ['A', 'analyse'], ['o', 'problems'], ['⌫', 'back'], ['Esc', 'tree'], ...common];
             const r = this.row;
@@ -274,13 +317,22 @@ export default function dense(data) {
         get playlistItem() {
             const t = this.pane === 'tracks' ? this.tracks[this.tsel] : null;
             if (t) return { id: t.id, title: t.title };
-            const a = this.row?.kind === 'album' ? this.row.album : null;
+            const a = this.row?.kind === 'album' && !this.row.album.playlist ? this.row.album : null;
 
             return a ? { kind: 'album', id: a.id, title: a.title } : null;
         },
 
         get playingAlbumId() {
-            return this.$store.player.current?.album_id ?? null;
+            return this.source === 'playlists' ? null : this.$store.player.current?.album_id ?? null;
+        },
+
+        /** Is what the toolbar's Play button would start the thing that is loaded in the player (the selected track, or the selected album)? */
+        get playHere() {
+            const current = this.$store.player.current;
+            if (!current) return false;
+            if (this.pane === 'tracks') return this.tracks[this.tsel]?.id === current.id;
+
+            return this.playingAlbumId !== null && this.playingAlbumId === this.shown?.id;
         },
 
         /** Does this folder, or one below it, hold the album that is playing? */
@@ -293,6 +345,15 @@ export default function dense(data) {
         /** What the selection is, for the actions menu: 'folder', 'album', 'loose' (tracks without an album), 'track' (in the tracks pane), or null. */
         get ctx() {
             if (this.mode !== 'tree') return null;
+            if (this.source !== 'library') {
+                // the other sources have their own entries in the menu (library-actions.blade.php)
+                const pl = this.source === 'playlists';
+                if (this.pane === 'tracks' && this.tracks[this.tsel]) return pl ? (this.shown?.mine ? 'pl-track' : 'ro-track') : 'ro-track';
+                const r = this.row;
+                if (r?.kind === 'album') return pl ? (r.album.mine ? 'pl-mine' : 'pl-other') : (r.album.mine ? 'sh-mine' : 'sh-other');
+
+                return r ? 'ro-' + r.kind : null;
+            }
             if (this.pane === 'tracks' && this.tracks[this.tsel]) return 'track';
             const r = this.row;
 
@@ -417,7 +478,24 @@ export default function dense(data) {
         },
 
         get hasAnything() {
-            return this.albums.length > 0 || this.loose.length > 0;
+            return this.source !== 'library' || this.albums.length > 0 || this.loose.length > 0;
+        },
+
+        /** What the loose row is called: tracks without an album tag in the library, single tracks that are shared. */
+        get looseTitle() {
+            return this.source === 'shared' ? 'Single tracks' : 'Without album tag';
+        },
+
+        /** Your own playlist is shown: its tracks can be dragged, moved (Shift+J, Shift+K) and removed. */
+        get canReorder() {
+            return this.source === 'playlists' && !!this.shown?.playlist && !!this.shown.mine && this.mode === 'tree';
+        },
+
+        get emptyNote() {
+            if (this.source === 'shared') return 'Nothing is shared yet. Use Share in your library (S).';
+            if (this.source === 'playlists') return 'No playlists yet. N makes one; + on an album or a track adds to one.';
+
+            return '';
         },
 
         say(text, ms = 4000) {
@@ -458,9 +536,12 @@ export default function dense(data) {
         },
 
         run(action) {
+            if (action === 'source') return this.cycleSource(1);
+            if (action === 'source-back') return this.cycleSource(-1);
             if (this.mode === 'search') return this.runSearch(action);
             if (this.mode === 'truth') return this.runTruth(action);
             if (action === 'search') return this.openSearch();
+            if (this.source !== 'library' && this.runSource(action)) return;
             if (this.pane === 'grid') return this.runGrid(action);
             const tree = this.pane === 'tree';
             const move = (to) => {
@@ -496,6 +577,7 @@ export default function dense(data) {
                     return;
                 }
                 case 'enter': return this.enter();
+                case 'flat': return this.toggleFlat();
                 case 'mark': return this.toggleMark();
                 case 'move': return this.openMover();
                 case 'new-folder': return this.newFolder();
@@ -514,6 +596,7 @@ export default function dense(data) {
                 case 'play': return this.playTrack(this.tsel);
                 case 'analyse': return this.analyseSelected();
                 case 'undo': return this.undoLast();
+                case 'copy': return this.say('Already yours: y copies from Shared and Playlists');
                 case 'edit': return this.editSelected();
                 case 'details': return this.openDetails();
                 case 'cover': return this.findCover();
@@ -565,9 +648,13 @@ export default function dense(data) {
 
         // ---- folders and the tree ----
 
+        storedOpen(id) {
+            return storage((s) => s.getItem(OPEN_KEY(id))) === '1';
+        },
+
         setOpen(id, on) {
             this.openIds = on ? [...new Set([...this.openIds, id])] : this.openIds.filter((x) => x !== id);
-            storage((s) => (on ? s.setItem(OPEN_KEY(id), '1') : s.removeItem(OPEN_KEY(id))));
+            if (this.source === 'library') storage((s) => (on ? s.setItem(OPEN_KEY(id), '1') : s.removeItem(OPEN_KEY(id))));
             const key = this.row?.key;
             this.rebuild();
             this.cur = Math.max(0, this.rows.findIndex((r) => r.key === key));
@@ -577,7 +664,7 @@ export default function dense(data) {
         reveal(folderId, rebuild = true) {
             for (const id of ancestorIds(this.folders, folderId)) {
                 if (!this.openIds.includes(id)) this.openIds.push(id);
-                storage((s) => s.setItem(OPEN_KEY(id), '1'));
+                if (this.source === 'library') storage((s) => s.setItem(OPEN_KEY(id), '1'));
             }
             if (rebuild) this.rebuild();
         },
@@ -589,10 +676,14 @@ export default function dense(data) {
         },
 
         playTrack(i, focus = true) {
-            if (!this.tracks[i]) return;
+            const track = this.tracks[i];
+            if (!track) return;
+            if (track.open === false && focus) return this.say('Not shared with you: you cannot play this track');
+            // only what this person may play, as a copy: the page edits its own array, the player keeps the queue it was given
+            const q = playQueue(this.tracks, i);
+            if (!q) return this.say('Nothing in here can be played by you');
             if (focus && this.pane === 'tracks') this.tsel = i;
-            // a copy: the page edits its own array, the player keeps the queue it was given
-            this.$store.player.setQueue([...this.tracks], i);
+            this.$store.player.setQueue(q.queue, q.index);
         },
 
         toggleMark() {
@@ -657,6 +748,7 @@ export default function dense(data) {
         },
 
         dragStart(ev, i) {
+            if (this.source !== 'library') return ev.preventDefault(); // albums of others, and playlists, are not moved
             const r = this.rows[i];
             this.dragIds = this.isMarked(r.id) ? [...this.marks] : [r.id];
             ev.dataTransfer.setData('text/plain', String(r.id));
@@ -776,6 +868,7 @@ export default function dense(data) {
         },
 
         async saveFd() {
+            if (this.fd.mode.startsWith('playlist-')) return this.savePlaylistDialog();
             const d = this.fd;
             d.saving = true;
             d.error = '';
@@ -979,6 +1072,7 @@ export default function dense(data) {
 
         /** Fetch the library as JSON and swap it in, keeping the selection and what is open or marked where it still exists. */
         async reload() {
+            if (this.source !== 'library') return this.refreshSource();
             const r = await fetch('/library', { cache: 'no-store', headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' } }).catch(() => null);
             if (!r || !r.ok) return Livewire.navigate(window.location.href);
             const d = await r.json();
@@ -1048,7 +1142,11 @@ export default function dense(data) {
             if (!name) return this.say(ambiguous.length ? `which one: ${ambiguous.join(', ')}?` : `no such command: ${typed}`);
             const player = this.$store.player;
             const ui = this.$store.ui;
+            if (this.source !== 'library' && this.runSourceCommand(name, arg)) return;
             switch (name) {
+                case 'library': case 'shared': case 'playlists': return this.setSource(name);
+                case 'copy': return this.say('Copy works from Shared and Playlists (y)');
+                case 'sharetracks': return this.say('That is for one of your shared playlists');
                 case 'analyze': return this.analyseSelected();
                 case 'details': return this.openDetails();
                 case 'edit': return this.editSelected();
@@ -1103,6 +1201,7 @@ export default function dense(data) {
 
                     return this.say(`info level ${level}`);
                 }
+                case 'flat': return this.toggleFlat();
                 case 'tint': return ui.toggleTint();
                 case 'hints': ui.toggleHints(); return this.say(ui.hints ? 'key hints on' : 'key hints off');
                 case 'theme': {
@@ -1440,6 +1539,7 @@ export default function dense(data) {
         },
 
         openSearch(text = '') {
+            this.useLibrary(); // the search shows your library's rows
             this.mode = 'search';
             this.typing = true;
             if (text) this.search.q = text;
@@ -1562,6 +1662,7 @@ export default function dense(data) {
 
         /** The Truth view (every file) or, with `only`, the Findings view (the files with a finding): two views of the same list. */
         openTruth(only = false) {
+            this.useLibrary();
             this.mode = 'truth';
             this.onlyProblems = only;
             this.detail = false;
@@ -1677,6 +1778,25 @@ export default function dense(data) {
         summary(tracks) {
             return this.$store.player.summary(tracks);
         },
+
+        /** The tracks list takes drags while one of your playlists is shown: Sortable is made when first needed and switched with the state. */
+        syncSortable(on) {
+            const list = this.libraryRoot?.querySelector('[data-list="tracks"]');
+            if (!this.sortable && list) {
+                this.sortable = Sortable.create(list, {
+                    handle: '[data-handle]',
+                    draggable: 'li',
+                    animation: 150,
+                    ghostClass: 'opacity-40',
+                    // The browser's own drag and drop does not work with touch; this works with mouse, pen and finger alike.
+                    forceFallback: true,
+                    onEnd: (e) => this.dropped(e),
+                });
+            }
+            this.sortable?.option('disabled', !on);
+        },
+
+        ...sourceMethods,
     };
 }
 

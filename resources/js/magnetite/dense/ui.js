@@ -8,7 +8,7 @@ import { send } from '../http';
  * player show (`info`: 0 none, 1 DR, 2 DR and findings) and whether the meters take their colours from the cover (`tint`), and whether the key hints under the player are shown (`hints`).
  * Saved with the account when someone is signed in; a guest keeps them until the page is reloaded.
  *
- * @param {{ info?: number, tint?: boolean, hints?: boolean } | null} saved what the server sent
+ * @param {{ info?: number, tint?: boolean, hints?: boolean, flat?: boolean } | null} saved what the server sent
  * @param {boolean} signedIn
  */
 export function uiStore(saved, signedIn) {
@@ -24,6 +24,8 @@ export function uiStore(saved, signedIn) {
 
         hints: saved?.hints !== false, // the key hints under the player (on until switched off)
 
+        flat: saved?.flat === true, // the library as one list of albums, without folders (off until chosen)
+
         cycleInfo() {
             this.info = (this.info + INFO_LEVELS - 1) % INFO_LEVELS; // 2, 1, 0, 2 ...
             this.save({ info: this.info });
@@ -32,6 +34,11 @@ export function uiStore(saved, signedIn) {
         toggleTint() {
             this.tint = !this.tint;
             this.save({ tint: this.tint });
+        },
+
+        toggleFlat() {
+            this.flat = !this.flat;
+            this.save({ flat: this.flat });
         },
 
         toggleHints() {
