@@ -1,6 +1,8 @@
 # Scenes: pictures as visualizers
 
-Status (2026-11-11): prototype, web only, nothing committed. Five test scenes (`scene-1`, `-3`, `-6`, `-8`, `-9`, local pictures in `public/scene-test/`, excluded from git) are in the meters picker. No upload, no storage, no settings panel yet.
+Status (2026-11-11): prototype committed; upload, storage and a first settings page are built, uncommitted, and not yet tried in a browser.
+
+**Built since:** `scenes` table (`user_id`, `name`, `file`, `settings`, `hotspots` unused so far), `SceneStore` (decodes and redraws any JPEG/PNG/WebP/GIF as a JPEG, longest side 1600, named by sha1, in `storage/app/private/scenes`), `SceneController` (upload, image route only for the owner, `PATCH` with a whitelist of keys and ranges, delete; 30 scenes per person), the page `/scenes` (`scenes-page.js`: upload by choosing or dropping, cards, name, sliders with "auto" per setting, glow colour, fit, "Show in player", delete). The player gets the person's scenes in `window.magnetite.scenes`; each becomes the meter `scene-{id}`. Precedence: defaults, picture suggestion, the scene's `settings`, the theme's look. The local test scenes are no longer registered: upload those pictures instead.
 
 ## How it works
 

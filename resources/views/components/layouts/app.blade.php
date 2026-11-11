@@ -28,6 +28,9 @@
                 @endauth
                 <a href="{{ route('themes') }}" wire:navigate class="{{ $link('themes') }}">Themes</a>
                 @auth
+                    <a href="{{ route('scenes') }}" wire:navigate class="{{ $link('scenes') }}">Scenes</a>
+                @endauth
+                @auth
                     <a href="{{ route('storage') }}" wire:navigate class="{{ $link('storage') }}">Storage</a>
                 @endauth
                 <div class="sm:ml-auto"><x-themes-menu /></div>

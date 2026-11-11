@@ -29,7 +29,7 @@ function tinted(layer, colour) {
     return byColour.get(colour);
 }
 
-export function createScene(id = 'scene', label = 'Scene', defaults = {}) {
+export function createScene(id = 'scene', label = 'Scene', defaults = {}, settings = {}) {
     const beat = new Beat();
     const level = new Float32Array(N);
     let src = null;
@@ -140,12 +140,13 @@ export function createScene(id = 'scene', label = 'Scene', defaults = {}) {
             vignette: 0, // darkness of the edges, which open a little on the kick (off; a per-picture choice)
             tint: null, // colour of the glow when the picture is bright and its dark shapes carry the music; defaults to the theme accent
         },
+        settings, // only what the person changed for this picture (the scenes page edits it live)
         get layers() {
             return layers;
         },
 
         draw(g, { bands }, { w, h, params, dt, colors }) {
-            const p = { ...this.params, ...(layers?.suggested ?? {}), ...params }; // defaults, then what the picture suggests, then the user's own
+            const p = { ...this.params, ...(layers?.suggested ?? {}), ...this.settings, ...params }; // defaults, what the picture suggests, what the person set for this picture, then the theme's look
             t += dt;
             beat.update(bands, dt, { threshold: p.kickThreshold, cooldown: p.kickCooldown });
             kick += (beat.pulse - kick) * (1 - Math.exp(-dt / 0.12)); // a soft swell, not a flash
@@ -250,8 +251,3 @@ export function createScene(id = 'scene', label = 'Scene', defaults = {}) {
         },
     };
 }
-
-export default createScene();
-
-// Tests with local pictures (public/scene-test, not in git); to be replaced by the user's own uploads.
-export const tests = [[1, 'green city'], [3, 'red building'], [6, 'white pole'], [8, 'dress'], [9, 'wine']].map(([n, name]) => createScene(`scene-${n}`, `Scene: ${name}`, { image: `/scene-test/p${n}.jpg` }));

@@ -4,10 +4,12 @@ import { visualizers } from './visualizers';
 import { layout, MAX_PANELS } from './layout';
 import builtinThemes from './themes.json';
 import { validateTheme } from './themes';
+import scenesPage from './scenes-page';
 import themeStudio from './themes-page';
 import { uploadsStore } from './uploads';
 import storage from './storage';
 import { send } from './http';
+import { scenesStore } from './scenes';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
 import dense from './dense/component';
 import { uiStore } from './dense/ui';
@@ -74,6 +76,7 @@ function readColors() {
 
 Alpine.data('dense', dense);
 Alpine.data('themeStudio', themeStudio);
+Alpine.data('scenesPage', scenesPage);
 Alpine.data('storage', storage);
 Alpine.store('playlists', playlistStore);
 Alpine.data('playlistPicker', playlistPicker);
@@ -121,6 +124,7 @@ Alpine.store('dialog', {
 });
 
 /** The user's interface choices (info level, meter tint). */
+Alpine.store('scenes', scenesStore(window.magnetite?.scenes, () => Alpine.store('player')));
 Alpine.store('uploads', uploadsStore(window.magnetite?.uploads ?? null));
 Alpine.store('ui', uiStore(window.magnetite?.ui, !!window.magnetite?.signedIn));
 
@@ -642,6 +646,7 @@ Alpine.store('player', {
         return `${tracks.length} ${tracks.length === 1 ? 'track' : 'tracks'} · ${time}`;
     },
 
+    visualizerObj: (id) => visualizers[id],
     visualizerList: Object.values(visualizers).map(({ id, label }) => ({ id, label })),
 });
 
