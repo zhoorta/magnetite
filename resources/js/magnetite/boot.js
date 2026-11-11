@@ -564,7 +564,7 @@ Alpine.store('player', {
                 g.rect(x, y, cw, ch);
                 g.clip();
                 g.translate(x, y);
-                visualizers[panels[i].id].draw(g, sample, { w: cw, h: ch, colors, params: panels[i].params, dt });
+                visualizers[panels[i].id].draw(g, sample, { w: cw, h: ch, colors, params: panels[i].params, dt, progress: this.duration ? this.time / this.duration : 0, track: this.current });
                 g.restore();
             }
 
