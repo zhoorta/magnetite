@@ -211,6 +211,10 @@ describe('meters', function () {
         $this->getJson('/api/v1/me', bearer($this->alice))->assertJson(['ui' => ['info' => 2]]);
         $this->putJson('/api/v1/settings/ui', ['info' => 1], bearer($this->alice))->assertOk();
         $this->getJson('/api/v1/me', bearer($this->alice))->assertJson(['ui' => ['info' => 1]]);
+
+        // the flat library is kept the same way, and only the keys sent change
+        $this->putJson('/api/v1/settings/ui', ['flat' => true], bearer($this->alice))->assertOk();
+        $this->getJson('/api/v1/me', bearer($this->alice))->assertJson(['ui' => ['info' => 1, 'flat' => true]]);
     });
 
     it('refuses more than four and duplicates', function () {

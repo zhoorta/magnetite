@@ -32,8 +32,18 @@ class MagnetiteApp : Application(), SingletonImageLoader.Factory {
     var info by mutableIntStateOf(2)
         private set
 
+    /** The library as one list of albums, without folders (`users.ui.flat`), like the web's toggle. */
+    var flat by androidx.compose.runtime.mutableStateOf(false)
+        private set
+
+    fun toggleFlat() {
+        flat = !flat
+        val on = flat
+        scope.launch { runCatching { api.saveUi(flat = on) } }
+    }
+
     suspend fun loadMe() {
-        runCatching { api.me() }.onSuccess { meters.clear(); meters.addAll(it.meters); info = it.ui.info }
+        runCatching { api.me() }.onSuccess { meters.clear(); meters.addAll(it.meters); info = it.ui.info; flat = it.ui.flat }
     }
 
     /** Off, DR, all, and round again (the web's `I`). */

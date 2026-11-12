@@ -104,9 +104,9 @@ data class PageMeta(@SerialName("current_page") val currentPage: Int, @SerialNam
 @Serializable
 data class Page<T>(val data: List<T>, val meta: PageMeta)
 
-/** The user's choices kept on the server: the info level (0 off, 1 DR, 2 DR and findings) and the meter tint. */
+/** The user's choices kept on the server: the info level (0 off, 1 DR, 2 DR and findings), the meter tint and the flat library (albums without folders). */
 @Serializable
-data class UiSettings(val info: Int = 2, val tint: Boolean = false)
+data class UiSettings(val info: Int = 2, val tint: Boolean = false, val flat: Boolean = false)
 
 @Serializable
 data class Me(val meters: List<String> = listOf("vu-wide"), val ui: UiSettings = UiSettings())

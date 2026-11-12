@@ -57,7 +57,7 @@ import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
+fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit, flat: Boolean = false, onToggleFlat: () -> Unit = {}) {
     val albums = remember { mutableStateListOf<Album>() }
     var page by remember { mutableStateOf(0) }
     var lastPage by remember { mutableStateOf(1) }
@@ -194,7 +194,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
             listOf<Pair<Int, Any>>(depth to f) +
                 if (f.id in expanded) tree(f.id, depth + 1) + albums.filter { it.folderId == f.id }.map { depth + 1 to it as Any } else emptyList()
         }
-    val rows = tree(null, 0) + albums.filter { it.folderId == null }.map { 0 to it as Any }
+    val rows = if (flat) albums.map { 0 to it as Any } else tree(null, 0) + albums.filter { it.folderId == null }.map { 0 to it as Any }
     fun rowKey(r: Pair<Int, Any>) = if (r.second is Folder) "f${(r.second as Folder).id}" else "a${(r.second as Album).id}"
 
     // Keys, for a hardware keyboard: the web's j k h l, Enter, / and the player's keys. The cursor shows once a key was used.
@@ -263,12 +263,13 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
     Scaffold(modifier = if (tv) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
         DenseBar("Library") {
             TransportButton(Icon.Search, "Search", onSearch)
-            TransportButton(Icon.NewFolder, "New folder", { dialog = FolderDialog.Create(null) })
             var menu by remember { mutableStateOf(false) }
             androidx.compose.foundation.layout.Box {
                 TransportButton(Icon.Menu, "Menu", { menu = true })
                 DropdownMenu(menu, { menu = false }) {
- DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
+                    DropdownMenuItem(text = { Text("View: " + if (flat) "flat" else "folders") }, onClick = { menu = false; onToggleFlat() })
+                    DropdownMenuItem(text = { Text("New folder") }, onClick = { menu = false; dialog = FolderDialog.Create(null) })
+                    DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
                     DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[info]) }, onClick = { onCycleInfo() })
                     DropdownMenuItem(text = { Text("Meters") }, onClick = { menu = false; onPickMeters() })
                     DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })

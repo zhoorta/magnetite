@@ -123,8 +123,9 @@ class Api(private val session: Session) {
     /** The user's meter list (`users.meters`) and interface choices (`users.ui`). */
     suspend fun me(): Me = json.decodeFromString(call(get("/me")))
 
-    suspend fun saveUi(info: Int) {
-        call(send("/settings/ui", "PUT", buildJsonObject { put("info", info) }))
+    /** Only what is given changes (the server merges). */
+    suspend fun saveUi(info: Int? = null, flat: Boolean? = null) {
+        call(send("/settings/ui", "PUT", buildJsonObject { if (info != null) put("info", info); if (flat != null) put("flat", flat) }))
     }
 
     suspend fun saveMeters(ids: List<String>) {

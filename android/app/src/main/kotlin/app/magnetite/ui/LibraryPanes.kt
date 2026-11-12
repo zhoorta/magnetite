@@ -33,6 +33,7 @@ fun LibraryPanes(
             focus = libFocus,
             onSwitchPane = if (wide) ({ if (selected != null) runCatching { albumFocus.requestFocus() } }) else null,
             onPickMeters = onPickMeters, onPickTheme = onPickTheme, onSignOut = onSignOut,
+            flat = app.flat, onToggleFlat = app::toggleFlat,
         )
     }
     if (!wide) {

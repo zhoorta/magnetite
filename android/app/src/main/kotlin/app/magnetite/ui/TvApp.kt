@@ -2,6 +2,11 @@ package app.magnetite.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -54,6 +59,7 @@ fun TvApp(app: MagnetiteApp) {
     var detail by remember { mutableStateOf<TvDetail?>(null) }
     var selected by remember { mutableStateOf<Int?>(null) }
     var showNowPlaying by remember { mutableStateOf(false) }
+    var fullScreen by remember { mutableStateOf(false) }
     var pickMeters by remember { mutableStateOf(false) }
     LaunchedEffect(signedIn) { if (signedIn) app.loadMe() }
     LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
@@ -77,7 +83,8 @@ fun TvApp(app: MagnetiteApp) {
     val widthPx = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * d0.density
     CompositionLocalProvider(LocalDensity provides Density(widthPx / TV_WIDTH_DP, d0.fontScale)) {
         if (pickMeters) MeterPicker(app.meters.toList(), { app.setMeters(it) }, { pickMeters = false })
-        if (showNowPlaying) BackHandler { showNowPlaying = false }
+        if (showNowPlaying) BackHandler { showNowPlaying = false; fullScreen = false }
+        if (fullScreen) BackHandler { fullScreen = false }
 
         if (!signedIn) {
             TvLoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
@@ -88,6 +95,20 @@ fun TvApp(app: MagnetiteApp) {
             app.player.signOut()
             scope.launch { app.api.signOut() }
             signedIn = false
+        }
+
+        // Full screen: only the meters, nothing else; any key brings the rest back.
+        if (showNowPlaying && fullScreen) {
+            val fsFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { fsFocus.requestFocus() } }
+            Box(
+                Modifier.fillMaxSize().padding(24.dp).focusRequester(fsFocus).focusable().onPreviewKeyEvent { e ->
+                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) { fullScreen = false; true } else false
+                },
+            ) {
+                NowPlayingScreen(app.player, app.meters, { pickMeters = true }, onClose = { fullScreen = false }, onOpenSource = {}, fullScreen = true)
+            }
+            return@CompositionLocalProvider
         }
 
         // Back from a page opened over a tab goes to that tab; from the tab itself, the system leaves the app.
@@ -123,6 +144,7 @@ fun TvApp(app: MagnetiteApp) {
                     when {
                         showNowPlaying -> NowPlayingScreen(
                             app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false },
+                            fullScreen = false, onFullScreen = { fullScreen = true },
                             onOpenSource = {
                                 when (val o = app.player.origin()) {
                                     is PlaySource.Album -> detail = TvDetail.Album(o.id)

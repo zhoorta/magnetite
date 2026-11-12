@@ -2,6 +2,7 @@ package app.magnetite.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.verticalScroll
@@ -45,8 +46,14 @@ private fun clock(ms: Long): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NowPlayingScreen(player: PlayerController, meters: List<String>, onPickMeters: () -> Unit, onClose: () -> Unit, onOpenSource: () -> Unit) {
+fun NowPlayingScreen(
+    player: PlayerController, meters: List<String>, onPickMeters: () -> Unit, onClose: () -> Unit, onOpenSource: () -> Unit,
+    fullScreen: Boolean = false, onFullScreen: (() -> Unit)? = null,
+) {
     BackHandler(onBack = onClose)
+    // On a TV the page opens with the focus on "Full screen", the one thing to do here with a remote
+    val fullFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(onFullScreen != null) { if (onFullScreen != null) { delay(200); runCatching { fullFocus.requestFocus() } } }
     val scroll = androidx.compose.foundation.rememberScrollState()
 
     // While the finger is on the slider, show its value instead of the playing position.
@@ -80,7 +87,14 @@ fun NowPlayingScreen(player: PlayerController, meters: List<String>, onPickMeter
     }
 
     Scaffold(modifier = closeSwipe, topBar = {
-        TopAppBar(title = { Text("Now playing") }, navigationIcon = { TransportButton(Icon.Back, "Back", onClose) }, actions = { TransportButton(Icon.Meters, "Meters", onPickMeters) })
+        // In full screen (a TV) nothing is left but the meters.
+        if (!fullScreen) TopAppBar(
+            title = { Text("Now playing") }, navigationIcon = { TransportButton(Icon.Back, "Back", onClose) },
+            actions = {
+                onFullScreen?.let { Text("Full screen", Modifier.focusRequester(fullFocus).tvFocus().clickable(onClick = it).padding(horizontal = 12.dp, vertical = 8.dp), color = MaterialTheme.colorScheme.primary) }
+                TransportButton(Icon.Meters, "Meters", onPickMeters)
+            },
+        )
     }) { padding ->
         if (meters.isNotEmpty()) {
             // With meters chosen this page is the meters, big; the mini player below keeps the title and controls.
