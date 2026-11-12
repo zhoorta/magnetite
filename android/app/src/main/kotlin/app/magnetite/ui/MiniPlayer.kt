@@ -68,7 +68,7 @@ fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMe
                 }
             }
             Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).clickable(onClick = onOpen)) {
+                Column(Modifier.weight(1f).tvFocus().clickable(onClick = onOpen)) {
                     Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                     player.artist?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
                     player.current?.let { t ->

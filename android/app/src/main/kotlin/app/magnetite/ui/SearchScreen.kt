@@ -82,7 +82,7 @@ fun SearchScreen(api: Api, player: PlayerController, info: Int, onOpenAlbum: (In
                     Text("/ ", color = MaterialTheme.colorScheme.primary)
                     Box(Modifier.weight(1f)) {
                         BasicTextField(
-                            text, { text = it }, Modifier.fillMaxWidth().focusRequester(focus), singleLine = true,
+                            text, { text = it }, Modifier.fillMaxWidth().dpadLeavesField().focusRequester(focus), singleLine = true,
                             textStyle = MaterialTheme.typography.bodyLarge.copy(color = Palette.Text),
                             cursorBrush = SolidColor(Palette.Accent),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = {}),
@@ -95,7 +95,7 @@ fun SearchScreen(api: Api, player: PlayerController, info: Int, onOpenAlbum: (In
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
                     note?.let { item { Text(it, Modifier.padding(horizontal = 10.dp), color = Palette.Muted) } }
                     items(albums, key = { "a${it.id}" }) { a ->
-                        Row(Modifier.fillMaxWidth().clickable { onOpenAlbum(a.id) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().tvFocus().clickable { onOpenAlbum(a.id) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("▸ ", color = Palette.Muted)
                             Text(nameAndRest(a.title, a.displayArtist ?: a.artist, player.albumId == a.id), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, inlineContent = PlayInline)
                             if (info >= 1) Info.dr(a.dr)?.let { Text(it, Modifier.padding(start = 8.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
@@ -106,7 +106,7 @@ fun SearchScreen(api: Api, player: PlayerController, info: Int, onOpenAlbum: (In
                     }
                     if (more) item {
                         Text(
-                            "more…", Modifier.fillMaxWidth().clickable {
+                            "more…", Modifier.fillMaxWidth().tvFocus().clickable {
                                 scope.launch {
                                     try {
                                         val r = api.search(text.trim(), page + 1)

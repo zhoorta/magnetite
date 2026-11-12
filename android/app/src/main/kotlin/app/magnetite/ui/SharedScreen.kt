@@ -56,7 +56,7 @@ fun SharedScreen(api: Api, player: PlayerController, onOpenAlbum: (Int) -> Unit,
             LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)) {
                 if (s.albums.isNotEmpty()) item { Heading("Albums") }
                 items(s.albums, key = { "a${it.id}" }) { album ->
-                    Row(Modifier.fillMaxWidth().clickable { onOpenAlbum(album.id) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().tvFocus().clickable { onOpenAlbum(album.id) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Text(
                             nameAndRest(album.title, listOfNotNull(album.displayArtist ?: album.artist, album.sharedBy?.let { "from $it" }).joinToString(" · ").ifEmpty { null }),
                             Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,

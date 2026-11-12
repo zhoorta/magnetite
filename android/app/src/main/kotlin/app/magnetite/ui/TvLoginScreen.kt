@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -68,15 +70,16 @@ fun TvLoginScreen(api: Api, lastServer: String, lastUsername: String, onSignedIn
         error = "The code expired. Get a new one."
     }
 
+    androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Column(
-        Modifier.fillMaxSize().padding(48.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+        Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 48.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Logo(Modifier.padding(bottom = 8.dp))
         if (shown == null) {
+            Logo(Modifier.width(200.dp).padding(bottom = 8.dp))
             OutlinedTextField(
-                server, { server = it }, Modifier.widthIn(max = 480.dp).fillMaxWidth(), singleLine = true,
+                server, { server = it }, Modifier.widthIn(max = 480.dp).fillMaxWidth().dpadLeavesField(), singleLine = true,
                 label = { Text("Server (https://…)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             )
@@ -95,9 +98,10 @@ fun TvLoginScreen(api: Api, lastServer: String, lastUsername: String, onSignedIn
             Text("On your phone or computer, open", style = MaterialTheme.typography.titleMedium)
             Text(shown.verificationUrl, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
             Text("and enter", style = MaterialTheme.typography.titleMedium)
-            Text(shown.userCode, fontSize = 64.sp, fontFamily = FontFamily.Monospace, letterSpacing = 6.sp)
+            Text(shown.userCode, fontSize = 56.sp, fontFamily = FontFamily.Monospace, letterSpacing = 6.sp)
             Text("Waiting for you to approve…", style = MaterialTheme.typography.bodyMedium)
             TextButton({ code = null }) { Text("Cancel") }
         }
+    }
     }
 }

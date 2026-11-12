@@ -27,6 +27,11 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PullRefresh(padding: PaddingValues, reload: suspend () -> Unit, content: @Composable () -> Unit) {
+    // A TV has no touch to pull with, and the indicator would sit on the list.
+    if (LocalTv.current) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().padding(padding)) { content() }
+        return
+    }
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     PullToRefreshBox(

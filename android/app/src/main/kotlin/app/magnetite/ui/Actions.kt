@@ -161,7 +161,7 @@ private fun ActionList(title: String, items: List<Item>, onClose: () -> Unit) {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 items.forEach { i ->
                     Text(
-                        i.label, Modifier.fillMaxWidth().clickable(onClick = i.run).padding(vertical = 11.dp),
+                        i.label, Modifier.fillMaxWidth().tvFocus().clickable(onClick = i.run).padding(vertical = 11.dp),
                         color = if (i.danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     )
                 }

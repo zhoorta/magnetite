@@ -23,7 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.launch
 import app.magnetite.ui.AlbumScreen
-import app.magnetite.ui.LibraryScreen
+import app.magnetite.ui.LibraryPanes
+import app.magnetite.ui.LocalTv
 import app.magnetite.ui.LoginScreen
 import app.magnetite.ui.MagnetiteTheme
 import app.magnetite.ui.MeterPicker
@@ -65,8 +66,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MagnetiteTheme {
-                if (isTelevision(this@MainActivity)) {
-                    TvApp(app)
+                val tv = isTelevision(this@MainActivity)
+                if (tv) {
+                    androidx.compose.runtime.CompositionLocalProvider(LocalTv provides true) { TvApp(app) }
                     return@MagnetiteTheme
                 }
                 var signedIn by remember { mutableStateOf(app.session.signedIn) }
@@ -76,8 +78,6 @@ class MainActivity : ComponentActivity() {
                 // On a wide screen (a tablet, an unfolded phone, a window) the library and the open album sit side by side.
                 val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 720
                 var selected by remember { mutableStateOf<Int?>(null) }
-                val libFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-                val albumFocus = remember { androidx.compose.ui.focus.FocusRequester() }
                 var pickMeters by remember { mutableStateOf(false) }
                 var pickTheme by remember { mutableStateOf(false) }
                 if (pickTheme) ThemePicker({ app.setLook(it) }, { pickTheme = false })
@@ -108,44 +108,18 @@ class MainActivity : ComponentActivity() {
                             d is Detail.Edit -> EditScreen(app.api, d.id, onBack = { if (wide) { selected = d.id; detail = null } else detail = Detail.Album(d.id) }, onSaved = { if (wide) { selected = d.id; detail = null } else detail = Detail.Album(d.id) })
                             d is Detail.Truth -> TruthScreen(app.api, app.player, onBack = { detail = null })
                             tab == Tab.Library || (d is Detail.Album && wide) -> {
-                                val library: @androidx.compose.runtime.Composable () -> Unit = {
-                                    LibraryScreen(
-                                        app.api, app.player, app.info, app::cycleInfo,
-                                        onOpen = { if (wide) selected = it else detail = Detail.Album(it) },
-                                        onSearch = { detail = Detail.Search },
-                                        onTruth = { detail = Detail.Truth },
-                                        onEdit = { detail = Detail.Edit(it) },
-                                        focus = libFocus,
-                                        onSwitchPane = if (wide) ({ if (selected != null) runCatching { albumFocus.requestFocus() } }) else null,
-                                        onPickMeters = { pickMeters = true },
-                                        onPickTheme = { pickTheme = true },
-                                        onSignOut = {
-                                            // The player forgets the saved queue while the user name is still known.
-                                            app.player.signOut()
-                                            scope.launch { app.api.signOut() }
-                                            signedIn = false
-                                        },
-                                    )
-                                }
-                                if (!wide) {
-                                    library()
-                                } else {
-                                    androidx.compose.runtime.LaunchedEffect(d) { if (d is Detail.Album) { selected = d.id; detail = null } }
-                                    Row(Modifier.fillMaxSize()) {
-                                        Box(Modifier.weight(1f).fillMaxHeight()) { library() }
-                                        Box(Modifier.weight(1.2f).fillMaxHeight()) {
-                                            val id = selected
-                                            if (id == null) {
-                                                Text("Pick an album", Modifier.align(Alignment.Center), color = Palette.Muted)
-                                            } else {
-                                                androidx.compose.runtime.key(id) {
-                                                    AlbumScreen(app.api, app.player, app.info, id, onBack = { selected = null }, onEdit = { detail = Detail.Edit(it) }, embedded = true,
-                                                        focus = albumFocus, onSwitchPane = { runCatching { libFocus.requestFocus() } })
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                androidx.compose.runtime.LaunchedEffect(d) { if (wide && d is Detail.Album) { selected = d.id; detail = null } }
+                                LibraryPanes(
+                                    app, wide, selected, { selected = it }, { detail = Detail.Album(it) },
+                                    onSearch = { detail = Detail.Search }, onTruth = { detail = Detail.Truth }, onEdit = { detail = Detail.Edit(it) },
+                                    onPickMeters = { pickMeters = true }, onPickTheme = { pickTheme = true },
+                                    onSignOut = {
+                                        // The player forgets the saved queue while the user name is still known.
+                                        app.player.signOut()
+                                        scope.launch { app.api.signOut() }
+                                        signedIn = false
+                                    },
+                                )
                             }
                             tab == Tab.Shared -> SharedScreen(
                                 app.api, app.player,

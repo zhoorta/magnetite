@@ -25,7 +25,7 @@ enum class Icon { Previous, Next, Play, Pause, NewFolder, Menu, Back, Meters, Se
 @Composable
 fun TransportButton(icon: Icon, description: String, onClick: () -> Unit, size: Dp = 44.dp, color: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)) {
     Box(
-        Modifier.size(size).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = description },
+        Modifier.size(size).tvFocus().clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(size * 0.4f)) { glyph(icon, color) }

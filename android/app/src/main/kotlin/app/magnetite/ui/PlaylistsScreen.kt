@@ -27,7 +27,7 @@ import kotlinx.coroutines.CancellationException
 @Composable
 fun PlaylistRow(p: PlaylistSummary, onClick: () -> Unit) {
     androidx.compose.foundation.layout.Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+        Modifier.fillMaxWidth().tvFocus().clickable(onClick = onClick).padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         Text(

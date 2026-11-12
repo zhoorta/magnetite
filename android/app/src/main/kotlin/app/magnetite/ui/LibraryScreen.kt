@@ -160,7 +160,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
             text = {
                 Column {
                     if (d is FolderDialog.Delete) Text("Its albums and subfolders move up one level. No music is deleted.")
-                    else OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") })
+                    else OutlinedTextField(name, { name = it }, Modifier.dpadLeavesField(), singleLine = true, label = { Text("Name") })
                     problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
@@ -200,7 +200,11 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
     // Keys, for a hardware keyboard: the web's j k h l, Enter, / and the player's keys. The cursor shows once a key was used.
     var cursor by remember { mutableStateOf<String?>(null) }
     var keysUsed by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val tv = LocalTv.current
+    // A remote moves the focus from row to row by itself (every row is focusable), so the keyboard cursor is for phones and tablets.
+    androidx.compose.runtime.LaunchedEffect(Unit) { if (!tv) runCatching { focus.requestFocus() } }
+    val firstRow = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(rows.isNotEmpty()) { if (tv && rows.isNotEmpty()) runCatching { firstRow.requestFocus() } }
 
     fun moveCursor(d: Int) {
         if (rows.isEmpty()) return
@@ -249,7 +253,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
         handled
     }
 
-    Scaffold(modifier = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
+    Scaffold(modifier = if (tv) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
         DenseBar("Library") {
             TransportButton(Icon.Search, "Search", onSearch)
             TransportButton(Icon.NewFolder, "New folder", { dialog = FolderDialog.Create(null) })
@@ -273,7 +277,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                 if (r is Folder) {
                     val open = r.id in expanded
                     Row(
-                        Modifier.fillMaxWidth().background(if (hover == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else if (keysUsed && cursor == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent).combinedClickable(
+                        Modifier.fillMaxWidth().background(if (hover == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else if (keysUsed && cursor == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent).tvFocus().then(if (tv && "f${r.id}" == rowKey(rows.first())) Modifier.focusRequester(firstRow) else Modifier).combinedClickable(
                             onClick = { if (open) expanded.remove(r.id) else expanded.add(r.id) },
                             onLongClick = { menuFor = r.id },
                         )
@@ -325,7 +329,13 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                                     }
                                 },
                             )
-                            .clickable { if (!drag.busy()) onOpen(album.id) }
+                            .tvFocus()
+                            .then(if (tv && key == rowKey(rows.first())) Modifier.focusRequester(firstRow) else Modifier)
+                            .then(
+                                // a remote's long press (hold the centre button) opens the menu; a finger's long press is the drag's
+                                if (tv) Modifier.combinedClickable(onClick = { onOpen(album.id) }, onLongClick = { actions = Target.OfAlbum(album) })
+                                else Modifier.clickable { if (!drag.busy()) onOpen(album.id) },
+                            )
                             .padding(start = 8.dp + 16.dp * depth, end = 10.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

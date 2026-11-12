@@ -103,7 +103,8 @@ fun TruthScreen(api: Api, player: PlayerController, onBack: () -> Unit) {
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val tv = LocalTv.current
+    LaunchedEffect(Unit) { if (!tv) runCatching { focus.requestFocus() } }
     val onKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = onKey@{ e ->
         if (!e.isPlain()) return@onKey false
         fun move(to: Int) {
@@ -125,14 +126,14 @@ fun TruthScreen(api: Api, player: PlayerController, onBack: () -> Unit) {
         }
     }
 
-    Scaffold(modifier = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
+    Scaffold(modifier = if (tv) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
         DenseBar("Truth", onBack) {
             Text(
-                "sort: $sort", Modifier.clickable { sort = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.size] }.padding(horizontal = 10.dp, vertical = 12.dp),
+                "sort: $sort", Modifier.tvFocus().clickable { sort = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.size] }.padding(horizontal = 10.dp, vertical = 12.dp),
                 color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
             )
             Text(
-                if (only) "[x] only !" else "[ ] only !", Modifier.clickable { only = !only }.padding(horizontal = 10.dp, vertical = 12.dp),
+                if (only) "[x] only !" else "[ ] only !", Modifier.tvFocus().clickable { only = !only }.padding(horizontal = 10.dp, vertical = 12.dp),
                 color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge,
             )
         }
@@ -143,7 +144,7 @@ fun TruthScreen(api: Api, player: PlayerController, onBack: () -> Unit) {
                 if (loaded && rows.isEmpty()) item { Text(if (only) "No findings." else "Nothing analysed yet.", Modifier.padding(horizontal = 10.dp), color = Palette.Muted) }
                 itemsIndexed(rows, key = { _, t -> t.id }) { i, t ->
                     val playing = player.currentId == t.id.toString()
-                    Column(Modifier.fillMaxWidth().background(if (cursor == i) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent).clickable { player.play(rows, t) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
+                    Column(Modifier.fillMaxWidth().tvFocus().background(if (cursor == i) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent).clickable { player.play(rows, t) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 nameAndRest(t.title, t.artist, playing, if (playing) Palette.Accent else Palette.Text), Modifier.weight(1f),

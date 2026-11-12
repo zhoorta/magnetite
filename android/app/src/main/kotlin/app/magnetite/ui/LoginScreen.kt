@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -35,18 +37,18 @@ fun LoginScreen(api: Api, lastServer: String, lastUsername: String, onSignedIn: 
 
     Scaffold { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(24.dp),
+            Modifier.fillMaxSize().padding(padding).padding(24.dp).then(if (LocalTv.current) Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()) else Modifier),
             verticalArrangement = Arrangement.spacedBy(12.dp, androidx.compose.ui.Alignment.CenterVertically),
         ) {
-            Logo(Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).padding(bottom = 8.dp))
+            Logo(Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally).then(if (LocalTv.current) Modifier.width(140.dp) else Modifier).padding(bottom = 8.dp))
             OutlinedTextField(
-                server, { server = it }, Modifier.fillMaxWidth(), singleLine = true,
+                server, { server = it }, Modifier.fillMaxWidth().dpadLeavesField(), singleLine = true,
                 label = { Text("Server (https://…)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             )
-            OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Username") })
+            OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().dpadLeavesField(), singleLine = true, label = { Text("Username") })
             OutlinedTextField(
-                password, { password = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Password") },
+                password, { password = it }, Modifier.fillMaxWidth().dpadLeavesField(), singleLine = true, label = { Text("Password") },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )

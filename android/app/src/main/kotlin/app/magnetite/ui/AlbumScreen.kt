@@ -78,7 +78,7 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
     ActionHost(actions, api, player, emptyList(), onClose = { actions = null }, onChanged = { scope.launch { load() } }, onEdit = onEdit)
     androidx.activity.compose.BackHandler(onBack = onBack)
 
-    Scaffold(modifier = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = { DenseBar(album?.title ?: "", if (embedded) null else onBack) }) { padding ->
+    Scaffold(modifier = if (LocalTv.current) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = { DenseBar(album?.title ?: "", if (embedded) null else onBack) }) { padding ->
         val a = album
         PullRefresh(padding, ::load) {
         if (a == null) {

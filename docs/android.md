@@ -143,7 +143,7 @@ The app is a media app for Android Auto: `PlaybackService` is a `MediaLibrarySer
 - `MainActivity.preferHighRefreshRate()` asks for the fastest display mode at the current resolution (adaptive-refresh phones otherwise drop for touch-free animation).
 - Draw costs (2026-10-10): the goniometer draws points (`drawPoints`) instead of a 1024-segment stroked path (it was ~3x slower than the other meters on the emulator); the scope draws one point per ~3 px; the magic eye uses concentric translucent discs instead of radial gradients; the spectrogram has 400 columns and slides by the fractional column; LUFS numbers are formatted without `String.format`.
 
-## Android TV (plan 2026-10-12; steps 1 and 4 built 2026-10-29, not yet run on a TV or emulator)
+## Android TV (plan 2026-10-12; built and run on a TV emulator 2026-11-12)
 
 Same Gradle project and APK as the phone app (Compose + Media3 carry over); the data layer, `PlaybackService`, meters, loudness/spectrum code and themes are reused unchanged.
 
@@ -164,13 +164,19 @@ Testing on a real box:
 
 Built 2026-10-29 (compiles; not yet run on a TV): manifest entries and banner; `isTelevision()` and `tvFocus()` in `ui/Tv.kt`; `ui/TvApp.kt` (side rail, album grid, reuses the phone's detail, player and picker screens); `ui/TvLoginScreen.kt`. Still open: focus fixes after a run, a real TV Now Playing layout, step 5, a debug `applicationIdSuffix`.
 
+### Run on an emulator (2026-11-12)
+- Emulator: AVD `TV_1080p_API_36`, 1920x1080 at 320 dpi (so 960x540 dp), image `system-images/android-36/android-tv/arm64-v8a`. `sdkmanager` and `avdmanager` hang here, so the image zip was fetched with curl (`https://dl.google.com/android/repository/sys-img/android-tv/arm64-v8a-36_r04.zip`, sha1 `ceb1dfcc6a28dbd9dbade780428cf7bafb1c65ef`), unpacked by hand and the AVD written as `~/.android/avd/TV_1080p_API_36.avd/config.ini` (`disk.dataPartition.size=1G`: the emulator wants about seven times that free). Start with `emulator -avd TV_1080p_API_36 -no-audio -no-snapshot`; keys with `adb shell input keyevent KEYCODE_DPAD_DOWN` (`DPAD_CENTER`, `BACK`); the server on the Mac is `http://10.0.2.2:PORT`.
+- The TV shell (`ui/TvApp.kt`) is the tablet's two panes driven by the remote: a side rail (Library, Shared, Playlists, Meters, Sign out), `LibraryPanes` (the library on the left, the open album on the right), a one-line player strip at the bottom whose title opens Now Playing (the meters are big there, not in the strip), text a fifth larger and 48 x 24 dp margins for overscan. `LocalTv` (`ui/Tv.kt`) is set in `MainActivity`; on a TV the screens turn their keyboard cursor and pull-to-refresh off and `tvFocus()` on, every row, button and menu entry is focusable and shows a focus mark, and holding the centre button on an album or track opens the long-press menu.
+- Text fields keep the up and down keys for their cursor, which traps a remote: `dpadLeavesField()` turns them into focus moves (sign-in, search, edit table, folder names).
+- Checked: pairing-code sign-in end to end (code on the TV, approved server side), library, open an album, move to the tracks and play one, the player strip, Now Playing, Back, and the rail with Left. Not checked: Shared and Playlists, search and the edit table with a remote, the on-screen keyboard for the server address on a real box, performance of the meters on a cheap box (step 5), and the seek bar and sliders (no D-pad control yet).
+
 ### Pairing-code sign-in (built 2026-10-29)
 - `POST /api/v1/device-code` (`device_name`; throttle 10/min) answers `device_code` (secret, stays on the TV), `user_code` (`ABCD-EFGH`, no look-alike characters), `verification_url` (`/device`), `expires_in` 600, `interval` 5.
 - `POST /api/v1/device-token` (`device_code`; throttle 30/min): 400 `authorization_pending` until approved, 400 `expired_token` if unknown, expired or already collected, else 201 with the same `{token, user}` as `POST /token` (ability `*`). The token is handed out once.
 - Web `GET/POST /device` (signed in; the POST is throttled 10/min): the person types the code; unknown or used codes fail validation. A code can be approved once.
 - State is in the cache only (`App\Support\DeviceGrants`, 10 minutes); only the SHA-256 of `device_code` is stored. Tests in `ApiTest` ("device code"). The TV still types the server address once; username and password remain as a fallback button.
 
-## Dense look (started 2026-11-12, branch `android-dense`, uncommitted)
+## Dense look (started 2026-11-12, branch `android-dense`)
 
 The library follows the web's dense view (`docs/dense-library.md`), phone first.
 

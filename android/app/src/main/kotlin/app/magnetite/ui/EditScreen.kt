@@ -81,7 +81,7 @@ fun EditScreen(api: Api, albumId: Int, onBack: () -> Unit, onSaved: () -> Unit) 
 
     Scaffold(topBar = {
         DenseBar("Edit", onBack) {
-            Text("save", Modifier.clickable(enabled = loaded && !saving) { save() }.padding(horizontal = 14.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+            Text("save", Modifier.tvFocus().clickable(enabled = loaded && !saving) { save() }.padding(horizontal = 14.dp, vertical = 12.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
         }
     }) { padding ->
         Pane("Album", Modifier.fillMaxSize().padding(padding)) {
