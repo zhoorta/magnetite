@@ -101,6 +101,19 @@ fun NowPlayingScreen(
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 8.dp)) {
                 val gap = 8.dp
                 val room = this.maxHeight
+                if (fullScreen && meters.size > 1) {
+                    // Full screen: two meters to a row (four make 2 x 2) instead of one above the other; an odd last one takes the whole row.
+                    val rows = meters.chunked(2)
+                    val cellH = (room - gap * (rows.size - 1)) / rows.size
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
+                        rows.forEach { row ->
+                            Row(Modifier.fillMaxWidth().height(cellH), horizontalArrangement = Arrangement.spacedBy(gap)) {
+                                row.forEach { id -> MeterPanel(Modifier.weight(1f).fillMaxSize()) { MeterView(id, player.isPlaying, fill = true) } }
+                            }
+                        }
+                    }
+                    return@BoxWithConstraints
+                }
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap, Alignment.CenterVertically)) {
                     meters.forEach { id ->
                         // Fill the room, but not past what the meter can use: a pair of wide meters in a full screen cell would float in empty space.
