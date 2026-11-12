@@ -31,7 +31,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}) {
+fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}, embedded: Boolean = false) {
     var album by remember { mutableStateOf<Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -45,7 +45,7 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
     ActionHost(actions, api, player, emptyList(), onClose = { actions = null }, onChanged = { scope.launch { load() } }, onEdit = onEdit)
     androidx.activity.compose.BackHandler(onBack = onBack)
 
-    Scaffold(topBar = { DenseBar(album?.title ?: "", onBack) }) { padding ->
+    Scaffold(topBar = { DenseBar(album?.title ?: "", if (embedded) null else onBack) }) { padding ->
         val a = album
         PullRefresh(padding, ::load) {
         if (a == null) {

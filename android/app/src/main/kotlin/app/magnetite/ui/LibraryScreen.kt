@@ -1,6 +1,15 @@
 package app.magnetite.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
@@ -179,7 +188,73 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
         return ids
     }
 
-    Scaffold(topBar = {
+    /** The rows as shown: folders (open ones with their contents) and the albums at the top level, with their depth. */
+    fun tree(parent: Int?, depth: Int): List<Pair<Int, Any>> =
+        folders.filter { it.parentId == parent }.flatMap { f ->
+            listOf<Pair<Int, Any>>(depth to f) +
+                if (f.id in expanded) tree(f.id, depth + 1) + albums.filter { it.folderId == f.id }.map { depth + 1 to it as Any } else emptyList()
+        }
+    val rows = tree(null, 0) + albums.filter { it.folderId == null }.map { 0 to it as Any }
+    fun rowKey(r: Pair<Int, Any>) = if (r.second is Folder) "f${(r.second as Folder).id}" else "a${(r.second as Album).id}"
+
+    // Keys, for a hardware keyboard: the web's j k h l, Enter, / and the player's keys. The cursor shows once a key was used.
+    var cursor by remember { mutableStateOf<String?>(null) }
+    var keysUsed by remember { mutableStateOf(false) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+
+    fun moveCursor(d: Int) {
+        if (rows.isEmpty()) return
+        val i = rows.indexOfFirst { rowKey(it) == cursor }
+        val n = (if (i < 0) (if (d > 0) 0 else rows.lastIndex) else i + d).coerceIn(0, rows.lastIndex)
+        cursor = rowKey(rows[n])
+        val shown = list.layoutInfo.visibleItemsInfo
+        if (shown.isEmpty() || n <= shown.first().index || n >= shown.last().index) scope.launch { list.animateScrollToItem((n - 2).coerceAtLeast(0)) }
+    }
+    fun jump(last: Boolean) { if (rows.isNotEmpty()) { cursor = rowKey(rows[if (last) rows.lastIndex else 0]); scope.launch { list.scrollToItem(if (last) rows.lastIndex else 0) } } }
+    fun current() = rows.firstOrNull { rowKey(it) == cursor }?.second
+    fun openCurrent() {
+        when (val c = current()) {
+            is Folder -> if (c.id in expanded) expanded.remove(c.id) else expanded.add(c.id)
+            is Album -> onOpen(c.id)
+        }
+    }
+    fun right() {
+        when (val c = current()) {
+            is Folder -> if (c.id !in expanded) expanded.add(c.id)
+            is Album -> onOpen(c.id)
+        }
+    }
+    fun left() {
+        when (val c = current()) {
+            is Folder -> if (c.id in expanded) expanded.remove(c.id) else c.parentId?.let { cursor = "f$it" }
+            is Album -> c.folderId?.let { cursor = "f$it" }
+        }
+    }
+    val onKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = onKey@{ e ->
+        if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || e.isCtrlPressed || e.isAltPressed || e.isMetaPressed) return@onKey false
+        val k = androidx.compose.ui.input.key.Key
+        val handled = when (e.key) {
+            k.J, k.DirectionDown -> { moveCursor(1); true }
+            k.K, k.DirectionUp -> { moveCursor(-1); true }
+            k.L, k.DirectionRight -> { right(); true }
+            k.H, k.DirectionLeft -> { left(); true }
+            k.Enter, k.NumPadEnter -> { openCurrent(); true }
+            k.G -> { jump(e.isShiftPressed); true }
+            k.Slash -> { onSearch(); true }
+            k.I -> if (e.isShiftPressed) { onCycleInfo(); true } else false
+            k.Spacebar -> { player.toggle(); true }
+            k.N -> if (!e.isShiftPressed) { player.next(); true } else false
+            k.P -> if (!e.isShiftPressed) { player.previous(); true } else false
+            k.Comma -> { player.seekTo((player.positionMs - 10_000).coerceAtLeast(0)); true }
+            k.Period -> { player.seekTo(player.positionMs + 10_000); true }
+            else -> false
+        }
+        if (handled) keysUsed = true
+        handled
+    }
+
+    Scaffold(modifier = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
         DenseBar("Library") {
             TransportButton(Icon.Search, "Search", onSearch)
             TransportButton(Icon.NewFolder, "New folder", { dialog = FolderDialog.Create(null) })
@@ -199,17 +274,11 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
         PullRefresh(padding, ::reload) {
         Pane("Library (${albums.size})", Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 8.dp)) {
-            fun tree(parent: Int?, depth: Int): List<Pair<Int, Any>> =
-                folders.filter { it.parentId == parent }.flatMap { f ->
-                    listOf<Pair<Int, Any>>(depth to f) +
-                        if (f.id in expanded) tree(f.id, depth + 1) + albums.filter { it.folderId == f.id }.map { depth + 1 to it as Any } else emptyList()
-                }
-            val rows = tree(null, 0) + albums.filter { it.folderId == null }.map { 0 to it as Any }
             items(rows, key = { (_, r) -> if (r is Folder) "f${r.id}" else "a${(r as Album).id}" }) { (depth, r) ->
                 if (r is Folder) {
                     val open = r.id in expanded
                     Row(
-                        Modifier.fillMaxWidth().background(if (hover == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent).combinedClickable(
+                        Modifier.fillMaxWidth().background(if (hover == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else if (keysUsed && cursor == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent).combinedClickable(
                             onClick = { if (open) expanded.remove(r.id) else expanded.add(r.id) },
                             onLongClick = { menuFor = r.id },
                         )
@@ -233,7 +302,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                     val key = "a${album.id}"
                     Row(
                         Modifier.fillMaxWidth()
-                            .background(if (hover == key) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent)
+                            .background(if (hover == key) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else if (keysUsed && cursor == key) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent)
                             .dragRow(
                                 drag, list, scope, key,
                                 onLongPress = { hover = null; actions = Target.OfAlbum(album) },
