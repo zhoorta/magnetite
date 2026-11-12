@@ -2,7 +2,9 @@ package app.magnetite.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -52,6 +54,7 @@ private sealed interface TvDetail {
  * by the remote's focus), and the player strip along the bottom (title, seek bar, the first meter, transport). The layout is drawn at a fixed 1200 dp width and the margins keep clear of the screen's edge (overscan).
  * Reuses the phone's screens; `LocalTv` turns their keyboard shortcuts off and their focus marks on.
  */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun TvApp(app: MagnetiteApp) {
     var signedIn by remember { mutableStateOf(app.session.signedIn) }
@@ -60,6 +63,7 @@ fun TvApp(app: MagnetiteApp) {
     var selected by remember { mutableStateOf<Int?>(null) }
     var showNowPlaying by remember { mutableStateOf(false) }
     var fullScreen by remember { mutableStateOf(false) }
+    val stripFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var pickMeters by remember { mutableStateOf(false) }
     LaunchedEffect(signedIn) { if (signedIn) app.loadMe() }
     LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
@@ -139,7 +143,13 @@ fun TvApp(app: MagnetiteApp) {
                         }
                     }
                 }
-                Box(Modifier.weight(1f).fillMaxHeight()) {
+                // Down from the last row goes to the player strip. Without this the focus search picks the nearest item below by position, which for a short
+                // list is one of the rail's (they sit beside the rows).
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().focusGroup().focusProperties {
+                        exit = { dir -> if (dir == androidx.compose.ui.focus.FocusDirection.Down) stripFocus else androidx.compose.ui.focus.FocusRequester.Default }
+                    },
+                ) {
                     val d = detail
                     when {
                         showNowPlaying -> NowPlayingScreen(
@@ -175,7 +185,7 @@ fun TvApp(app: MagnetiteApp) {
             }
             if (!showNowPlaying || app.meters.isNotEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                TvPlayerStrip(app.player, app.info, app.meters) { showNowPlaying = true }
+                TvPlayerStrip(app.player, app.info, app.meters, { showNowPlaying = true }, compact = showNowPlaying, titleFocus = stripFocus)
             }
         }
     }

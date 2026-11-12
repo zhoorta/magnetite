@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -42,9 +43,10 @@ private fun clock(ms: Long): String {
 /**
  * The player along the bottom of the TV: title, artist and the format line on the left (select it to open Now Playing), the seek bar under
  * them (focus it and press left or right to seek 10 s), the first chosen meter in the middle and the transport buttons on the right.
+ * [compact] (while Now Playing shows the meters itself): no meter and no format line, a thinner strip.
  */
 @Composable
-fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onOpen: () -> Unit) {
+fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onOpen: () -> Unit, compact: Boolean = false, titleFocus: androidx.compose.ui.focus.FocusRequester? = null) {
     val title = player.title ?: return
 
     LaunchedEffect(player.isPlaying) {
@@ -57,16 +59,16 @@ fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onO
 
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(
-            Modifier.fillMaxWidth().height(136.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().height(if (compact) 84.dp else 136.dp).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.fillMaxWidth().tvFocus().clickable(onClick = onOpen).padding(horizontal = 6.dp)) {
+                Column(Modifier.fillMaxWidth().then(if (titleFocus != null) Modifier.focusRequester(titleFocus) else Modifier).tvFocus().clickable(onClick = onOpen).padding(horizontal = 6.dp)) {
                     Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                     player.artist?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
                     player.current?.let { t ->
                         val line = Info.line(t, info)
-                        if (line.isNotEmpty()) Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Palette.Muted)
+                        if (!compact && line.isNotEmpty()) Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Palette.Muted)
                     }
                 }
                 val duration = player.durationMs.coerceAtLeast(1L)
@@ -94,7 +96,7 @@ fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onO
                     Text(clock(player.durationMs), style = MaterialTheme.typography.labelSmall)
                 }
             }
-            if (meters.isNotEmpty()) {
+            if (!compact && meters.isNotEmpty()) {
                 MeterPanel(Modifier.width(440.dp).fillMaxHeight()) { MeterView(meters.first(), player.isPlaying, fill = true) }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

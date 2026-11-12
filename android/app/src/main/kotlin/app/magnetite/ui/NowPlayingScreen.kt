@@ -101,7 +101,7 @@ fun NowPlayingScreen(
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 8.dp)) {
                 val gap = 8.dp
                 val room = this.maxHeight
-                if ((fullScreen || LocalTv.current) && meters.size > 1) {
+                if (fullScreen || LocalTv.current) {
                     // On a TV (full screen or not): two meters to a row (four make 2 x 2) instead of one above the other; an odd last one takes the whole row.
                     val rows = meters.chunked(2)
                     val cellH = (room - gap * (rows.size - 1)) / rows.size
