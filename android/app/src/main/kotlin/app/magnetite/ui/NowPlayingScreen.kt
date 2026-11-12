@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,7 +49,7 @@ private fun clock(ms: Long): String {
 @Composable
 fun NowPlayingScreen(
     player: PlayerController, meters: List<String>, onPickMeters: () -> Unit, onClose: () -> Unit, onOpenSource: () -> Unit,
-    fullScreen: Boolean = false, onFullScreen: (() -> Unit)? = null,
+    fullScreen: Boolean = false, onFullScreen: (() -> Unit)? = null, info: Int = 2,
 ) {
     BackHandler(onBack = onClose)
     // On a TV the page opens with the focus on "Full screen", the one thing to do here with a remote
@@ -125,39 +126,41 @@ fun NowPlayingScreen(
             }
             return@Scaffold
         }
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp).verticalScroll(scroll),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.height(16.dp))
-            Cover(player.coverUrl, Modifier.fillMaxWidth(0.6f).clickable(onClick = onOpenSource))
-            Spacer(Modifier.height(24.dp))
-            Text(player.title ?: "", style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-            Text(player.artist ?: "", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(16.dp))
-
-            val duration = player.durationMs.coerceAtLeast(1L)
-            val shown = dragging ?: (player.positionMs.toFloat() / duration)
-            Slider(
-                value = shown.coerceIn(0f, 1f),
-                onValueChange = { dragging = it },
-                onValueChangeFinished = {
-                    dragging?.let { player.seekTo((it * duration).toLong()) }
-                    dragging = null
-                },
-                enabled = player.durationMs > 0,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(clock((shown * duration).toLong()), style = MaterialTheme.typography.bodySmall)
-                Text(clock(player.durationMs), style = MaterialTheme.typography.bodySmall)
+        // No meters chosen: the cover and what the web's player says about the track. The transport and the seek bar are the player strip's, below.
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            val sideBySide = maxWidth > 600.dp
+            if (sideBySide) {
+                val side = minOf(maxHeight, maxWidth * 0.45f)
+                Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Cover(player.coverUrl, Modifier.size(side).tvFocus().clickable(onClick = onOpenSource))
+                    Column(Modifier.weight(1f).verticalScroll(scroll)) { TrackDetails(player, info, Alignment.Start) }
+                }
+            } else {
+                Column(Modifier.fillMaxSize().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Cover(player.coverUrl, Modifier.fillMaxWidth(0.7f).clickable(onClick = onOpenSource))
+                    Spacer(Modifier.height(20.dp))
+                    TrackDetails(player, info, Alignment.CenterHorizontally)
+                }
             }
+        }
+    }
+}
 
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TransportButton(Icon.Previous, "Previous", { player.previous() }, size = 64.dp)
-                TransportButton(if (player.isPlaying) Icon.Pause else Icon.Play, if (player.isPlaying) "Pause" else "Play", { player.toggle() }, size = 80.dp)
-                TransportButton(Icon.Next, "Next", { player.next() }, size = 64.dp)
-            }
+/** What the web's player says about the playing track: title, artist, album and year, the position in the queue, the format line and the findings. */
+@Composable
+private fun TrackDetails(player: PlayerController, info: Int, align: Alignment.Horizontal) {
+    val t = player.current
+    val text = if (align == Alignment.Start) TextAlign.Start else TextAlign.Center
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = align, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(player.title ?: "", style = MaterialTheme.typography.headlineSmall, textAlign = text)
+        player.artist?.let { Text(it, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = text) }
+        val album = listOfNotNull(t?.album, t?.year?.toString()).joinToString(" · ")
+        if (album.isNotEmpty()) Text(album, color = Palette.Muted, textAlign = text)
+        player.positionText()?.let { Text(it, color = Palette.Muted, style = MaterialTheme.typography.bodySmall, textAlign = text) }
+        if (t != null) {
+            val line = Info.line(t, info)
+            if (line.isNotEmpty()) Text(line, color = Palette.Muted, style = MaterialTheme.typography.bodySmall, textAlign = text, modifier = Modifier.padding(top = 6.dp))
+            if (info >= 2) Info.findings(t, 3).forEach { f -> Text("! " + f.label, color = flagColor(f.level), style = MaterialTheme.typography.bodySmall, textAlign = text) }
         }
     }
 }

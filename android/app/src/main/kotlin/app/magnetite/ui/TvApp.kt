@@ -154,7 +154,7 @@ fun TvApp(app: MagnetiteApp) {
                     when {
                         showNowPlaying -> NowPlayingScreen(
                             app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false },
-                            fullScreen = false, onFullScreen = { fullScreen = true },
+                            fullScreen = false, onFullScreen = { fullScreen = true }, info = app.info,
                             onOpenSource = {
                                 when (val o = app.player.origin()) {
                                     is PlaySource.Album -> detail = TvDetail.Album(o.id)
@@ -183,9 +183,9 @@ fun TvApp(app: MagnetiteApp) {
                     }
                 }
             }
-            if (!showNowPlaying || app.meters.isNotEmpty()) {
+            run {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                TvPlayerStrip(app.player, app.info, app.meters, { showNowPlaying = true }, compact = showNowPlaying, titleFocus = stripFocus)
+                TvPlayerStrip(app.player, app.info, app.meters, { showNowPlaying = true }, compact = showNowPlaying && app.meters.isNotEmpty(), titleFocus = stripFocus)
             }
         }
     }

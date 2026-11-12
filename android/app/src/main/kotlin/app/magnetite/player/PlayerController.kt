@@ -54,6 +54,15 @@ class PlayerController(context: Context, private val session: Session) {
     /** The track that is playing, with what is known about the file (format, DR); read through [currentId] so it follows changes. */
     val current: Track? get() = currentId?.let { id -> queue.firstOrNull { it.id.toString() == id } }
 
+    /** "track 6 of 11" when the queue is one album, else just the track number when there is one (the web's `trackPosition`). */
+    fun positionText(): String? {
+        val id = currentId ?: return null
+        val i = queue.indexOfFirst { it.id.toString() == id }.takeIf { it >= 0 } ?: return null
+        val t = queue[i]
+        if (t.albumId != null && queue.all { it.albumId == t.albumId }) return "track ${i + 1} of ${queue.size}"
+        return t.edit?.trackNumber?.let { "track $it" } ?: t.number?.let { "track $it" }
+    }
+
     var title by mutableStateOf<String?>(null)
         private set
     var artist by mutableStateOf<String?>(null)

@@ -32,6 +32,7 @@ data class Track(
     val artist: String? = null,
     val album: String? = null,
     @SerialName("album_id") val albumId: Int? = null,
+    val year: Int? = null,
     val number: Int? = null,
     val disc: Int? = null,
     val duration: Double? = null,

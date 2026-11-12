@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
                         when {
                             !signedIn -> LoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
                             showNowPlaying -> NowPlayingScreen(
-                                app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false },
+                                app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false }, info = app.info,
                                 onOpenSource = {
                                     when (val o = app.player.origin()) {
                                         is PlaySource.Album -> detail = Detail.Album(o.id)
@@ -129,7 +129,7 @@ class MainActivity : ComponentActivity() {
                             else -> PlaylistsScreen(app.api) { detail = Detail.Playlist(it) }
                         }
                     }
-                    if (signedIn && (!showNowPlaying || app.meters.isNotEmpty())) {
+                    if (signedIn) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         MiniPlayer(app.player, app.info, app.meters, !showNowPlaying, { pickMeters = true }) { showNowPlaying = true }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
