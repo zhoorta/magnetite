@@ -20,7 +20,8 @@ class AlbumResource extends JsonResource
             'label' => $this->label,
             'folder_id' => $this->when($this->user_id === $request->user()?->id, $this->folder_id),
             // The album's dynamic range (mean of its tracks' scores): the owner's, and only once the tracks are loaded and analysed.
-            'dr' => $this->when($this->user_id === $request->user()?->id && $this->relationLoaded('tracks'), fn () => $this->dr),
+            // In a list the average comes from the query (`dr_avg`), with the tracks loaded from the tracks themselves.
+            'dr' => $this->when($this->user_id === $request->user()?->id && ($this->relationLoaded('tracks') || isset($this->dr_avg)), fn () => $this->relationLoaded('tracks') ? $this->dr : (int) round($this->dr_avg)),
             'cover_url' => $this->coverUrl(),
             'track_count' => $this->tracks_count ?? $this->whenLoaded('tracks', fn () => $this->tracks->count()),
             'tracks' => TrackResource::collection($this->whenLoaded('tracks')),

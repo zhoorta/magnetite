@@ -207,6 +207,12 @@ describe('meters', function () {
         expect($this->bob->fresh()->meters)->toBeNull();
     });
 
+    it('saves the interface level through the API and returns it from /me', function () {
+        $this->getJson('/api/v1/me', bearer($this->alice))->assertJson(['ui' => ['info' => 2]]);
+        $this->putJson('/api/v1/settings/ui', ['info' => 1], bearer($this->alice))->assertOk();
+        $this->getJson('/api/v1/me', bearer($this->alice))->assertJson(['ui' => ['info' => 1]]);
+    });
+
     it('refuses more than four and duplicates', function () {
         $this->putJson('/api/v1/settings/meters', ['ids' => ['a', 'b', 'c', 'd', 'e']], bearer($this->alice))->assertUnprocessable();
         $this->putJson('/api/v1/settings/meters', ['ids' => ['scope', 'scope']], bearer($this->alice))->assertUnprocessable();

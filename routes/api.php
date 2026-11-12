@@ -24,6 +24,7 @@ use App\Http\Controllers\LooseTrackController;
 use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController as PlaylistWrites;
 use App\Http\Controllers\ScanController;
+use App\Http\Controllers\UiSettingController;
 use Illuminate\Support\Facades\Route;
 
 // Token API for the Android app (docs/android.md). Visibility is decided by the same scopes and policies as the web.
@@ -38,6 +39,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/token', [TokenController::class, 'destroy'])->name('api.token.destroy');
         Route::get('/me', MeController::class)->name('api.me');
         Route::put('/settings/meters', [MeterSettingController::class, 'update'])->name('api.settings.meters');
+        Route::put('/settings/ui', [UiSettingController::class, 'update'])->name('api.settings.ui');
 
         Route::get('/albums', [AlbumController::class, 'index'])->name('api.albums');
         Route::get('/albums/{album}', [AlbumController::class, 'show'])->whereNumber('album')->name('api.albums.show');

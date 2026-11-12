@@ -12,6 +12,6 @@ class MeController extends Controller
     {
         $me = $request->user();
 
-        return response()->json(['id' => $me->id, 'username' => $me->username, 'meters' => $me->meters ?? ['vu-wide']]);
+        return response()->json(['id' => $me->id, 'username' => $me->username, 'meters' => $me->meters ?? ['vu-wide'], 'ui' => array_merge(['info' => 2, 'tint' => false], $me->ui ?? [])]);
     }
 }

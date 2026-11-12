@@ -227,8 +227,8 @@ describe('what the owner sees about a track and an album', function () {
         $one = $this->getJson("/api/v1/tracks/{$tracks[0]->id}?spectrum=1", $h)->assertOk();
         expect($one->json('data.truth.spectrum'))->toEqual([-20, -30])->and($one->json('data.truth.step_hz'))->toBe(500);
 
-        // The list of albums carries no tracks and so no DR.
-        $this->getJson('/api/v1/albums', $h)->assertJsonMissingPath('data.0.dr');
+        // The list of albums carries no tracks, but the mean DR of the tracks comes with the query; someone else's albums never carry it.
+        $this->getJson('/api/v1/albums', $h)->assertJsonPath('data.0.dr', 9)->assertJsonMissingPath('data.0.tracks.0');
     });
 
     it('follows and starts an analysis through the API, for one\'s own albums only', function () {

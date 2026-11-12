@@ -22,7 +22,7 @@ class AlbumController extends Controller
         return AlbumResource::collection(
             Album::when($since > 0, fn ($q) => $q->whereHas('tracks', fn ($t) => $t->where('created_at', '>=', Carbon::createFromTimestamp($since))))
                 ->withCount(['tracks', 'tracks as artist_count' => fn ($q) => $q->select(DB::raw('count(distinct artist)'))])
-                ->withMin('tracks as first_artist', 'artist')->where('user_id', $request->user()->id)
+                ->withMin('tracks as first_artist', 'artist')->withAvg('tracks as dr_avg', 'dr')->where('user_id', $request->user()->id)
                 ->inLibraryOrder()->paginate(50)
         );
     }
