@@ -228,7 +228,7 @@ describe('what the owner sees about a track and an album', function () {
         expect($one->json('data.truth.spectrum'))->toEqual([-20, -30])->and($one->json('data.truth.step_hz'))->toBe(500);
 
         // The list of albums carries no tracks, but the mean DR of the tracks comes with the query; someone else's albums never carry it.
-        $this->getJson('/api/v1/albums', $h)->assertJsonPath('data.0.dr', 9)->assertJsonMissingPath('data.0.tracks.0');
+        $this->getJson('/api/v1/albums', $h)->assertJsonPath('data.0.dr', 9)->assertJsonMissingPath('data.0.tracks.0')->assertJsonPath('data.0.problems', 2); // both tracks are copies of each other
     });
 
     it('shares and unshares through the API, shows the flag to the owner, and saves the edit table', function () {
