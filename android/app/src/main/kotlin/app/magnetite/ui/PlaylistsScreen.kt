@@ -26,11 +26,13 @@ import kotlinx.coroutines.CancellationException
 
 @Composable
 fun PlaylistRow(p: PlaylistSummary, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Text(p.name, style = MaterialTheme.typography.titleMedium)
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
         Text(
-            listOfNotNull("${p.trackCount} tracks", if (p.shared) "shared" else null, p.sharedBy?.let { "from $it" }).joinToString(" · "),
-            style = MaterialTheme.typography.bodySmall,
+            nameAndRest(p.name, listOfNotNull("${p.trackCount} tracks", if (p.shared) "shared" else null, p.sharedBy?.let { "from $it" }).joinToString(" · ")),
+            Modifier.weight(1f), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
     }
 }
@@ -46,14 +48,16 @@ fun PlaylistsScreen(api: Api, onOpen: (Int) -> Unit) {
     }
     LaunchedEffect(Unit) { load() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Playlists") }) }) { padding ->
+    Scaffold(topBar = { DenseBar("Playlists") }) { padding ->
         val list = playlists
         PullRefresh(padding, ::load) {
             when {
                 list == null -> ScrollingMessage(error ?: "Loading…")
                 list.isEmpty() -> ScrollingMessage("No playlists yet.")
-                else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(list, key = { it.id }) { PlaylistRow(it) { onOpen(it.id) } }
+                else -> Pane("Playlists (${list.size})", Modifier.fillMaxSize()) {
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
+                        items(list, key = { it.id }) { PlaylistRow(it) { onOpen(it.id) } }
+                    }
                 }
             }
         }

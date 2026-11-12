@@ -31,7 +31,7 @@ import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Unit) {
+fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Unit, info: Int = 0) {
     var playlist by remember { mutableStateOf<Playlist?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     // Rows carry their own id: the position changes while dragging, so it cannot be the key.
@@ -53,19 +53,18 @@ fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Un
     }
     BackHandler(onBack = onBack)
 
-    Scaffold(topBar = {
-        TopAppBar(title = { Text(playlist?.name ?: "") }, navigationIcon = { TransportButton(Icon.Back, "Back", onBack) })
-    }) { padding ->
+    Scaffold(topBar = { DenseBar(playlist?.name ?: "", onBack) }) { padding ->
         val p = playlist
         PullRefresh(padding, ::load) {
         if (p == null) {
             ScrollingMessage(error ?: "Loading…")
         } else {
             // Long-press a track and drag it to a new place; your own playlists only. The order is saved when you let go.
-            LazyColumn(Modifier.fillMaxSize(), state = list) {
+            Pane("${p.name} (${rows.size})", Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
                 itemsIndexed(rows, key = { _, r -> r.first }) { i, (uid, track) ->
                     TrackRow(
-                        track, player.currentId == track.id.toString(), { player.play(rows.map { it.second }, track, PlaySource.Playlist(id)) }, leading = "${i + 1}",
+                        track, player.currentId == track.id.toString(), { player.play(rows.map { it.second }, track, PlaySource.Playlist(id)) }, leading = "${i + 1}", info = info,
                         modifier = Modifier.dragRow(
                             drag, list, scope, uid, enabled = p.mine,
                             onMove = { y ->
@@ -81,6 +80,7 @@ fun PlaylistScreen(api: Api, player: PlayerController, id: Int, onBack: () -> Un
                         ),
                     )
                 }
+            }
             }
         }
         }

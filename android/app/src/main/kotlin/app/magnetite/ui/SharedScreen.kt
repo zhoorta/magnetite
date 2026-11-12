@@ -28,9 +28,10 @@ import app.magnetite.data.Shared
 import app.magnetite.player.PlayerController
 import kotlinx.coroutines.CancellationException
 
+/** A sub-heading inside a pane: the name in the accent colour with a rule after it. */
 @Composable
-private fun Heading(text: String) =
-    Text(text, Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+fun Heading(text: String) =
+    Text("── $text", Modifier.padding(start = 10.dp, top = 8.dp, bottom = 2.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +44,7 @@ fun SharedScreen(api: Api, player: PlayerController, onOpenAlbum: (Int) -> Unit,
     }
     LaunchedEffect(Unit) { load() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Shared") }) }) { padding ->
+    Scaffold(topBar = { DenseBar("Shared") }) { padding ->
         val s = shared
         PullRefresh(padding, ::load) {
         if (s == null) {
@@ -51,18 +52,15 @@ fun SharedScreen(api: Api, player: PlayerController, onOpenAlbum: (Int) -> Unit,
         } else if (s.albums.isEmpty() && s.tracks.isEmpty() && s.playlists.isEmpty()) {
             ScrollingMessage("Nothing is shared yet.")
         } else {
-            LazyColumn(Modifier.fillMaxSize()) {
+            Pane("Shared with you", Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp)) {
                 if (s.albums.isNotEmpty()) item { Heading("Albums") }
                 items(s.albums, key = { "a${it.id}" }) { album ->
-                    Row(Modifier.fillMaxWidth().clickable { onOpenAlbum(album.id) }.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        Cover(album.coverUrl, Modifier.size(56.dp))
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Text(album.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                listOfNotNull(album.artist, album.sharedBy?.let { "from $it" }).joinToString(" · "),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
+                    Row(Modifier.fillMaxWidth().clickable { onOpenAlbum(album.id) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(
+                            nameAndRest(album.title, listOfNotNull(album.displayArtist ?: album.artist, album.sharedBy?.let { "from $it" }).joinToString(" · ").ifEmpty { null }),
+                            Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
                 if (s.tracks.isNotEmpty()) item { Heading("Tracks") }
@@ -71,6 +69,7 @@ fun SharedScreen(api: Api, player: PlayerController, onOpenAlbum: (Int) -> Unit,
                 }
                 if (s.playlists.isNotEmpty()) item { Heading("Playlists") }
                 items(s.playlists, key = { "p${it.id}" }) { PlaylistRow(it) { onOpenPlaylist(it.id) } }
+            }
             }
         }
         }

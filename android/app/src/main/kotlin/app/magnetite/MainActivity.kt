@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
                             d is Detail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null })
-                            d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
+                            d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null }, info = app.info)
                             d is Detail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = Detail.Album(it) }, onBack = { detail = null })
                             d is Detail.Truth -> TruthScreen(app.api, app.player, onBack = { detail = null })
                             tab == Tab.Library -> LibraryScreen(
