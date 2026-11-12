@@ -24,6 +24,7 @@ use App\Http\Controllers\LooseTrackController;
 use App\Http\Controllers\MeterSettingController;
 use App\Http\Controllers\PlaylistController as PlaylistWrites;
 use App\Http\Controllers\ScanController;
+use App\Http\Controllers\ShareController;
 use App\Http\Controllers\UiSettingController;
 use Illuminate\Support\Facades\Route;
 
@@ -70,6 +71,9 @@ Route::prefix('v1')->group(function () {
             Route::put('/albums/{album}/folder', [FolderWrites::class, 'moveAlbum'])->whereNumber('album')->name('api.albums.folder');
             Route::post('/albums', [AlbumGroupController::class, 'store'])->name('api.albums.store');
             Route::patch('/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('api.albums.update');
+            Route::patch('/albums/{album}/details', [LibraryEditController::class, 'details'])->whereNumber('album')->name('api.albums.details');
+            Route::post('/share/{kind}/{id}', [ShareController::class, 'store'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('api.share.store');
+            Route::delete('/share/{kind}/{id}', [ShareController::class, 'destroy'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('api.share.destroy');
             Route::patch('/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('api.tracks.update');
             Route::post('/albums/{album}/merge', [AlbumMergeController::class, 'store'])->whereNumber('album')->name('api.albums.merge');
             Route::post('/albums/{album}/titles/find', [AlbumTitlesController::class, 'find'])->whereNumber('album')->name('api.albums.titles.find');

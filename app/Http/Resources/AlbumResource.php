@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\SharedFlags;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -18,6 +19,8 @@ class AlbumResource extends JsonResource
             'year' => $this->year,
             'release_date' => $this->release_date,
             'label' => $this->label,
+            // Is it in the shared area (the owner's albums only; one query per request).
+            'shared' => $this->when($this->user_id === $request->user()?->id, fn () => SharedFlags::for($request)['albums']->has($this->id)),
             'folder_id' => $this->when($this->user_id === $request->user()?->id, $this->folder_id),
             // The album's dynamic range (mean of its tracks' scores): the owner's, and only once the tracks are loaded and analysed.
             // In a list the average comes from the query (`dr_avg`), with the tracks loaded from the tracks themselves.

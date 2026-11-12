@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\Track;
 use App\Support\FileTruth;
+use App\Support\SharedFlags;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -30,6 +31,7 @@ class TrackResource extends JsonResource
             // The owner's own details: what can be edited, as stored, and the measurements (without the long spectrum).
             'edit' => $this->when($this->user_id === $request->user()?->id, fn () => ['title' => $this->title, 'artist' => $this->artist, 'track_number' => $this->track_number]),
             'truth' => $this->when($this->user_id === $request->user()?->id, fn () => $this->truth($request)),
+            'shared' => $this->when($this->user_id === $request->user()?->id, fn () => SharedFlags::for($request)['tracks']->has($this->id)),
             'open' => (bool) $open,
             'stream_url' => $open ? route('stream', $this->id) : null,
         ];

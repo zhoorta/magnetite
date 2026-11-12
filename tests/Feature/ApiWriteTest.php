@@ -231,6 +231,24 @@ describe('what the owner sees about a track and an album', function () {
         $this->getJson('/api/v1/albums', $h)->assertJsonPath('data.0.dr', 9)->assertJsonMissingPath('data.0.tracks.0');
     });
 
+    it('shares and unshares through the API, shows the flag to the owner, and saves the edit table', function () {
+        $h = writer($this->alice);
+
+        $this->getJson("/api/v1/albums/{$this->album->id}", $h)->assertJsonPath('data.shared', false);
+        $this->postJson("/api/v1/share/albums/{$this->album->id}", [], $h)->assertOk()->assertJson(['shared' => true]);
+        $this->getJson("/api/v1/albums/{$this->album->id}", $h)->assertJsonPath('data.shared', true);
+        $this->deleteJson("/api/v1/share/albums/{$this->album->id}", [], $h)->assertOk()->assertJson(['shared' => false]);
+
+        $tracks = $this->album->tracks()->get();
+        $this->patchJson("/api/v1/albums/{$this->album->id}/details", [
+            'title' => 'Edited', 'artist' => null, 'release_date' => '2019', 'label' => null,
+            'tracks' => [['id' => $tracks[0]->id, 'title' => 'One', 'artist' => null, 'track_number' => 1]],
+        ], $h)->assertOk()->assertJsonPath('album.title', 'Edited');
+
+        // someone else's album is a 404 for every one of these
+        $this->postJson("/api/v1/share/albums/{$this->bobAlbum->id}", [], $h)->assertNotFound();
+    });
+
     it('follows and starts an analysis through the API, for one\'s own albums only', function () {
         config(['queue.default' => 'database']);
         $h = writer($this->alice);
