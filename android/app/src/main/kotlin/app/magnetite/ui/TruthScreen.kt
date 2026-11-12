@@ -1,6 +1,13 @@
 package app.magnetite.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,6 +36,7 @@ import app.magnetite.data.Api
 import app.magnetite.data.Track
 import app.magnetite.player.PlayerController
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /** The ways to order the Truth list; the web's `TRUTH_SORTS`. */
 private val SORTS = listOf("findings", "DR", "loudness", "peak", "title")
@@ -91,7 +99,33 @@ fun TruthScreen(api: Api, player: PlayerController, onBack: () -> Unit) {
 
     val rows = remember(all.size, sort, only) { all.filter { !only || Info.hasProblem(it) }.sortedWith(order(sort)) }
 
-    Scaffold(topBar = {
+    var cursor by remember { mutableStateOf(-1) }
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val onKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = onKey@{ e ->
+        if (!e.isPlain()) return@onKey false
+        fun move(to: Int) {
+            if (rows.isEmpty()) return
+            cursor = to.coerceIn(0, rows.lastIndex)
+            val shown = list.layoutInfo.visibleItemsInfo
+            if (shown.isEmpty() || cursor <= shown.first().index || cursor >= shown.last().index) scope.launch { list.animateScrollToItem((cursor - 2).coerceAtLeast(0)) }
+        }
+        val k = androidx.compose.ui.input.key.Key
+        when (e.key) {
+            k.J, k.DirectionDown -> { move(if (cursor < 0) 0 else cursor + 1); true }
+            k.K, k.DirectionUp -> { move(if (cursor < 0) rows.lastIndex else cursor - 1); true }
+            k.G -> { move(if (e.isShiftPressed) rows.lastIndex else 0); true }
+            k.Enter, k.NumPadEnter -> { rows.getOrNull(cursor)?.let { player.play(rows, it) }; true }
+            k.S -> { sort = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.size]; true }
+            k.O -> { only = !only; true }
+            k.Escape, k.Backspace, k.H, k.DirectionLeft -> { onBack(); true }
+            else -> playerKey(e, player)
+        }
+    }
+
+    Scaffold(modifier = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
         DenseBar("Truth", onBack) {
             Text(
                 "sort: $sort", Modifier.clickable { sort = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.size] }.padding(horizontal = 10.dp, vertical = 12.dp),
@@ -104,12 +138,12 @@ fun TruthScreen(api: Api, player: PlayerController, onBack: () -> Unit) {
         }
     }) { padding ->
         Pane("Files (${rows.size}${if (loaded) "" else "…"})", Modifier.fillMaxSize().padding(padding)) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
                 error?.let { item { Text(it, Modifier.padding(10.dp), color = MaterialTheme.colorScheme.error) } }
                 if (loaded && rows.isEmpty()) item { Text(if (only) "No findings." else "Nothing analysed yet.", Modifier.padding(horizontal = 10.dp), color = Palette.Muted) }
-                items(rows, key = { it.id }) { t ->
+                itemsIndexed(rows, key = { _, t -> t.id }) { i, t ->
                     val playing = player.currentId == t.id.toString()
-                    Column(Modifier.fillMaxWidth().clickable { player.play(rows, t) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
+                    Column(Modifier.fillMaxWidth().background(if (cursor == i) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent).clickable { player.play(rows, t) }.padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 nameAndRest(t.title, t.artist, playing, if (playing) Palette.Accent else Palette.Text), Modifier.weight(1f),

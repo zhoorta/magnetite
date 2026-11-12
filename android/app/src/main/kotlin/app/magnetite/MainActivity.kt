@@ -76,6 +76,8 @@ class MainActivity : ComponentActivity() {
                 // On a wide screen (a tablet, an unfolded phone, a window) the library and the open album sit side by side.
                 val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 720
                 var selected by remember { mutableStateOf<Int?>(null) }
+                val libFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+                val albumFocus = remember { androidx.compose.ui.focus.FocusRequester() }
                 var pickMeters by remember { mutableStateOf(false) }
                 var pickTheme by remember { mutableStateOf(false) }
                 if (pickTheme) ThemePicker({ app.setLook(it) }, { pickTheme = false })
@@ -113,6 +115,8 @@ class MainActivity : ComponentActivity() {
                                         onSearch = { detail = Detail.Search },
                                         onTruth = { detail = Detail.Truth },
                                         onEdit = { detail = Detail.Edit(it) },
+                                        focus = libFocus,
+                                        onSwitchPane = if (wide) ({ if (selected != null) runCatching { albumFocus.requestFocus() } }) else null,
                                         onPickMeters = { pickMeters = true },
                                         onPickTheme = { pickTheme = true },
                                         onSignOut = {
@@ -135,7 +139,8 @@ class MainActivity : ComponentActivity() {
                                                 Text("Pick an album", Modifier.align(Alignment.Center), color = Palette.Muted)
                                             } else {
                                                 androidx.compose.runtime.key(id) {
-                                                    AlbumScreen(app.api, app.player, app.info, id, onBack = { selected = null }, onEdit = { detail = Detail.Edit(it) }, embedded = true)
+                                                    AlbumScreen(app.api, app.player, app.info, id, onBack = { selected = null }, onEdit = { detail = Detail.Edit(it) }, embedded = true,
+                                                        focus = albumFocus, onSwitchPane = { runCatching { libFocus.requestFocus() } })
                                                 }
                                             }
                                         }

@@ -57,7 +57,7 @@ import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
+fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
     val albums = remember { mutableStateListOf<Album>() }
     var page by remember { mutableStateOf(0) }
     var lastPage by remember { mutableStateOf(1) }
@@ -200,7 +200,6 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
     // Keys, for a hardware keyboard: the web's j k h l, Enter, / and the player's keys. The cursor shows once a key was used.
     var cursor by remember { mutableStateOf<String?>(null) }
     var keysUsed by remember { mutableStateOf(false) }
-    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
     fun moveCursor(d: Int) {
@@ -232,7 +231,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
         }
     }
     val onKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = onKey@{ e ->
-        if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || e.isCtrlPressed || e.isAltPressed || e.isMetaPressed) return@onKey false
+        if (!e.isPlain()) return@onKey false
         val k = androidx.compose.ui.input.key.Key
         val handled = when (e.key) {
             k.J, k.DirectionDown -> { moveCursor(1); true }
@@ -243,12 +242,8 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
             k.G -> { jump(e.isShiftPressed); true }
             k.Slash -> { onSearch(); true }
             k.I -> if (e.isShiftPressed) { onCycleInfo(); true } else false
-            k.Spacebar -> { player.toggle(); true }
-            k.N -> if (!e.isShiftPressed) { player.next(); true } else false
-            k.P -> if (!e.isShiftPressed) { player.previous(); true } else false
-            k.Comma -> { player.seekTo((player.positionMs - 10_000).coerceAtLeast(0)); true }
-            k.Period -> { player.seekTo(player.positionMs + 10_000); true }
-            else -> false
+            k.Tab -> if (onSwitchPane != null) { onSwitchPane(); true } else false
+            else -> playerKey(e, player)
         }
         if (handled) keysUsed = true
         handled
@@ -286,6 +281,10 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(nameAndRest((if (open) "▾ " else "▸ ") + r.name, null, holdsPlaying(r), MaterialTheme.colorScheme.primary), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, inlineContent = PlayInline)
+                        if (info >= 2) {
+                            val ids = under(r)
+                            if (albums.any { it.folderId in ids && (it.problems ?: 0) > 0 }) Text("!", Modifier.padding(start = 6.dp), color = Palette.Red)
+                        }
                         if (info >= 1) {
                             val ids = under(r)
                             Info.dr(Info.mean(albums.filter { it.folderId in ids }.mapNotNull { it.dr }))?.let { Text(it, Modifier.padding(start = 8.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
@@ -334,6 +333,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                             nameAndRest(album.title, album.displayArtist ?: album.artist, player.albumId == album.id), Modifier.weight(1f),
                             maxLines = 1, overflow = TextOverflow.Ellipsis, inlineContent = PlayInline,
                         )
+                        if (info >= 2 && (album.problems ?: 0) > 0) Text("!", Modifier.padding(start = 6.dp), color = Palette.Red)
                         if (info >= 1) Info.dr(album.dr)?.let { Text(it, Modifier.padding(start = 8.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
                     }
                 }

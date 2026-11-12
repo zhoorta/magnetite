@@ -59,6 +59,8 @@ data class Album(
     @SerialName("folder_id") val folderId: Int? = null,
     /** The mean dynamic range of the tracks (the owner's albums only, once analysed). */
     val dr: Int? = null,
+    /** Tracks with a problem or a warning (the owner's list only). */
+    val problems: Int? = null,
     @SerialName("display_artist") val displayArtist: String? = null,
     @SerialName("release_date") val releaseDate: String? = null,
     val label: String? = null,

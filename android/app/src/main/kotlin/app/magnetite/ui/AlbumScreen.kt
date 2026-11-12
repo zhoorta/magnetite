@@ -26,12 +26,20 @@ import app.magnetite.data.Album
 import app.magnetite.data.Api
 import app.magnetite.player.PlayerController
 import app.magnetite.player.PlaySource
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}, embedded: Boolean = false) {
+fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}, embedded: Boolean = false,
+    focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null) {
     var album by remember { mutableStateOf<Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -42,17 +50,42 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
     LaunchedEffect(id) { load() }
 
     var actions by remember { mutableStateOf<Target?>(null) }
+    var cursor by remember { mutableStateOf(-1) }
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    val onKey: (androidx.compose.ui.input.key.KeyEvent) -> Boolean = onKey@{ e ->
+        if (!e.isPlain()) return@onKey false
+        val tracks = album?.tracks ?: return@onKey false
+        fun move(to: Int) {
+            if (tracks.isEmpty()) return
+            cursor = to.coerceIn(0, tracks.lastIndex)
+            val shown = list.layoutInfo.visibleItemsInfo
+            if (shown.isEmpty() || cursor + 1 <= shown.first().index || cursor + 1 >= shown.last().index) scope.launch { list.animateScrollToItem(cursor + 1) }
+        }
+        val k = androidx.compose.ui.input.key.Key
+        when (e.key) {
+            k.J, k.DirectionDown -> { move(if (cursor < 0) 0 else cursor + 1); true }
+            k.K, k.DirectionUp -> { move(if (cursor < 0) tracks.lastIndex else cursor - 1); true }
+            k.G -> { move(if (e.isShiftPressed) tracks.lastIndex else 0); true }
+            k.Enter, k.NumPadEnter, k.L, k.DirectionRight -> {
+                tracks.getOrNull(cursor)?.let { if (it.open) player.play(tracks, it, PlaySource.Album(id)) }
+                true
+            }
+            k.Tab, k.H, k.DirectionLeft -> if (onSwitchPane != null) { onSwitchPane(); true } else false
+            k.Escape -> { onBack(); true }
+            else -> playerKey(e, player)
+        }
+    }
     ActionHost(actions, api, player, emptyList(), onClose = { actions = null }, onChanged = { scope.launch { load() } }, onEdit = onEdit)
     androidx.activity.compose.BackHandler(onBack = onBack)
 
-    Scaffold(topBar = { DenseBar(album?.title ?: "", if (embedded) null else onBack) }) { padding ->
+    Scaffold(modifier = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = { DenseBar(album?.title ?: "", if (embedded) null else onBack) }) { padding ->
         val a = album
         PullRefresh(padding, ::load) {
         if (a == null) {
             ScrollingMessage(error ?: "Loading…")
         } else {
             Pane(listOfNotNull(a.title, a.displayArtist ?: a.artist).joinToString(" — ").ifEmpty { "Album" }, Modifier.fillMaxSize()) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 8.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 8.dp)) {
                 item {
                     Row(Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp)) {
                         Cover(a.coverUrl, Modifier.size(96.dp))
@@ -65,10 +98,10 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
                         }
                     }
                 }
-                items(a.tracks, key = { it.id }) { track ->
+                itemsIndexed(a.tracks, key = { _, t -> t.id }) { i, track ->
                     // the album's own artist is already in the header; show the track's only when it differs (a compilation)
                     val rest = track.artist?.takeIf { it != (a.displayArtist ?: a.artist) }
-                    TrackRow(track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}", info = info, rest = rest, onLongClick = if (track.shared != null) ({ actions = Target.OfTrack(track) }) else null)
+                    TrackRow(track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}", info = info, rest = rest, modifier = if (cursor == i) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)) else Modifier, onLongClick = if (track.shared != null) ({ actions = Target.OfTrack(track) }) else null)
                 }
             }
             }
