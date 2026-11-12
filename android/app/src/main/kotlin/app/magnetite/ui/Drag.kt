@@ -23,6 +23,10 @@ class DragState {
     var key by mutableStateOf<Any?>(null)
     var fingerY by mutableFloatStateOf(0f)
     var grabY = 0f
+    var lastEnd = 0L
+
+    /** A long press is going on or has just ended: the release must not count as a tap on the row. */
+    fun busy() = key != null || android.os.SystemClock.uptimeMillis() - lastEnd < 400
 }
 
 /** The visible row under the finger, other than the one being dragged. */
@@ -37,6 +41,7 @@ fun Modifier.dragRow(
     enabled: Boolean = true,
     onMove: (fingerY: Float) -> Unit,
     onDrop: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
 ): Modifier {
     fun offset() = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.offset ?: 0
     fun edge(y: Float) {
@@ -44,11 +49,13 @@ fun Modifier.dragRow(
         val h = list.layoutInfo.viewportSize.height
         if (y < 120f) scope.launch { list.scrollBy(-28f) } else if (y > h - 120f) scope.launch { list.scrollBy(28f) }
     }
+    var moved = false
     return this
         .pointerInput(key, enabled) {
             if (!enabled) return@pointerInput
             detectDragGesturesAfterLongPress(
                 onDragStart = { o ->
+                    moved = false
                     drag.key = key
                     drag.grabY = o.y
                     drag.fingerY = offset() + o.y
@@ -56,12 +63,14 @@ fun Modifier.dragRow(
                 },
                 onDrag = { change, amount ->
                     change.consume()
+                    if (kotlin.math.abs(amount.y) > 0.5f || kotlin.math.abs(amount.x) > 0.5f) moved = true
                     drag.fingerY += amount.y
                     edge(drag.fingerY)
                     onMove(drag.fingerY)
                 },
-                onDragEnd = { onDrop(); drag.key = null },
-                onDragCancel = { drag.key = null },
+                onDragEnd = { drag.lastEnd = android.os.SystemClock.uptimeMillis(); if (!moved && onLongPress != null) onLongPress() else onDrop(); drag.key = null },
+                // a release without any movement ends the gesture as a cancel: that is the plain long press
+                onDragCancel = { drag.lastEnd = android.os.SystemClock.uptimeMillis(); drag.key = null; if (!moved) onLongPress?.invoke() },
             )
         }
         .graphicsLayer {

@@ -21,6 +21,10 @@ data class Truth(
     val flags: List<Flag> = emptyList(),
 )
 
+/** The raw values the owner may correct (the track's own artist, not the album's). */
+@Serializable
+data class TrackEdit(val title: String = "", val artist: String? = null, @SerialName("track_number") val trackNumber: Int? = null)
+
 @Serializable
 data class Track(
     val id: Int,
@@ -37,6 +41,9 @@ data class Track(
     @SerialName("stream_url") val streamUrl: String? = null,
     @SerialName("shared_by") val sharedBy: String? = null,
     val truth: Truth? = null,
+    val edit: TrackEdit? = null,
+    /** In the shared area; only present on the owner's own tracks (null: not yours). */
+    val shared: Boolean? = null,
 )
 
 @Serializable
@@ -53,6 +60,10 @@ data class Album(
     /** The mean dynamic range of the tracks (the owner's albums only, once analysed). */
     val dr: Int? = null,
     @SerialName("display_artist") val displayArtist: String? = null,
+    @SerialName("release_date") val releaseDate: String? = null,
+    val label: String? = null,
+    /** In the shared area; only present on the owner's own albums (null: not yours). */
+    val shared: Boolean? = null,
 )
 
 @Serializable

@@ -72,3 +72,17 @@ fun DenseBar(title: String, back: (() -> Unit)? = null, actions: @Composable and
         actions()
     }
 }
+
+/** A one-line text field in the dense style: the label dimmed on the left, the value to its right, a rule underneath. */
+@Composable
+fun DenseField(label: String, value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, keyboardType: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text) {
+    androidx.compose.foundation.layout.Row(modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.width(72.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall)
+        androidx.compose.foundation.text.BasicTextField(
+            value, onChange, Modifier.weight(1f).border(1.dp, Palette.Muted.copy(alpha = 0.35f)).padding(horizontal = 6.dp, vertical = 5.dp), singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Palette.Text),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.Accent),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
+        )
+    }
+}

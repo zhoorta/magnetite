@@ -27,18 +27,22 @@ import app.magnetite.data.Api
 import app.magnetite.player.PlayerController
 import app.magnetite.player.PlaySource
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit) {
+fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}) {
     var album by remember { mutableStateOf<Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     suspend fun load() {
         try { album = api.album(id); error = null } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { error = e.message }
     }
     LaunchedEffect(id) { load() }
 
+    var actions by remember { mutableStateOf<Target?>(null) }
+    ActionHost(actions, api, player, emptyList(), onClose = { actions = null }, onChanged = { scope.launch { load() } }, onEdit = onEdit)
     androidx.activity.compose.BackHandler(onBack = onBack)
 
     Scaffold(topBar = { DenseBar(album?.title ?: "", onBack) }) { padding ->
@@ -64,7 +68,7 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
                 items(a.tracks, key = { it.id }) { track ->
                     // the album's own artist is already in the header; show the track's only when it differs (a compilation)
                     val rest = track.artist?.takeIf { it != (a.displayArtist ?: a.artist) }
-                    TrackRow(track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}", info = info, rest = rest)
+                    TrackRow(track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}", info = info, rest = rest, onLongClick = if (track.shared != null) ({ actions = Target.OfTrack(track) }) else null)
                 }
             }
             }

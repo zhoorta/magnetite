@@ -36,6 +36,7 @@ import app.magnetite.ui.PlaylistsScreen
 import app.magnetite.ui.SharedScreen
 import app.magnetite.ui.SearchScreen
 import app.magnetite.ui.TruthScreen
+import app.magnetite.ui.EditScreen
 import app.magnetite.ui.TvApp
 import app.magnetite.ui.isTelevision
 
@@ -47,6 +48,7 @@ private sealed interface Detail {
     data class Playlist(val id: Int) : Detail
     data object Search : Detail
     data object Truth : Detail
+    data class Edit(val id: Int) : Detail
 }
 
 class MainActivity : ComponentActivity() {
@@ -94,15 +96,17 @@ class MainActivity : ComponentActivity() {
                                     showNowPlaying = false
                                 },
                             )
-                            d is Detail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null })
+                            d is Detail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = Detail.Edit(it) })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null }, info = app.info)
                             d is Detail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = Detail.Album(it) }, onBack = { detail = null })
+                            d is Detail.Edit -> EditScreen(app.api, d.id, onBack = { detail = Detail.Album(d.id) }, onSaved = { detail = Detail.Album(d.id) })
                             d is Detail.Truth -> TruthScreen(app.api, app.player, onBack = { detail = null })
                             tab == Tab.Library -> LibraryScreen(
                                 app.api, app.player, app.info, app::cycleInfo,
                                 onOpen = { detail = Detail.Album(it) },
                                 onSearch = { detail = Detail.Search },
                                 onTruth = { detail = Detail.Truth },
+                                onEdit = { detail = Detail.Edit(it) },
                                 onPickMeters = { pickMeters = true },
                                 onPickTheme = { pickTheme = true },
                                 onSignOut = {

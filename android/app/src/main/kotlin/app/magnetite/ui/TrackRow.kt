@@ -1,6 +1,7 @@
 package app.magnetite.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,15 +29,16 @@ fun defaultRest(track: Track): String? =
  * DR and the time. [info] is the user's info level (0 off, 1 DR, 2 DR and findings). Tracks the viewer may not play
  * (`open = false`) are dimmed and do nothing when tapped.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackRow(
     track: Track, playing: Boolean, onClick: () -> Unit, leading: String? = null, modifier: Modifier = Modifier,
-    info: Int = 0, rest: String? = defaultRest(track),
+    info: Int = 0, rest: String? = defaultRest(track), onLongClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier.fillMaxWidth().alpha(if (track.open) 1f else 0.4f)
             .tvFocus()
-            .clickable(enabled = track.open, onClick = onClick)
+            .combinedClickable(enabled = track.open, onClick = onClick, onLongClick = onLongClick)
             .padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

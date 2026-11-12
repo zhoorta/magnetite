@@ -48,7 +48,7 @@ import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
+fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
     val albums = remember { mutableStateListOf<Album>() }
     var page by remember { mutableStateOf(0) }
     var lastPage by remember { mutableStateOf(1) }
@@ -121,6 +121,9 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
     val list = androidx.compose.foundation.lazy.rememberLazyListState()
     val drag = remember { DragState() }
     var hover by remember { mutableStateOf<Any?>(null) }
+
+    var actions by remember { mutableStateOf<Target?>(null) }
+    ActionHost(actions, api, player, folders.toList(), onClose = { actions = null }, onChanged = { refresh() }, onEdit = onEdit)
 
     dialog?.let { d ->
         var name by remember(d) { mutableStateOf((d as? FolderDialog.Rename)?.name ?: "") }
@@ -233,6 +236,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                             .background(if (hover == key) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent)
                             .dragRow(
                                 drag, list, scope, key,
+                                onLongPress = { hover = null; actions = Target.OfAlbum(album) },
                                 onMove = { y ->
                                     hover = list.rowAt(y, key)?.key?.takeIf { it != "a${album.id}" }
                                 },
@@ -253,7 +257,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                                     }
                                 },
                             )
-                            .clickable { onOpen(album.id) }
+                            .clickable { if (!drag.busy()) onOpen(album.id) }
                             .padding(start = 8.dp + 16.dp * depth, end = 10.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

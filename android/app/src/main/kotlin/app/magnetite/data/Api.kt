@@ -19,6 +19,9 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
+/** One row of the edit table. */
+class TrackEditRow(val id: Int, val title: String, val artist: String, val number: Int?)
+
 class ApiException(message: String, val code: Int = 0) : IOException(message)
 
 /** Thin client for `/api/v1`. The bearer token is added to every request, including covers and streams (see [client]). */
@@ -152,6 +155,34 @@ class Api(private val session: Session) {
     /** Albums and subfolders move up to the parent; no music is deleted. */
     suspend fun deleteFolder(id: Int) {
         call(Request.Builder().url(url("/folders/$id")).header("Accept", "application/json").delete().build())
+    }
+
+    /** Starts the analysis of one album or one track (the server needs a queue worker). */
+    suspend fun analyse(albumId: Int? = null, trackId: Int? = null) {
+        call(send("/analysis", "POST", buildJsonObject { if (albumId != null) put("album_id", albumId); if (trackId != null) put("track_id", trackId) }))
+    }
+
+    /** [kind] is `albums`, `tracks` or `playlists`. */
+    suspend fun share(kind: String, id: Int, on: Boolean) {
+        call(if (on) send("/share/$kind/$id", "POST", buildJsonObject { }) else send("/share/$kind/$id", "DELETE", buildJsonObject { }))
+    }
+
+    suspend fun deleteAlbum(id: Int) { call(send("/albums/$id", "DELETE", buildJsonObject { })) }
+
+    suspend fun deleteTrack(id: Int) { call(send("/tracks/$id", "DELETE", buildJsonObject { })) }
+
+    suspend fun addToPlaylist(playlistId: Int, albumId: Int? = null, trackId: Int? = null) {
+        call(send("/playlists/$playlistId/tracks", "POST", buildJsonObject { if (albumId != null) put("album_id", albumId); if (trackId != null) put("track_id", trackId) }))
+    }
+
+    /** The edit table: the album's fields and its changed tracks, saved together or not at all. */
+    suspend fun saveDetails(albumId: Int, title: String, artist: String, releaseDate: String, label: String, tracks: List<TrackEditRow>) {
+        call(send("/albums/$albumId/details", "PATCH", buildJsonObject {
+            put("title", title); put("artist", artist); put("release_date", releaseDate); put("label", label)
+            put("tracks", kotlinx.serialization.json.JsonArray(tracks.map { t ->
+                buildJsonObject { put("id", t.id); put("title", t.title); put("artist", t.artist); if (t.number != null) put("track_number", t.number) else put("track_number", kotlinx.serialization.json.JsonNull) }
+            }))
+        }))
     }
 
     private fun send(path: String, method: String, body: JsonObject) =
