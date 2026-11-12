@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,7 +48,7 @@ import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(api: Api, player: PlayerController, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
+fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit) {
     val albums = remember { mutableStateListOf<Album>() }
     var page by remember { mutableStateOf(0) }
     var lastPage by remember { mutableStateOf(1) }
@@ -164,25 +165,35 @@ fun LibraryScreen(api: Api, player: PlayerController, onOpen: (Int) -> Unit, onP
         )
     }
 
+    /** Folders inside [f] (itself included), for the mean DR of everything under it. */
+    fun under(f: Folder): Set<Int> {
+        val ids = mutableSetOf(f.id)
+        var grew = true
+        while (grew) {
+            grew = false
+            for (x in folders) if (x.parentId in ids && ids.add(x.id)) grew = true
+        }
+        return ids
+    }
+
     Scaffold(topBar = {
-        TopAppBar(
-            title = { Text("Library") },
-            actions = {
-                TransportButton(Icon.NewFolder, "New folder", { dialog = FolderDialog.Create(null) })
-                var menu by remember { mutableStateOf(false) }
-                androidx.compose.foundation.layout.Box {
-                    TransportButton(Icon.Menu, "Menu", { menu = true })
-                    DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(text = { Text("Meters") }, onClick = { menu = false; onPickMeters() })
-                        DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })
-                        DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
-                    }
+        DenseBar("Library") {
+            TransportButton(Icon.NewFolder, "New folder", { dialog = FolderDialog.Create(null) })
+            var menu by remember { mutableStateOf(false) }
+            androidx.compose.foundation.layout.Box {
+                TransportButton(Icon.Menu, "Menu", { menu = true })
+                DropdownMenu(menu, { menu = false }) {
+                    DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[info]) }, onClick = { onCycleInfo() })
+                    DropdownMenuItem(text = { Text("Meters") }, onClick = { menu = false; onPickMeters() })
+                    DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })
+                    DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
                 }
-            },
-        )
+            }
+        }
     }) { padding ->
         PullRefresh(padding, ::reload) {
-        LazyColumn(Modifier.fillMaxSize(), state = list) {
+        Pane("Library (${albums.size})", Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 8.dp, bottom = 8.dp)) {
             fun tree(parent: Int?, depth: Int): List<Pair<Int, Any>> =
                 folders.filter { it.parentId == parent }.flatMap { f ->
                     listOf<Pair<Int, Any>>(depth to f) +
@@ -197,13 +208,15 @@ fun LibraryScreen(api: Api, player: PlayerController, onOpen: (Int) -> Unit, onP
                             onClick = { if (open) expanded.remove(r.id) else expanded.add(r.id) },
                             onLongClick = { menuFor = r.id },
                         )
-                            .padding(start = 16.dp + 20.dp * depth, end = 16.dp, top = 14.dp, bottom = 14.dp),
+                            .padding(start = 8.dp + 16.dp * depth, end = 10.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                            Text((if (open) "▾ " else "▸ ") + r.name, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                            if (holdsPlaying(r)) PlayingMark(Modifier.padding(start = 8.dp))
+                        Text(nameAndRest((if (open) "▾ " else "▸ ") + r.name, null, holdsPlaying(r), MaterialTheme.colorScheme.primary), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, inlineContent = PlayInline)
+                        if (info >= 1) {
+                            val ids = under(r)
+                            Info.dr(Info.mean(albums.filter { it.folderId in ids }.mapNotNull { it.dr }))?.let { Text(it, Modifier.padding(start = 8.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
                         }
-                        Text("${r.albumCount}", style = MaterialTheme.typography.bodySmall)
+                        Text("${r.albumCount}", Modifier.padding(start = 8.dp).width(28.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.End)
                         DropdownMenu(expanded = menuFor == r.id, onDismissRequest = { menuFor = null }) {
                             DropdownMenuItem(text = { Text("New subfolder") }, onClick = { menuFor = null; dialog = FolderDialog.Create(r.id) })
                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menuFor = null; dialog = FolderDialog.Rename(r.id, r.name) })
@@ -239,25 +252,21 @@ fun LibraryScreen(api: Api, player: PlayerController, onOpen: (Int) -> Unit, onP
                                 },
                             )
                             .clickable { onOpen(album.id) }
-                            .padding(start = 16.dp + 20.dp * depth, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                            .padding(start = 8.dp + 16.dp * depth, end = 10.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Cover(album.coverUrl, Modifier.size(56.dp))
-                        Column(Modifier.padding(start = 12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(album.title, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                                if (player.albumId == album.id) PlayingMark(Modifier.padding(start = 8.dp))
-                            }
-                            Text(
-                                listOfNotNull(album.artist, album.year?.toString(), album.trackCount?.let { "$it tracks" }).joinToString(" · "),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
+                        Text(
+                            nameAndRest(album.title, album.displayArtist ?: album.artist, player.albumId == album.id), Modifier.weight(1f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, inlineContent = PlayInline,
+                        )
+                        if (info >= 1) Info.dr(album.dr)?.let { Text(it, Modifier.padding(start = 8.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
             }
             item {
                 error?.let { Text(it, Modifier.padding(16.dp), color = MaterialTheme.colorScheme.error) }
             }
+        }
         }
         }
     }

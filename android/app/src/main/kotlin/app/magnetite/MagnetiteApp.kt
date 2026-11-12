@@ -28,8 +28,19 @@ class MagnetiteApp : Application(), SingletonImageLoader.Factory {
         getSharedPreferences("look", MODE_PRIVATE).edit().putString("id", l.id).apply()
     }
 
-    suspend fun loadMeters() {
-        runCatching { api.meters() }.onSuccess { meters.clear(); meters.addAll(it) }
+    /** How much the lists and the player say about a file (`users.ui.info`: 0 off, 1 DR, 2 DR and findings); kept with the account. */
+    var info by mutableIntStateOf(2)
+        private set
+
+    suspend fun loadMe() {
+        runCatching { api.me() }.onSuccess { meters.clear(); meters.addAll(it.meters); info = it.ui.info }
+    }
+
+    /** Off, DR, all, and round again (the web's `I`). */
+    fun cycleInfo() {
+        info = (info + 2) % 3
+        val level = info
+        scope.launch { runCatching { api.saveUi(level) } }
     }
 
     fun setMeters(ids: List<String>) {

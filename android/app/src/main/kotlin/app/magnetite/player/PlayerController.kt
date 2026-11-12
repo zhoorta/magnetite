@@ -51,6 +51,9 @@ class PlayerController(context: Context, private val session: Session) {
     /** The album the current track belongs to, whatever the queue was started from; the library marks it. */
     var albumId by mutableStateOf<Int?>(null)
         private set
+    /** The track that is playing, with what is known about the file (format, DR); read through [currentId] so it follows changes. */
+    val current: Track? get() = currentId?.let { id -> queue.firstOrNull { it.id.toString() == id } }
+
     var title by mutableStateOf<String?>(null)
         private set
     var artist by mutableStateOf<String?>(null)

@@ -117,9 +117,12 @@ class Api(private val session: Session) {
         call(send("/playlists/$id/order", "PUT", buildJsonObject { put("ids", kotlinx.serialization.json.JsonArray(trackIds.map { kotlinx.serialization.json.JsonPrimitive(it) })) }))
     }
 
-    /** The user's meter list (`users.meters`), in panel order; the server default is one wide meter. */
-    suspend fun meters(): List<String> =
-        json.parseToJsonElement(call(get("/me"))).jsonObject["meters"]?.let { json.decodeFromJsonElement<List<String>>(it) } ?: listOf("vu-wide")
+    /** The user's meter list (`users.meters`) and interface choices (`users.ui`). */
+    suspend fun me(): Me = json.decodeFromString(call(get("/me")))
+
+    suspend fun saveUi(info: Int) {
+        call(send("/settings/ui", "PUT", buildJsonObject { put("info", info) }))
+    }
 
     suspend fun saveMeters(ids: List<String>) {
         call(send("/settings/meters", "PUT", buildJsonObject { put("ids", kotlinx.serialization.json.JsonArray(ids.map { kotlinx.serialization.json.JsonPrimitive(it) })) }))

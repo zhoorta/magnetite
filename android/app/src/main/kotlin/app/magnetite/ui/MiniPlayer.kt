@@ -36,7 +36,7 @@ private fun clock(ms: Long): String {
 
 /** Bar at the bottom of every screen once something has been played: title, controls and a seek bar. */
 @Composable
-fun MiniPlayer(player: PlayerController, meters: List<String>, showMeters: Boolean, onPickMeters: () -> Unit, onOpen: () -> Unit) {
+fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMeters: Boolean, onPickMeters: () -> Unit, onOpen: () -> Unit) {
     val title = player.title ?: return
     var dragging by remember { mutableStateOf<Float?>(null) }
 
@@ -70,7 +70,14 @@ fun MiniPlayer(player: PlayerController, meters: List<String>, showMeters: Boole
             Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).clickable(onClick = onOpen)) {
                     Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
-                    player.artist?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall) }
+                    player.artist?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+                    player.current?.let { t ->
+                        val line = Info.line(t, info)
+                        if (line.isNotEmpty()) Text(line, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = Palette.Muted)
+                        if (info >= 2) Info.findings(t, 2).takeIf { it.isNotEmpty() }?.let { f ->
+                            Text(f.joinToString("  ") { "! " + it.label }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = flagColor(f.first().level))
+                        }
+                    }
                 }
                 TransportButton(Icon.Previous, "Previous", { player.previous() })
                 TransportButton(if (player.isPlaying) Icon.Pause else Icon.Play, if (player.isPlaying) "Pause" else "Play", { player.toggle() })

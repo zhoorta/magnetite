@@ -169,3 +169,11 @@ Built 2026-10-29 (compiles; not yet run on a TV): manifest entries and banner; `
 - `POST /api/v1/device-token` (`device_code`; throttle 30/min): 400 `authorization_pending` until approved, 400 `expired_token` if unknown, expired or already collected, else 201 with the same `{token, user}` as `POST /token` (ability `*`). The token is handed out once.
 - Web `GET/POST /device` (signed in; the POST is throttled 10/min): the person types the code; unknown or used codes fail validation. A code can be approved once.
 - State is in the cache only (`App\Support\DeviceGrants`, 10 minutes); only the SHA-256 of `device_code` is stored. Tests in `ApiTest` ("device code"). The TV still types the server address once; username and password remain as a fallback button.
+
+## Dense look (started 2026-11-12, branch `android-dense`, uncommitted)
+
+The library follows the web's dense view (`docs/dense-library.md`), phone first.
+
+- **Server**: `/me` also returns `ui` (`users.ui`: `info` 0 off, 1 DR, 2 DR and findings; default 2), `PUT /api/v1/settings/ui` is the web's `UiSettingController` (only the keys sent change), and `GET /albums` carries `dr` (mean of the tracks, `withAvg`) for your own albums; tracks already carried `truth` (`dr`, `lufs`, `flags`).
+- **App**: `ui/Dense.kt` (`Pane` = titled bordered pane, `DenseBar`, `PlayColumn`), `ui/Info.kt` (port of `dense/info.js`: format, DR, LUFS, findings), one-line rows in the library (folder mean DR) and in `TrackRow` (`!` of the worst finding, DR, time), an album page with a small header, the mini player with the format line and the findings under the artist. `MagnetiteApp.info` is loaded from `/me` and cycled from the library menu (off, DR, all), saved to the account.
+- **Not done yet**: `!` marks and folder findings in the album list (the list has no per-track findings, only DR), Search and Truth views, the ⋯ menu for albums and tracks, edit table, tablet panes, key table, Shared and Playlists in the same style (they still pass `info = 0`).

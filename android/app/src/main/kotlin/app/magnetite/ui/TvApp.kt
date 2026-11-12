@@ -53,7 +53,7 @@ fun TvApp(app: MagnetiteApp) {
     var detail by remember { mutableStateOf<TvDetail?>(null) }
     var showNowPlaying by remember { mutableStateOf(false) }
     var pickMeters by remember { mutableStateOf(false) }
-    LaunchedEffect(signedIn) { if (signedIn) app.loadMeters() }
+    LaunchedEffect(signedIn) { if (signedIn) app.loadMe() }
     LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -110,7 +110,7 @@ fun TvApp(app: MagnetiteApp) {
                             showNowPlaying = false
                         },
                     )
-                    d is TvDetail.Album -> AlbumScreen(app.api, app.player, d.id, onBack = { detail = null })
+                    d is TvDetail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null })
                     d is TvDetail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
                     tab == TvTab.Shared -> SharedScreen(
                         app.api, app.player,
@@ -124,7 +124,7 @@ fun TvApp(app: MagnetiteApp) {
         }
         if (!showNowPlaying || app.meters.isNotEmpty()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            MiniPlayer(app.player, app.meters, !showNowPlaying, { pickMeters = true }) { showNowPlaying = true }
+            MiniPlayer(app.player, app.info, app.meters, !showNowPlaying, { pickMeters = true }) { showNowPlaying = true }
         }
     }
 }

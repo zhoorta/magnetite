@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
                 if (pickTheme) ThemePicker({ app.setLook(it) }, { pickTheme = false })
                 if (pickMeters) MeterPicker(app.meters.toList(), { app.setMeters(it) }, { pickMeters = false })
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
-                androidx.compose.runtime.LaunchedEffect(signedIn) { if (signedIn) app.loadMeters() }
+                androidx.compose.runtime.LaunchedEffect(signedIn) { if (signedIn) app.loadMe() }
                 androidx.compose.runtime.LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
 
                 Column(Modifier.fillMaxSize()) {
@@ -90,10 +90,10 @@ class MainActivity : ComponentActivity() {
                                     showNowPlaying = false
                                 },
                             )
-                            d is Detail.Album -> AlbumScreen(app.api, app.player, d.id, onBack = { detail = null })
+                            d is Detail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
                             tab == Tab.Library -> LibraryScreen(
-                                app.api, app.player,
+                                app.api, app.player, app.info, app::cycleInfo,
                                 onOpen = { detail = Detail.Album(it) },
                                 onPickMeters = { pickMeters = true },
                                 onPickTheme = { pickTheme = true },
@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
                     }
                     if (signedIn && (!showNowPlaying || app.meters.isNotEmpty())) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        MiniPlayer(app.player, app.meters, !showNowPlaying, { pickMeters = true }) { showNowPlaying = true }
+                        MiniPlayer(app.player, app.info, app.meters, !showNowPlaying, { pickMeters = true }) { showNowPlaying = true }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         Row(Modifier.fillMaxWidth().height(40.dp)) {
                             Tab.entries.forEach { t ->
