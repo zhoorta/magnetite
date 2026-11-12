@@ -92,6 +92,8 @@ export default function dense(data) {
         init() {
             // `$root` is the root of whichever x-data is running a handler: inside a menu it is the menu. The library's own root is kept here.
             this.libraryRoot = this.$el;
+            // Safari does not always say "touch" on the click event; a touchstart just before it is the sure sign of a finger
+            this.$el.addEventListener('touchstart', () => (this.touchAt = Date.now()), { passive: true, capture: true });
             this.own = { folders: this.folders, albums: this.albums, loose: this.loose, shares: this.shares };
             this.openIds = this.folders.filter((f) => this.storedOpen(f.id)).map((f) => f.id);
             // Start on the album that is playing, if there is one, with the way to it open.
@@ -753,7 +755,7 @@ export default function dense(data) {
          */
         isTouch(ev) {
             const type = ev?.pointerType;
-            if (type === 'touch') return true;
+            if (type === 'touch' || Date.now() - (this.touchAt || 0) < 1000) return true;
             if (type) return false; // a mouse or a pen: the double click works
             return !!window.matchMedia?.('(pointer: coarse)').matches;
         },
