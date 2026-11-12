@@ -204,7 +204,14 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
     // A remote moves the focus from row to row by itself (every row is focusable), so the keyboard cursor is for phones and tablets.
     androidx.compose.runtime.LaunchedEffect(Unit) { if (!tv) runCatching { focus.requestFocus() } }
     val firstRow = remember { androidx.compose.ui.focus.FocusRequester() }
-    androidx.compose.runtime.LaunchedEffect(rows.isNotEmpty()) { if (tv && rows.isNotEmpty()) runCatching { firstRow.requestFocus() } }
+    // the first row only exists once the list has been laid out: try again for a moment
+    androidx.compose.runtime.LaunchedEffect(rows.isNotEmpty()) {
+        if (!tv || rows.isEmpty()) return@LaunchedEffect
+        repeat(15) {
+            if (runCatching { firstRow.requestFocus() }.isSuccess) return@LaunchedEffect
+            kotlinx.coroutines.delay(100)
+        }
+    }
 
     fun moveCursor(d: Int) {
         if (rows.isEmpty()) return

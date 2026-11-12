@@ -29,6 +29,9 @@ import app.magnetite.MagnetiteApp
 import app.magnetite.player.PlaySource
 import kotlinx.coroutines.launch
 
+/** The width, in dp, the TV layout is drawn at: about what a 1080p set reports, a little more so that nothing is huge. */
+private const val TV_WIDTH_DP = 1200f
+
 private enum class TvTab(val label: String) { Library("Library"), Shared("Shared"), Playlists("Playlists"), Meters("Meters"), SignOut("Sign out") }
 
 private sealed interface TvDetail {
@@ -41,7 +44,7 @@ private sealed interface TvDetail {
 
 /**
  * The remote-first shell for Android TV: a side rail, the library on the left with the open album beside it (the tablet's two panes, driven
- * by the remote's focus), and the player along the bottom. Text is a fifth larger and the margins keep clear of the screen's edge (overscan).
+ * by the remote's focus), and the player strip along the bottom (title, seek bar, the first meter, transport). The layout is drawn at a fixed 1200 dp width and the margins keep clear of the screen's edge (overscan).
  * Reuses the phone's screens; `LocalTv` turns their keyboard shortcuts off and their focus marks on.
  */
 @Composable
@@ -56,8 +59,23 @@ fun TvApp(app: MagnetiteApp) {
     LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
+    // When a page opens or closes from inside the content, the item that had the focus is gone and the focus falls back to the first one on the
+    // screen (the rail); put it back into the content. A choice made on the rail itself keeps the focus there.
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    var fromRail by remember { mutableStateOf(false) }
+    var firstRun by remember { mutableStateOf(true) }
+    LaunchedEffect(detail) {
+        if (firstRun) { firstRun = false; return@LaunchedEffect }
+        kotlinx.coroutines.delay(300)
+        // the search page puts the focus in its text field itself
+        if (!fromRail && detail !is TvDetail.Search) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Right)
+        fromRail = false
+    }
+
+    // Every TV reports its own density (and 4K ones a huge one): lay the screen out as if it were TV_WIDTH_DP wide, so it looks the same on all of them.
     val d0 = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(d0.density, d0.fontScale * 1.2f)) {
+    val widthPx = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * d0.density
+    CompositionLocalProvider(LocalDensity provides Density(widthPx / TV_WIDTH_DP, d0.fontScale)) {
         if (pickMeters) MeterPicker(app.meters.toList(), { app.setMeters(it) }, { pickMeters = false })
         if (showNowPlaying) BackHandler { showNowPlaying = false }
 
@@ -75,10 +93,10 @@ fun TvApp(app: MagnetiteApp) {
         // Back from a page opened over a tab goes to that tab; from the tab itself, the system leaves the app.
         if (detail != null && !showNowPlaying) BackHandler { detail = null }
 
-        Column(Modifier.fillMaxSize().padding(horizontal = 48.dp, vertical = 24.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 20.dp)) {
             Row(Modifier.weight(1f)) {
                 if (!showNowPlaying) {
-                    Column(Modifier.fillMaxHeight().width(168.dp).padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxHeight().width(148.dp).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Logo(Modifier.padding(bottom = 16.dp).width(96.dp))
                         TvTab.entries.forEach { t ->
                             val on = tab == t && detail == null
@@ -86,6 +104,7 @@ fun TvApp(app: MagnetiteApp) {
                                 t.label,
                                 Modifier.fillMaxWidth().tvFocus()
                                     .clickable {
+                                        fromRail = detail != null
                                         when (t) {
                                             TvTab.Meters -> pickMeters = true
                                             TvTab.SignOut -> signOut()
@@ -134,8 +153,7 @@ fun TvApp(app: MagnetiteApp) {
             }
             if (!showNowPlaying || app.meters.isNotEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                // no meter panel here: the strip stays small, and its title opens Now Playing, where the meters are big
-                MiniPlayer(app.player, app.info, app.meters, false, { pickMeters = true }) { showNowPlaying = true }
+                TvPlayerStrip(app.player, app.info, app.meters) { showNowPlaying = true }
             }
         }
     }
