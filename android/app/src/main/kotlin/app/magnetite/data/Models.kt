@@ -112,3 +112,12 @@ data class DeviceCode(
     @SerialName("expires_in") val expiresIn: Int,
     val interval: Int = 5,
 )
+
+/** `GET /search`: albums and tracks that match, 25 and 50 a page; `more` says another page follows. */
+@Serializable
+data class SearchResult(val albums: List<Album> = emptyList(), val tracks: List<Track> = emptyList(), val page: Int = 1, val more: More = More()) {
+    val hasMore get() = more.albums || more.tracks
+}
+
+@Serializable
+data class More(val albums: Boolean = false, val tracks: Boolean = false)

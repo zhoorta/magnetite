@@ -131,6 +131,13 @@ class Api(private val session: Session) {
     suspend fun albums(page: Int): Page<Album> =
         json.decodeFromString(call(get("/albums?page=$page")))
 
+    suspend fun search(q: String, page: Int = 1): SearchResult =
+        json.decodeFromString(call(get("/search?q=" + java.net.URLEncoder.encode(q, "UTF-8") + "&page=$page")))
+
+    /** The owner's analysed tracks with their measurements, 500 to a page (the Truth view loads them all). */
+    suspend fun truthTracks(page: Int): Page<Track> =
+        json.decodeFromString(call(get("/tracks?truth=1&per_page=500&page=$page")))
+
     suspend fun folders(): List<Folder> =
         json.decodeFromString<Envelope<List<Folder>>>(call(get("/folders"))).data
 

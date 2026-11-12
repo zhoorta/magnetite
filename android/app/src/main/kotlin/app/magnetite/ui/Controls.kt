@@ -19,7 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-enum class Icon { Previous, Next, Play, Pause, NewFolder, Menu, Back, Meters }
+enum class Icon { Previous, Next, Play, Pause, NewFolder, Menu, Back, Meters, Search }
 
 /** A transport button drawn on a canvas (no icon library needed); [size] is the tap target, the glyph is 40% of it. */
 @Composable
@@ -63,6 +63,11 @@ private fun DrawScope.glyph(icon: Icon, color: Color) {
         // level bars of different heights, like a small meter
         Icon.Meters -> listOf(0.45f, 0.9f, 0.65f, 0.3f).forEachIndexed { i, v ->
             drawRect(color, Offset(w * (0.04f + i * 0.25f), h * (1 - v)), Size(w * 0.17f, h * v))
+        }
+        Icon.Search -> {
+            val line = h * 0.11f
+            drawCircle(color, w * 0.34f, Offset(w * 0.4f, h * 0.4f), style = androidx.compose.ui.graphics.drawscope.Stroke(line))
+            drawLine(color, Offset(w * 0.66f, h * 0.66f), Offset(w * 0.95f, h * 0.95f), line, androidx.compose.ui.graphics.StrokeCap.Square)
         }
         Icon.Menu -> for (i in 0..2) drawCircle(color, w * 0.1f, Offset(w / 2, h * (0.15f + 0.35f * i)))
         Icon.Play -> triangle(w * 0.1f, w * 0.85f, true)

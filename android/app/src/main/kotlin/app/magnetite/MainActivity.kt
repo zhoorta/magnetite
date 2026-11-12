@@ -34,6 +34,8 @@ import app.magnetite.ui.NowPlayingScreen
 import app.magnetite.ui.PlaylistScreen
 import app.magnetite.ui.PlaylistsScreen
 import app.magnetite.ui.SharedScreen
+import app.magnetite.ui.SearchScreen
+import app.magnetite.ui.TruthScreen
 import app.magnetite.ui.TvApp
 import app.magnetite.ui.isTelevision
 
@@ -43,6 +45,8 @@ private enum class Tab(val label: String) { Library("Library"), Shared("Shared")
 private sealed interface Detail {
     data class Album(val id: Int) : Detail
     data class Playlist(val id: Int) : Detail
+    data object Search : Detail
+    data object Truth : Detail
 }
 
 class MainActivity : ComponentActivity() {
@@ -92,9 +96,13 @@ class MainActivity : ComponentActivity() {
                             )
                             d is Detail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null })
+                            d is Detail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = Detail.Album(it) }, onBack = { detail = null })
+                            d is Detail.Truth -> TruthScreen(app.api, app.player, onBack = { detail = null })
                             tab == Tab.Library -> LibraryScreen(
                                 app.api, app.player, app.info, app::cycleInfo,
                                 onOpen = { detail = Detail.Album(it) },
+                                onSearch = { detail = Detail.Search },
+                                onTruth = { detail = Detail.Truth },
                                 onPickMeters = { pickMeters = true },
                                 onPickTheme = { pickTheme = true },
                                 onSignOut = {
