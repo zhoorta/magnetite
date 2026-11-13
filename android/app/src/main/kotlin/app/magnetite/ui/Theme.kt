@@ -134,7 +134,7 @@ fun ThemePicker(onPick: (Look) -> Unit, onClose: () -> Unit) {
             Column {
                 Looks.forEach { l ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { onPick(l) }.padding(vertical = 10.dp),
+                        Modifier.fillMaxWidth().tvFocus().clickable { onPick(l) }.padding(vertical = 10.dp, horizontal = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(if (l.id == Looking.current.id) "●" else "○", Modifier.padding(end = 12.dp), color = MaterialTheme.colorScheme.primary)

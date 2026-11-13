@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 /** The width, in dp, the TV layout is drawn at: about what a 1080p set reports, a little more so that nothing is huge. */
 private const val TV_WIDTH_DP = 1200f
 
-private enum class TvTab(val label: String) { Library("Library"), Shared("Shared"), Playlists("Playlists"), Meters("Meters"), SignOut("Sign out") }
+private enum class TvTab(val label: String) { Library("Library"), Shared("Shared"), Playlists("Playlists"), Meters("Meters"), Theme("Theme"), SignOut("Sign out") }
 
 private sealed interface TvDetail {
     data class Album(val id: Int) : TvDetail
@@ -65,6 +65,7 @@ fun TvApp(app: MagnetiteApp) {
     var fullScreen by remember { mutableStateOf(false) }
     val stripFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var pickMeters by remember { mutableStateOf(false) }
+    var pickTheme by remember { mutableStateOf(false) }
     LaunchedEffect(signedIn) { if (signedIn) app.loadMe() }
     LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -86,6 +87,7 @@ fun TvApp(app: MagnetiteApp) {
     val d0 = LocalDensity.current
     val widthPx = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp * d0.density
     CompositionLocalProvider(LocalDensity provides Density(widthPx / TV_WIDTH_DP, d0.fontScale)) {
+        if (pickTheme) ThemePicker({ app.setLook(it) }, { pickTheme = false })
         if (pickMeters) MeterPicker(app.meters.toList(), { app.setMeters(it) }, { pickMeters = false })
         if (showNowPlaying) BackHandler { showNowPlaying = false; fullScreen = false }
         if (fullScreen) BackHandler { fullScreen = false }
@@ -132,6 +134,7 @@ fun TvApp(app: MagnetiteApp) {
                                         fromRail = detail != null
                                         when (t) {
                                             TvTab.Meters -> pickMeters = true
+                                            TvTab.Theme -> pickTheme = true
                                             TvTab.SignOut -> signOut()
                                             else -> { tab = t; detail = null }
                                         }
@@ -178,7 +181,7 @@ fun TvApp(app: MagnetiteApp) {
                         else -> LibraryPanes(
                             app, wide = true, selected = selected, onSelect = { selected = it }, openAlbum = { selected = it },
                             onSearch = { detail = TvDetail.Search }, onTruth = { detail = TvDetail.Truth }, onEdit = { detail = TvDetail.Edit(it) },
-                            onPickMeters = { pickMeters = true }, onPickTheme = { }, onSignOut = ::signOut,
+                            onPickMeters = { pickMeters = true }, onPickTheme = { pickTheme = true }, onSignOut = ::signOut,
                         )
                     }
                 }
