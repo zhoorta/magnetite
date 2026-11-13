@@ -50,11 +50,6 @@ class User extends Authenticatable
         return $this->hasMany(Playlist::class);
     }
 
-    public function scenes(): HasMany
-    {
-        return $this->hasMany(Scene::class);
-    }
-
     public function albums(): HasMany
     {
         return $this->hasMany(Album::class);

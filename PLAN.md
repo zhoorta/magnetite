@@ -24,7 +24,7 @@ Stay standalone with a thin library of our own (scanner, covers, ALAC conversion
 ## Open
 
 - [ ] **Open source and adoption** (`docs/open-source.md`): phase 0 history audit (the licence is AGPL-3.0-or-later everywhere, decided 2026-11-13), 1 one-container Docker install, 2 README, templates, releases, 3 client binaries, 4 shared Rust core, 5 Subsonic/OpenSubsonic server API (read-only first, `apiKey` auth), 6 one-file server only on evidence. Landing page and README refreshed 2026-11-13
-- [ ] Scenes: any picture as a visualizer (`docs/scenes.md`): tuning on real music, light mode, scenes from the album cover, linked to music, on Android and iOS
+- [x] Scenes (any picture as a meter) removed 2026-11-13: poster meters do the job with real measurements; the code is on the `scenes` branch
 - [ ] Write edits back to the files' tags (`docs/editing.md`), opt-in with a preview
 - [ ] Safari and a real phone for the dense library and the meters; iOS on a real device, drag and drop, CarPlay; Android: upload from the phone, keys in Search and the TV shell, a test on a real phone, tablet and box
 - [x] Poster meters (2026-11-13): fourteen built (every design of the mockup), themes Night and Cream & orange, text printed from the track (`docs/posters.md`); not yet seen on real music in the app

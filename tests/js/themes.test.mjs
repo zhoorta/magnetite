@@ -53,9 +53,9 @@ test('meter numbers are clamped, colours checked, null follows the theme, a bad 
     assert.deepEqual(theme.visualizers[1].params, { response: 0.5, face: null });
 });
 
-test('a meter without a schema (the picture scenes) keeps plain values', () => {
-    const { theme } = validateTheme({ ...good, visualizers: [{ id: 'scene-1', params: { zoom: 0.3, f() {} } }] });
-    assert.deepEqual(theme.visualizers, [{ id: 'scene-1', params: { zoom: 0.3 } }]);
+test('a meter without a schema keeps plain values', () => {
+    const { theme } = validateTheme({ ...good, visualizers: [{ id: 'custom-1', params: { zoom: 0.3, f() {} } }] });
+    assert.deepEqual(theme.visualizers, [{ id: 'custom-1', params: { zoom: 0.3 } }]);
 });
 
 test('every schema key is a param of its meter, and its default fits the range', () => {

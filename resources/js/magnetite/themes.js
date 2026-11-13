@@ -67,7 +67,7 @@ const fullHex = (c) => {
 function cleanParams(id, params) {
     const schema = METER_SCHEMAS[id];
     const plain = Object.entries(params).filter(([, x]) => ['number', 'string', 'boolean'].includes(typeof x) || x === null);
-    if (!schema) return Object.fromEntries(plain); // a meter without a schema (the picture scenes): plain values, as before
+    if (!schema) return Object.fromEntries(plain); // a meter without a schema: plain values, as before
 
     const out = {};
     for (const { key, type, min, max } of schema) {

@@ -25,5 +25,5 @@ import vuWide from './vu-wide';
 
 export const visualizers = Object.fromEntries([vuWide, vuNeedle, vuLeds, magicEye, scope, goniometer, loudness, thirdOctave, spectrogram, posterLens, posterWarp, posterLenses, posterArches, posterFan, posterOvercome, posterPillars, posterFacets, posterDials, posterColumns, posterSlides, posterRings, posterHalftone, posterHeads].map((v) => [v.id, v]));
 
-/** What the meter menu lists (the scenes the person added come and go, so this is read when needed). */
+/** What the meter menu lists. */
 export const meterList = () => meterEntries(visualizers);

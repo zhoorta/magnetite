@@ -10,7 +10,7 @@ Magnetite is a self-hosted music player for the browser. It plays the files stor
 - Nine meters, up to four at once. LUFS (momentary, short-term, integrated), true peak, phase correlation and a goniometer are computed sample by sample in an AudioWorklet.
 - `magnetite:analyze` decodes every file and reports lossy sources, upsampling, clipping, heavy compression, true peak over 0 dBTP and duplicates, with the dynamic range of each track and album.
 - The library is built for the keyboard: two panes, a command line, an edit table, search with filters and a truth view. Every key also has a button for touch.
-- A theme is one JSON file with the palette, corner radius, font and settings for each meter. The theme studio previews it live and there are 16 bundled open fonts. Pictures can drive a meter too (scenes).
+- A theme is one JSON file with the palette, corner radius, font and settings for each meter. The theme studio previews it live and there are 16 bundled open fonts.
 - Each person has their own library and can share albums, tracks and playlists. Zips of audio and covers can be uploaded. Files can also live in a Ferrite folder.
 - Clients: the web app, a terminal client (`tui/`, Rust), Android for phone, tablet and TV (`android/`) and iOS (`ios/`).
 

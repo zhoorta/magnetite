@@ -6,12 +6,10 @@ import { renderThumb } from './visualizers/thumb';
 import { layout, MAX_PANELS } from './layout';
 import builtinThemes from './themes.json';
 import { validateTheme } from './themes';
-import scenesPage from './scenes-page';
 import themeStudio from './themes-page';
 import { uploadsStore } from './uploads';
 import storage from './storage';
 import { send } from './http';
-import { scenesStore } from './scenes';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
 import { loadFont } from './font-load';
 import dense from './dense/component';
@@ -84,7 +82,6 @@ function readColors() {
 
 Alpine.data('dense', dense);
 Alpine.data('themeStudio', themeStudio);
-Alpine.data('scenesPage', scenesPage);
 Alpine.data('storage', storage);
 Alpine.store('playlists', playlistStore);
 Alpine.data('playlistPicker', playlistPicker);
@@ -132,7 +129,6 @@ Alpine.store('dialog', {
 });
 
 /** The user's interface choices (info level, meter tint). */
-Alpine.store('scenes', scenesStore(window.magnetite?.scenes, () => Alpine.store('player')));
 Alpine.store('uploads', uploadsStore(window.magnetite?.uploads ?? null));
 Alpine.store('ui', uiStore(window.magnetite?.ui, !!window.magnetite?.signedIn));
 
@@ -694,12 +690,12 @@ Alpine.store('player', {
         }
     },
 
-    /** The picture for a meter in the menu: a poster's drawn thumbnail, or a scene's own picture; none for the others. */
+    /** The picture for a meter in the menu: a poster's drawn thumbnail; none for the others. */
     thumbOf(id) {
-        return this.thumbs[id] ?? Alpine.store('scenes').list.find((s) => `scene-${s.id}` === id)?.url ?? '';
+        return this.thumbs[id] ?? '';
     },
 
-    /** The poster meters and the scenes, as groups for submenus in the meter menu. */
+    /** The poster meters, as a group (a submenu) in the meter menu. */
     get visualizerGroups() {
         return meterGroups(this.visualizerList);
     },

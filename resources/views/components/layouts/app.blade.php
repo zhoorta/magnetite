@@ -28,7 +28,6 @@
                 @endauth
                 <a href="{{ route('themes') }}" wire:navigate class="{{ $link('themes') }}">Themes</a>
                 @auth
-                    <a href="{{ route('scenes') }}" wire:navigate class="{{ $link('scenes') }}">Scenes</a>
                 @endauth
                 @auth
                     <a href="{{ route('storage') }}" wire:navigate class="{{ $link('storage') }}">Storage</a>
@@ -203,7 +202,7 @@
                             {{-- The whole list scrolls when it is taller than the screen, so no group hides its last items. --}}
                             <div class="max-h-[min(32rem,70vh)] overflow-y-auto">
                             <p class="px-3 pb-1 pt-0.5 text-xs text-muted" x-text="'Up to ' + $store.player.maxPanels + ' at once'"></p>
-{{-- The meters in the main list, then the poster meters and the scenes as submenus that open in place (a nested group, so it also works on a phone). --}}
+{{-- The meters in the main list, then the poster meters as a submenu that opens in place (a nested group, so it also works on a phone). --}}
                             <template x-for="v in $store.player.visualizerList.filter((v) => ! v.group)" :key="v.id">
                                 <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)"
                                         :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
@@ -221,7 +220,7 @@
                                         <span x-text="g.name"></span>
                                         <span class="ml-auto text-xs text-accent tabular-nums" x-text="g.items.filter((v) => $store.player.hasMeter(v.id)).length || ''"></span>
                                     </button>
-                                    {{-- A grid of pictures with the name under each: the posters' are drawn on a demo signal in the theme's colours, a scene's is its own picture. --}}
+                                    {{-- A grid of pictures with the name under each: drawn on a demo signal in the theme's colours. --}}
                                     <div x-show="open" x-cloak role="group" :aria-label="g.name" class="grid grid-cols-3 gap-1.5 px-2 pb-2 pt-1">
                                         <template x-for="v in g.items" :key="v.id">
                                             <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)" :title="v.short"

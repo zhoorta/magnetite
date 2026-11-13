@@ -32,7 +32,6 @@
 @php
     $user = auth()->user();
     $boot = ['signedIn' => auth()->check(), 'userId' => auth()->id(), 'meters' => $user?->meters, 'ui' => $user?->ui,
-        'scenes' => $user ? app(\App\Http\Controllers\SceneController::class)->list($user) : [],
         'uploads' => $user ? ['url' => route('upload.store'), 'scanUrl' => route('scan.show'), 'maxMb' => config('magnetite.upload.max_zip_mb')] : null];
 @endphp
 {{-- What the player needs to know about the person: the meters they chose and their interface choices (null: they never did). Read once, when the player starts. --}}

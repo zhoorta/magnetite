@@ -1,6 +1,6 @@
-// What the meter menu lists: every meter with its label, and, for the poster meters and the scenes, the group they sit in. No DOM: Node tests it.
+// What the meter menu lists: every meter with its label, and, for the poster meters, the group they sit in. No DOM: Node tests it.
 
-const GROUPS = [['poster-', 'Posters', 'Poster: '], ['scene-', 'Scenes', 'Scene: ']];
+const GROUPS = [['poster-', 'Posters', 'Poster: ']];
 
 /** `[{ id, label, group, short }]`: `group` is null for a meter that sits in the main list; `short` is the label without the group's prefix. */
 export function meterEntries(visualizers) {

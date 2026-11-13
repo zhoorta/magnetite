@@ -34,11 +34,11 @@ The bundled themes **Night** (charcoal, teal and violet) and **Cream & orange** 
 - Text comes from the playing track (`artist`, `title`, `album`, `year`, `number`, `duration`, `codec` and the `truth` for bit depth, rate and DR; only the owner's own tracks have `truth`). With no artist the title becomes the name. Fonts: the theme's meter font (`colors.font`).
 - Overlaps (Lens, Slides) darken on a light paper and lighten (`screen`) on a dark one (Slides decides per row). Text and shapes that sit on a poster's own colour pick what reads best (`readableOn`, `darkest` in `poster.js`): the Facets text on its orange, the Warp pupil, the Lenses name on its panel.
 - Checked on the Terminal, Late-night FM and Paper & ink themes (2026-11-13); other themes are not checked one by one.
-- The module `label` is "Poster: Name". The meter menu in the player bar lists the other meters first, then "Posters" and "Scenes" as groups that open in place (`visualizers/menu.js`, tested; a group is open when one of its meters is on, and shows how many are on). A new group is one line in `GROUPS` there.
+- The module `label` is "Poster: Name". The meter menu in the player bar lists the other meters first, then "Posters" as a group that opens in place (`visualizers/menu.js`, tested; a group is open when one of its meters is on, and shows how many are on; Posters starts open). A new group is one line in `GROUPS` there.
 
 ## Thumbnails
 
-The meter menu shows the posters (and the scenes) as a grid of pictures with the name under each. A poster's picture is drawn once per theme by `visualizers/thumb.js` on a canvas of its own, with its settings from the theme, text off and a canned demo signal (`demo-sample.js`); `loadThumbs()` in the player store makes them one by one when the menu is first opened (about 150 ms for all fourteen) and again after a theme change. This is why the poster meters keep their state per canvas context (`stateOf`), so drawing a picture never disturbs the live meter. A scene's picture is the scene's own image.
+The meter menu shows the posters as a grid of pictures with the name under each. A poster's picture is drawn once per theme by `visualizers/thumb.js` on a canvas of its own, with its settings from the theme, text off and a canned demo signal (`demo-sample.js`); `loadThumbs()` in the player store makes them one by one when the menu is first opened (about 150 ms for all fourteen) and again after a theme change. This is why the poster meters keep their state per canvas context (`stateOf`), so drawing a picture never disturbs the live meter.
 
 ## Ideas not done
 
