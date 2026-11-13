@@ -27,7 +27,7 @@ Stay standalone with a thin library of our own (scanner, covers, ALAC conversion
 - [x] Scenes (any picture as a meter) removed 2026-11-13: poster meters do the job with real measurements; the code is on the `scenes` branch
 - [ ] Write edits back to the files' tags (`docs/editing.md`), opt-in with a preview
 - [ ] Safari and a real phone for the dense library and the meters; iOS on a real device, drag and drop, CarPlay; Android: upload from the phone, keys in Search and the TV shell, a test on a real phone, tablet and box
-- [x] Poster meters (2026-11-13): fourteen built (every design of the mockup), themes Night and Cream & orange, text printed from the track (`docs/posters.md`); not yet seen on real music in the app
+- [x] Poster meters (2026-11-13): fourteen built (every design of the mockup), themes Night and Cream & orange, text printed from the track (`docs/posters.md`); Tunnel, Circuit and Terrain added (mockups `poster-tunnel.html`, `poster-circuit.html`, `poster-terrain.html`), Warp and Columns removed (branches `poster-warp`, `poster-columns`); the mockup `poster-glow.html` is not built; not yet seen on real music in the app
 - [ ] More meters (PPM, crest factor, nixie readout, LRA, K-metering) and more VU looks
 - [ ] Metadata sources beyond MusicBrainz and Cover Art Archive (optional), albums with a wrong tag, files in the library root
 - [ ] Remote Ferrite latency test from a US server (`docs/bare-metal.md`)

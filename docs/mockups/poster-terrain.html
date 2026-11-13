@@ -1,0 +1,300 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Terrain</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Terrain poster meter: the screen of an old vector workstation, two colours of line on black. The centre is a
+   wireframe city on a grid: eight columns are eight bands, the front row is the sound now and each row behind it follows more
+   slowly, so the city keeps a memory of the last seconds. Around it, panels that are all readings: a spectrum strip, a ruler
+   with the time played, the left and right level, a clip lamp, the stereo width, a small goniometer, a list of four ranges, four folders that fill with the loudness values (momentary, short-term, integrated,
+   true peak), a window that prints the numbers as code, and the time played and left. The title is the logo. Fake signal,
+   no audio. Shapes are drawn here, nothing is copied from the reference picture. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Terrain</h1>
+  <p>A vector workstation screen where every panel is a reading. The city is the spectrum: eight columns are eight bands, the front row follows the sound calmly and each row behind more slowly still. Above it a spectrum strip and a ruler with the time played; top right the left and right level, a clip lamp, the stereo width and a small goniometer; the list is four ranges; the folders fill with momentary, short-term and integrated loudness and true peak; the window prints the numbers; the title is the logo.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>glow <input id="glow" type="range" min="0" max="1" step="0.01" value="0.35"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Red and amber', { bg:'#0a0605', line:'#f2381f', hot:'#ffb526' }],
+  ['Green and lime', { bg:'#040805', line:'#2fc46a', hot:'#d8ff5a' }],
+  ['Blueprint', { bg:'#070b16', line:'#4a86ff', hot:'#e6efff' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', no:'03', codec:'FLAC', bits:'24/96', dr:'12', dur:274 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', no:'07', codec:'ALAC', bits:'16/44', dr:'7', dur:468 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', no:'', codec:'MP3', bits:'320', dr:'', dur:125 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const NB = 8, ROWS = 6;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.37) + i) + 0.42 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.2) + i * 0.9)), 6);
+    return clamp(v * (1 - i * 0.07) * base);
+  });
+}
+
+const line = (g, ...p) => { g.beginPath(); g.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) g.lineTo(p[i], p[i + 1]); g.stroke(); };
+const box = (g, x, y, w, h) => g.strokeRect(x, y, w, h);
+const poly = (g, pts) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); };
+function mix(a, b, t) {
+  const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(',')})`;
+}
+function label(g, txt, x, y, size = 10, align = 'left', font = SANS, weight = 500) {
+  g.font = `${weight} ${size}px ${font}`; g.textAlign = align; g.fillText(txt, x, y);
+}
+function fit(g, txt, maxW, size, weight, font = SANS, style = '') {
+  g.font = `${style} ${weight} ${size}px ${font}`;
+  while (g.measureText(txt).width > maxW && size > 9) { size -= 1; g.font = `${style} ${weight} ${size}px ${font}`; }
+  return size;
+}
+
+// the city's ground: tile (c, r) to the poster, c runs right and down, r left and down
+const OX = 172, OY = 322, TX = 20, TY = 10, TALL = 150;
+const P = (c, r, h = 0) => [OX + (c - r) * TX, OY + (c + r) * TY - h];
+
+function shapes(g, pal, st, o, tr) {
+  const T = o.text;
+  g.lineWidth = 1.4; g.lineJoin = 'round'; g.lineCap = 'round'; g.textBaseline = 'alphabetic';
+  g.strokeStyle = pal.line; g.fillStyle = pal.line;
+
+  // ---- header boxes
+  box(g, 22, 22, 150, 24); box(g, 172, 22, 180, 24);
+  if (T) { label(g, 'NOW PLAYING:', 32, 38, 10); fit(g, tr.name.toUpperCase(), 164, 10, 500); g.textAlign = 'left'; g.fillText(tr.name.toUpperCase(), 180, 38); }
+
+  // ---- spectrum strip: forty outlined bars, the tall ones in the hot colour
+  box(g, 22, 52, 330, 58);
+  for (let i = 0; i < 40; i++) {
+    const f = (i / 39) * (NB - 1), a = Math.floor(f), b = Math.min(NB - 1, a + 1);
+    const v = clamp((st.b[a] + (st.b[b] - st.b[a]) * (f - a)) * (0.8 + 0.2 * Math.sin(i * 12.9898 + st.t * 6)));
+    const hh = 3 + v * 48, x = 27 + i * 8;
+    g.strokeStyle = mix(pal.line, pal.hot, clamp(v * 1.3 - 0.3));
+    box(g, x, 106 - hh, 5, hh);
+  }
+  g.strokeStyle = pal.line;
+
+  // ---- ruler: the track's length, the pointer is the time played
+  line(g, 22, 134, 22, 140, 352, 140, 352, 134);
+  for (let i = 1; i < 30; i++) line(g, 22 + i * 11, 140, 22 + i * 11, i % 5 ? 137 : 134);
+  if (T) for (let i = 0; i <= 6; i++) label(g, mmss((i / 6) * tr.dur), 22 + i * 55, 128, 8, i === 0 ? 'left' : i === 6 ? 'right' : 'center');
+  const px = 22 + o.played * 330;
+  g.strokeStyle = pal.hot; poly(g, [[px, 146], [px - 7, 154], [px + 7, 154]]); g.stroke(); g.strokeStyle = pal.line;
+
+  // ---- four small squares: left level, right level, clip lamp, stereo width
+  const sq = [[366, 22], [397, 22], [366, 53], [397, 53]];
+  sq.forEach(([x, y]) => box(g, x, y, 25, 25));
+  [st.l, st.r].forEach((v, i) => { const [x, y] = sq[i]; g.fillStyle = mix(pal.line, pal.hot, clamp(v * 1.4 - 0.4)); g.fillRect(x + 8, y + 21 - v * 17, 9, v * 17); });
+  g.fillStyle = pal.line;
+  g.beginPath(); g.arc(378.5, 65.5, 6, 0, TAU); g.stroke();
+  if (st.clip > 0.02) { g.save(); g.globalAlpha = st.clip; g.fillStyle = pal.hot; g.fill(); g.restore(); }
+  const wd = 1 + 4 * (1 - st.corr);
+  g.beginPath(); g.arc(409.5 - wd, 65.5, 5, 0, TAU); g.stroke(); g.beginPath(); g.arc(409.5 + wd, 65.5, 5, 0, TAU); g.stroke();
+
+  // ---- stereo field: a small goniometer
+  box(g, 432, 22, 146, 24); box(g, 432, 46, 146, 78);
+  if (T) label(g, 'STEREO FIELD', 505, 38, 10, 'center');
+  g.save(); g.beginPath(); g.rect(433, 47, 144, 76); g.clip();
+  g.strokeStyle = pal.line; g.globalAlpha = 0.5; line(g, 505 - 34, 85 - 34, 505 + 34, 85 + 34); line(g, 505 + 34, 85 - 34, 505 - 34, 85 + 34); g.globalAlpha = 1;
+  g.strokeStyle = pal.hot; g.beginPath();
+  for (let n = 0; n <= 90; n++) {
+    const a = (n / 90) * TAU, m = Math.sin(a * 3 + st.t * 1.1) * 30 * (0.3 + st.level), s = Math.sin(a * 2 + st.t * 1.7) * 26 * (0.3 + st.level) * (1 - st.corr);
+    const x = 505 + s, y = 85 - m * 0.9; n ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.stroke(); g.restore(); g.strokeStyle = pal.line;
+
+  // ---- file lines under it
+  if (T) {
+    const rows = [['FORMAT:', [tr.codec, tr.bits].filter(Boolean).join(' ')], ['DYNAMIC RANGE:', tr.dr ? `DR${tr.dr}` : '········'], ['TRACK:', tr.no ? `#${tr.no}` : '—']];
+    rows.forEach(([k, v], i) => { label(g, k, 432, 142 + i * 14, 9); label(g, v, 578, 142 + i * 14, 9, 'right'); });
+  }
+
+  // ---- the city: ground grid, then towers from the back to the front
+  for (let c = 0; c <= NB; c++) line(g, ...P(c, 0), ...P(c, ROWS));
+  for (let r = 0; r <= ROWS; r++) line(g, ...P(0, r), ...P(NB, r));
+  for (let d = 0; d <= NB + ROWS - 2; d++) for (let r = 0; r < ROWS; r++) {
+    const c = d - r; if (c < 0 || c >= NB) continue;
+    const v = st.city[r][c], h = v * TALL;
+    const seed = Math.abs(Math.sin(c * 12.9898 + r * 78.233) * 43758.5453) % 1;
+    const m = 0.12 + 0.14 * seed, a = [c + m, r + m], b = [c + 1 - m, r + m], e = [c + 1 - m, r + 1 - m], f = [c + m, r + 1 - m];
+    g.strokeStyle = mix(pal.line, pal.hot, clamp(v * 1.5 - 0.25));
+    g.fillStyle = pal.bg;
+    if (h < 2) { poly(g, [P(...a), P(...b), P(...e), P(...f)]); g.stroke(); continue; }
+    poly(g, [P(...f), P(...e), P(...e, h), P(...f, h)]); g.fill(); g.stroke();          // left face
+    poly(g, [P(...e), P(...b), P(...b, h), P(...e, h)]); g.fill(); g.stroke();          // right face
+    poly(g, [P(...a, h), P(...b, h), P(...e, h), P(...f, h)]); g.fill(); g.stroke();    // roof
+    if (seed > 0.6 && h > 30) for (let k = 1; k < 4; k++) {                               // some towers are ribbed
+      const u = k / 4, x0 = P(...f)[0] + (P(...e)[0] - P(...f)[0]) * u, y0 = P(...f)[1] + (P(...e)[1] - P(...f)[1]) * u;
+      line(g, x0, y0, x0, y0 - h);
+    }
+  }
+  g.strokeStyle = pal.line; g.fillStyle = pal.line;
+  line(g, 30, 196, 62, 196); line(g, 46, 180, 46, 212); line(g, 36, 206, 56, 186);       // a register mark
+
+  if (T) {
+    label(g, `${tr.no || '00'}_${(tr.album || 'SINGLE').toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 20)}`, 372, 178, 8, 'right');
+    label(g, 'READING_SPECTRUM', 372, 190, 8, 'right');
+    label(g, 'ROWS/NOW_TO_SLOW', 22, 506, 8); label(g, 'COLS/40HZ_16KHZ', 40, 518, 8); label(g, `LEVEL/${st.level.toFixed(2)}`, 58, 530, 8);
+  }
+
+  // ---- the list: four ranges
+  const names = ['LOW', 'LOW MID', 'HIGH MID', 'HIGH'];
+  const grp = [0, 1, 2, 3].map((i) => (st.b[i * 2] + st.b[i * 2 + 1]) / 2);
+  line(g, 472, 196, 482, 182, 578, 182, 578, 196);
+  for (let k = 0; k < 3; k++) for (let j = 0; j < 3; j++) { const x = 500 + k * 26 + j * 5; line(g, x + 4, 185, x, 189, x + 4, 193); }
+  box(g, 392, 196, 186, 208);
+  grp.forEach((v, i) => {
+    const y = 204 + i * 49;
+    box(g, 400, y, 36, 42); box(g, 442, y, 128, 42);
+    g.beginPath();                                                        // the icon: a wave, faster for higher ranges
+    for (let n = 0; n <= 28; n++) { const x = 404 + n, yy = y + 21 - Math.sin((n / 28) * TAU * (1 + i * 1.5)) * (3 + 11 * v); n ? g.lineTo(x, yy) : g.moveTo(x, yy); }
+    g.stroke();
+    line(g, 442, y + 21, 442 + 8 + v * 50, y + 21);
+    if (T) label(g, names[i], 562, y + 25, 10, 'right');
+  });
+  g.strokeStyle = g.fillStyle = pal.line;
+
+  // ---- the logo: artist, title, year
+  if (T) {
+    g.fillStyle = pal.hot;
+    const title = tr.title.toUpperCase(), yr = tr.year ? tr.year.slice(-2) : '';
+    g.font = `italic 900 40px ${SANS}`; const yw = yr ? g.measureText(yr).width + 8 : 0;
+    const ts = fit(g, title, 330 - yw, 34, 900);
+    g.textAlign = 'right'; g.fillText(title, 578 - yw, 556);
+    const tw = g.measureText(title).width;
+    if (yr) { g.font = `italic 900 40px ${SANS}`; g.fillText(yr, 578, 556); }
+    g.font = `700 12px ${SANS}`; if ('letterSpacing' in g) g.letterSpacing = '4px';
+    g.textAlign = 'left'; g.fillText(tr.name.toUpperCase(), Math.max(240, 578 - yw - tw), 556 - ts - 4);
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+    g.fillStyle = pal.line;
+  }
+
+  // ---- double rule
+  box(g, 22, 574, 556, 6);
+
+  // ---- folders: momentary, short-term and integrated loudness, true peak
+  const vals = [['M', st.lm, -36, -6, ' LUFS'], ['S', st.ls, -36, -6, ' LUFS'], ['I', st.li, -36, -6, ' LUFS'], ['P', st.tp, -24, 0, ' dBTP']];
+  vals.forEach(([name, db, lo, hi], i) => {
+    const x = 22 + i * 82, y = 606, v = clamp((db - lo) / (hi - lo));
+    g.save(); g.beginPath(); g.rect(x, y + 8, 64, 44); g.clip();
+    g.globalAlpha = 0.3; g.fillRect(x, y + 52 - v * 44, 64, v * 44); g.globalAlpha = 1;
+    g.strokeStyle = pal.hot; line(g, x, y + 52 - v * 44, x + 64, y + 52 - v * 44); g.restore();
+    g.strokeStyle = pal.line;
+    poly(g, [[x, y + 52], [x, y + 8], [x + 6, y], [x + 26, y], [x + 32, y + 8], [x + 64, y + 8], [x + 64, y + 52]]); g.stroke();
+    const dots = 1 + Math.round(v * 3);
+    for (let k = 0; k < dots; k++) { g.beginPath(); g.arc(x + 62 - k * 6, 690, 1.6, 0, TAU); g.fill(); }
+    line(g, x + 8, 702, x + 8, 712, x + 30, 712); box(g, x + 30, 702, 34, 20);
+    if (T) { label(g, name, x, 696, 24, 'left', SANS, 500); label(g, db.toFixed(db <= -10 ? 0 : 1), x + 47, 716, 9, 'center', MONO, 700); }
+  });
+
+  // ---- the window that prints the numbers
+  box(g, 352, 606, 162, 116); line(g, 352, 622, 514, 622);
+  [0, 1, 2].forEach((k) => { g.beginPath(); g.arc(504 - k * 11, 614, 3, 0, TAU); g.stroke(); });
+  if (T) {
+    const code = [`var t = play("${tr.title.toLowerCase().slice(0, 14)}");`, '', `lufs.m = ${st.lm.toFixed(1)};`, `lufs.s = ${st.ls.toFixed(1)};`, `peak.tp = ${st.tp.toFixed(1)};`, `corr = ${st.corr >= 0 ? '+' : ''}${st.corr.toFixed(2)};`];
+    code.forEach((ln, i) => label(g, ln, 360, 638 + i * 13, 8.5, 'left', MONO));
+  }
+
+  // ---- time played and time left
+  box(g, 524, 606, 54, 44); box(g, 524, 678, 54, 44);
+  if (T) {
+    g.fillStyle = pal.hot;
+    label(g, mmss(o.played * tr.dur), 551, 633, 14, 'center', SANS, 700); label(g, `-${mmss((1 - o.played) * tr.dur)}`, 551, 705, 14, 'center', SANS, 700);
+    g.fillStyle = pal.line;
+    label(g, 'PLAYED', 551, 664, 9, 'center'); label(g, 'LEFT', 551, 736, 9, 'center');
+    label(g, 'MAGNETITE', 352, 742, 8); line(g, 408, 739, 440, 739); label(g, 'POSTER TERRAIN', 448, 742, 8);
+  }
+}
+
+function draw(card, o) {
+  const { c, layer, pal, st } = card;
+  const dpr = devicePixelRatio || 1;
+  const cw = Math.round(c.clientWidth * dpr), ch = Math.round(c.clientHeight * dpr);
+  if (c.width !== cw || c.height !== ch) { c.width = layer.width = cw; c.height = layer.height = ch; }
+  const s = Math.min(cw / W, ch / H);
+  const tr = TRACKS[ti];
+
+  // state
+  const fol = (v, to, sec) => v + (to - v) * (1 - Math.exp(-o.dt / sec));
+  st.t += o.dt;
+  o.bands.forEach((v, i) => { st.b[i] = fol(st.b[i], v, 0.09); });
+  for (let r = 0; r < ROWS; r++) for (let cc = 0; cc < NB; cc++) st.city[r][cc] = fol(st.city[r][cc], o.bands[cc], 0.2 * Math.pow(1.9, ROWS - 1 - r));
+  const mean = o.bands.reduce((a, b) => a + b, 0) / NB;
+  st.level = fol(st.level, mean, 0.09);
+  st.l = fol(st.l, clamp(mean * (1.4 + 0.3 * Math.sin(st.t * 0.7))), 0.09); st.r = fol(st.r, clamp(mean * (1.4 - 0.3 * Math.sin(st.t * 0.7))), 0.09);
+  st.corr = fol(st.corr, 0.5 + 0.45 * Math.sin(st.t * 0.33), 0.2);
+  st.clip = Math.max(Math.max(...o.bands) > 0.93 ? 1 : 0, st.clip * Math.exp(-o.dt / 0.4));
+  st.lm = fol(st.lm, -34 + mean * 44, 0.4); st.ls = fol(st.ls, -34 + mean * 44, 3); st.li = fol(st.li, -34 + mean * 44, 20);
+  st.tp = Math.max(-24 + Math.max(...o.bands) * 24, st.tp - o.dt * 3);
+
+  const lg = layer.getContext('2d');
+  lg.setTransform(1, 0, 0, 1, 0, 0); lg.clearRect(0, 0, cw, ch);
+  lg.setTransform(s, 0, 0, s, (cw - W * s) / 2, (ch - H * s) / 2);
+  // the towers hide what is behind them with the ground colour, so the layer starts filled and is laid on black as it is
+  lg.fillStyle = pal.bg; lg.fillRect(0, 0, W, H);
+  shapes(lg, pal, st, o, tr);
+
+  const g = c.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.filter = 'none';
+  g.fillStyle = pal.bg; g.fillRect(0, 0, cw, ch);
+  g.drawImage(layer, 0, 0);
+  if (o.glow > 0.01) {
+    g.globalCompositeOperation = 'lighter';
+    g.filter = `blur(${10 * s}px)`; g.globalAlpha = 0.8 * o.glow; g.drawImage(layer, 0, 0);
+    g.filter = `blur(${3 * s}px)`; g.globalAlpha = 0.6 * o.glow; g.drawImage(layer, 0, 0);
+    g.filter = 'none'; g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  }
+}
+
+const cards = PALS.map(([name, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = name;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, layer: document.createElement('canvas'), pal, st: { t: 0, b: new Array(NB).fill(0), city: Array.from({ length: ROWS }, () => new Array(NB).fill(0)), level: 0, l: 0, r: 0, corr: 0.5, clip: 0, lm: -34, ls: -34, li: -34, tp: -24, sel: 0 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const bands = fakeBands(clock, $('auto').checked ? 1.15 : +$('lvl').value * 2);
+  const o = { dt, bands, played: (clock % 40) / 40, text: $('text').checked, glow: +$('glow').value };
+  cards.forEach((card) => draw(card, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+requestAnimationFrame(frame);
+</script>
