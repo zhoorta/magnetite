@@ -3,6 +3,7 @@ import { Livewire } from '../../../../vendor/livewire/livewire/dist/livewire.esm
 import { send } from '../http';
 import { actionFor, isTextTarget } from './keymap';
 import { complete, parse, pick } from './commands';
+import { SHUFFLES, REPEATS } from '../order';
 import { folderStats, folderTiles, summaryLine } from './folder';
 import { findings, hasProblem } from './info';
 import { appendPage, emptySearch, queueFrom, searchItems, wantsMore } from './search';
@@ -1262,6 +1263,18 @@ export default function dense(data) {
                     player.setTheme(hit);
 
                     return this.say(`theme: ${hit}`);
+                }
+                case 'shuffle': {
+                    if (!arg.trim()) return player.cycleShuffle();
+                    const hit = pick(arg, SHUFFLES);
+
+                    return hit ? player.setShuffle(hit) : this.say('shuffle off, tracks or albums');
+                }
+                case 'repeat': {
+                    if (!arg.trim()) return player.cycleRepeat();
+                    const hit = pick(arg, REPEATS);
+
+                    return hit ? player.setRepeat(hit) : this.say('repeat off, all or one');
                 }
                 case 'full': player.expanded = !player.expanded; return;
                 case 'help': player.helpOpen = true;

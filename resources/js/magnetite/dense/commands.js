@@ -33,6 +33,8 @@ export const COMMANDS = [
     ['tint', 'meter colours from the cover (c)'],
     ['hints', 'show or hide the key hints at the bottom'],
     ['theme', 'theme NAME (t)'],
+    ['shuffle', 'shuffle: shuffle off, tracks or albums; no argument cycles (Z)'],
+    ['repeat', 'repeat: repeat off, all or one; no argument cycles (R)'],
     ['full', 'full screen (f)'],
     ['help', 'the keys (?)'],
 ];
@@ -65,7 +67,7 @@ export function complete(text, { folders = [], themes = [], sorts = ['library', 
     if (!space) return NAMES.filter((n) => n.startsWith(head.toLowerCase())).map((n) => n);
 
     const cmd = parse(head).name;
-    const pool = { move: folders, rename: folders, theme: themes, sort: sorts, info: ['0', '1', '2'] }[cmd] ?? [];
+    const pool = { move: folders, rename: folders, theme: themes, sort: sorts, info: ['0', '1', '2'], shuffle: ['off', 'tracks', 'albums'], repeat: ['off', 'all', 'one'] }[cmd] ?? [];
     const want = rest.toLowerCase();
 
     return pool.filter((p) => String(p).toLowerCase().startsWith(want)).map((p) => `${cmd} ${p}`);

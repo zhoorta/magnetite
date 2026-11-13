@@ -12,6 +12,7 @@ import storage from './storage';
 import { send } from './http';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
 import { loadFont } from './font-load';
+import { makeOrder, advance, previous, upcoming, cycle, SHUFFLES, REPEATS } from './order';
 import dense from './dense/component';
 import { uiStore } from './dense/ui';
 import { dockInfo, trackPosition } from './dense/info';
@@ -136,6 +137,10 @@ Alpine.store('player', {
     // state
     queue: [],
     index: -1,
+    shuffle: 'off', // off, tracks or albums: the play order (`order`) is shuffled, the queue is not
+    repeat: 'off', // off, all (the queue, so an album when an album was played) or one
+    order: [], // queue indices in play order; rebuilt when the queue or the shuffle changes (ensureOrder)
+    orderOf: null, // the queue `order` was made for
     playing: false,
     time: 0,
     duration: 0,
@@ -210,7 +215,7 @@ Alpine.store('player', {
             this.playing = false;
             this.savePlayback();
         });
-        audio.addEventListener('ended', () => this.next());
+        audio.addEventListener('ended', () => this.ended());
         // Chrome/Firefox cannot decode everything (e.g. ALAC in .m4a). Say so and move on.
         audio.addEventListener('error', () => this.fail());
 
@@ -389,7 +394,43 @@ Alpine.store('player', {
 
     setQueue(tracks, index = 0) {
         this.queue = tracks;
+        this.order = makeOrder(tracks, this.shuffle, index);
+        this.orderOf = this.queue;
         return this.playAt(index);
+    },
+
+    /** The play order for the queue as it is now (the queue is also set directly by the restore and the start page). */
+    ensureOrder() {
+        if (this.orderOf !== this.queue || this.order.length !== this.queue.length) {
+            this.order = makeOrder(this.queue, this.shuffle, this.index >= 0 ? this.index : null);
+            this.orderOf = this.queue;
+        }
+
+        return this.order;
+    },
+
+    setShuffle(mode) {
+        if (!SHUFFLES.includes(mode)) return;
+        this.shuffle = mode;
+        this.order = makeOrder(this.queue, mode, this.index >= 0 ? this.index : null);
+        this.orderOf = this.queue;
+        this.say(mode === 'off' ? 'shuffle off' : `shuffle ${mode}`);
+        this.savePlayback();
+    },
+
+    cycleShuffle() {
+        this.setShuffle(cycle(SHUFFLES, this.shuffle));
+    },
+
+    setRepeat(mode) {
+        if (!REPEATS.includes(mode)) return;
+        this.repeat = mode;
+        this.say(mode === 'off' ? 'repeat off' : `repeat ${mode}`);
+        this.savePlayback();
+    },
+
+    cycleRepeat() {
+        this.setRepeat(cycle(REPEATS, this.repeat));
     },
 
     async playAt(i) {
@@ -411,7 +452,8 @@ Alpine.store('player', {
 
     /** Ask the server to fetch the next track into its cache while this one plays. Fire and forget: nothing depends on it. */
     prefetchNext(audio) {
-        const next = this.queue[this.index + 1];
+        const at = upcoming(this.ensureOrder(), this.index);
+        const next = at === null ? undefined : this.queue[at];
 
         if (!shouldPrefetch({ playing: this.playing, time: audio.currentTime, duration: audio.duration, next, already: this.prefetched })) return;
 
@@ -429,7 +471,9 @@ Alpine.store('player', {
         this.playing = false;
 
         // Skip ahead so a run of unplayable files doesn't stall the queue, but stop at the end.
-        if (this.index + 1 < this.queue.length) setTimeout(() => this.next(), 1500);
+        const at = upcoming(this.ensureOrder(), this.index);
+        const failed = this.index;
+        if (at !== null) setTimeout(() => this.index === failed && this.playAt(at), 1500);
     },
 
     toggle() {
@@ -439,14 +483,28 @@ Alpine.store('player', {
     },
 
     next() {
-        if (this.index + 1 < this.queue.length) this.playAt(this.index + 1);
+        const to = advance({ queue: this.queue, order: this.ensureOrder(), index: this.index, shuffle: this.shuffle, repeat: this.repeat });
+        if (!to) return;
+
+        this.order = to.order;
+        this.playAt(to.index);
+    },
+
+    /** A track ran to its end: the same one again (repeat one), the next, or stop at the end of the queue. */
+    ended() {
+        if (this.repeat !== 'one') return this.next();
+
+        this.engine.el.currentTime = 0;
+        this.engine.play();
     },
 
     prev() {
-        if (this.engine.el.currentTime > 3 || this.index === 0) {
+        const before = previous(this.ensureOrder(), this.index);
+
+        if (this.engine.el.currentTime > 3 || before === null) {
             this.engine.el.currentTime = 0;
         } else {
-            this.playAt(this.index - 1);
+            this.playAt(before);
         }
     },
 
@@ -467,7 +525,7 @@ Alpine.store('player', {
         const from = Math.max(0, Math.min(this.index - MAX_SAVED_QUEUE / 2, this.queue.length - MAX_SAVED_QUEUE));
         const queue = this.queue.slice(from, from + MAX_SAVED_QUEUE);
 
-        safeStorage((s) => s.setItem(key, JSON.stringify({ queue, index: this.index - from, time })));
+        safeStorage((s) => s.setItem(key, JSON.stringify({ queue, index: this.index - from, time, shuffle: this.shuffle, repeat: this.repeat })));
     },
 
     /** `signingOut`: the page is about to unload and would save again on the way out; do not. */
@@ -514,6 +572,8 @@ Alpine.store('player', {
             const check = await fetch(track.url, { method: 'HEAD', credentials: 'same-origin' });
             if (!check.ok || this.current) return forgetIf(check.status, () => this.forgetPlayback());
 
+            if (SHUFFLES.includes(saved.shuffle)) this.shuffle = saved.shuffle;
+            if (REPEATS.includes(saved.repeat)) this.repeat = saved.repeat;
             this.queue = queue;
             this.index = saved.index;
             this.time = Number(saved.time) || 0;
@@ -566,6 +626,8 @@ Alpine.store('player', {
         else if (/^[0-9]$/.test(key) && this.duration) act(() => this.seek(Number(key) / 10));
         else if (key === 'n') act(() => this.next());
         else if (key === 'p') act(() => this.prev());
+        else if (key === 'Z') act(() => this.cycleShuffle()); // the library's lowercase s, r and the other letters are taken, so these two are capitals
+        else if (key === 'R') act(() => this.cycleRepeat());
         else if (key === 'I') act(() => Alpine.store('ui').cycleInfo()); // how much the lists and the player say about the files
         else if (key === 'f' || key === 'F') act(() => (this.expanded = !this.expanded));
         else if (key === 'm') act(() => this.cycleMeter(1)); // the terminal client's keys: m / M change the meter, + and - the number of meters

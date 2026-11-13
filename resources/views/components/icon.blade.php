@@ -6,6 +6,8 @@
         @case('pause') <rect x="4" y="3.5" width="3" height="9" fill="currentColor" stroke="none"/><rect x="9" y="3.5" width="3" height="9" fill="currentColor" stroke="none"/> @break
         @case('prev') <path d="M12 3.5v9l-6.5-4.5z" fill="currentColor" stroke="none"/><rect x="3" y="3.5" width="1.8" height="9" fill="currentColor" stroke="none"/> @break
         @case('next') <path d="M4 3.5v9l6.5-4.5z" fill="currentColor" stroke="none"/><rect x="11.2" y="3.5" width="1.8" height="9" fill="currentColor" stroke="none"/> @break
+        @case('shuffle') <path d="M2 4.5h2.2c3.3 0 3.6 7 7 7H14M2 11.5h2.2c1 0 1.7-.6 2.3-1.5M9.5 6c.5-.9 1.2-1.5 2.2-1.5H14"/><path d="M12.5 3l1.7 1.5-1.7 1.5M12.5 10l1.7 1.5-1.7 1.5"/> @break
+        @case('repeat') <path d="M3 8V7a2 2 0 0 1 2-2h8M13 8v1a2 2 0 0 1-2 2H3"/><path d="M11 3l2 2-2 2M5 9l-2 2 2 2"/> @break
         @case('folder') <path d="M2 4.5a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/> @break
         @case('back') <path d="M9.5 3.5L5 8l4.5 4.5M5 8h8"/> @break
         @case('select') <rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M5.5 8l2 2 3.5-4"/> @break

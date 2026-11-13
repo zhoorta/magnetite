@@ -114,6 +114,8 @@
                             'Shift + ← →' => 'Back or forward 30 s',
                             '0 – 9' => 'Jump to 0 – 90 % of the track',
                             'n / p' => 'Next track / previous (or restart)',
+                            'Shift + Z' => 'Shuffle: off, tracks, albums (the albums at random, each in its own order)',
+                            'Shift + R' => 'Repeat: off, all (the album or playlist you started), one',
                             ', .' => 'Back or forward 10 s',
                             'Shift + I' => 'How much the lists and the player say about the files: all, DR only, nothing',
                             'm / M' => 'Next / previous meter on the active panel (none shown: bring one back)',
@@ -269,6 +271,12 @@
 
                 {{-- Previous, play or pause, next: as in the mockup. --}}
                 <div class="flex items-center justify-center gap-2 text-sm">
+                    {{-- Shuffle (off, tracks, albums) and repeat (off, all, one): lit when on, a small letter or 1 says which. --}}
+                    <button type="button" class="relative inline-flex items-center rounded-theme border px-3 py-1 hover:border-accent hover:text-accent" :class="$store.player.shuffle !== 'off' ? 'border-accent text-accent' : 'border-white/15 text-muted'"
+                            :title="'Shuffle: ' + $store.player.shuffle + ' (Shift+Z)'" :aria-label="'Shuffle: ' + $store.player.shuffle" :aria-pressed="$store.player.shuffle !== 'off'" @click="$store.player.cycleShuffle()">
+                        <x-icon name="shuffle" />
+                        <span x-show="$store.player.shuffle === 'albums'" x-cloak class="absolute -right-1 -top-1.5 rounded-full bg-accent px-1 text-[10px] font-bold leading-4 text-bg" aria-hidden="true">A</span>
+                    </button>
                     <button type="button" class="inline-flex items-center rounded-theme border border-white/15 px-4 py-1 hover:border-accent hover:text-accent" title="Previous (p)" aria-label="Previous" @click="$store.player.prev()"><x-icon name="prev" /></button>
                     {{-- Shows the state, like the icons in the lists: the play icon while it plays, the pause icon (in amber) while it is paused. --}}
                     <button type="button" class="inline-flex items-center rounded-theme border px-4 py-1 hover:border-accent hover:text-accent" :class="$store.player.playing ? 'border-accent text-accent' : 'border-amber-500 text-amber-500'"
@@ -277,6 +285,11 @@
                         <x-icon name="play" x-show="! $store.player.playing" x-cloak />
                     </button>
                     <button type="button" class="inline-flex items-center rounded-theme border border-white/15 px-4 py-1 hover:border-accent hover:text-accent" title="Next (n)" aria-label="Next" @click="$store.player.next()"><x-icon name="next" /></button>
+                    <button type="button" class="relative inline-flex items-center rounded-theme border px-3 py-1 hover:border-accent hover:text-accent" :class="$store.player.repeat !== 'off' ? 'border-accent text-accent' : 'border-white/15 text-muted'"
+                            :title="'Repeat: ' + $store.player.repeat + ' (Shift+R)'" :aria-label="'Repeat: ' + $store.player.repeat" :aria-pressed="$store.player.repeat !== 'off'" @click="$store.player.cycleRepeat()">
+                        <x-icon name="repeat" />
+                        <span x-show="$store.player.repeat === 'one'" x-cloak class="absolute -right-1 -top-1.5 rounded-full bg-accent px-1 text-[10px] font-bold leading-4 text-bg" aria-hidden="true">1</span>
+                    </button>
                 </div>
             </div>
             </div>

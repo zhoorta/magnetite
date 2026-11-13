@@ -34,6 +34,8 @@ test('completion offers command names, then the arguments of the command', () =>
     assert.deepEqual(complete('mv R', ctx), ['move Rock'], 'an alias completes to the command');
     assert.deepEqual(complete('theme g', ctx), ['theme graphite']);
     assert.deepEqual(complete('info ', ctx), ['info 0', 'info 1', 'info 2']);
+    assert.deepEqual(complete('shuffle a', ctx), ['shuffle albums']);
+    assert.deepEqual(complete('repeat ', ctx), ['repeat off', 'repeat all', 'repeat one']);
     assert.deepEqual(complete('sort y'), ['sort year']);
     assert.deepEqual(complete('delete x'), [], 'a command without arguments completes to nothing');
 });
