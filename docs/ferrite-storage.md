@@ -1,4 +1,4 @@
-# Ferrite as library storage (design, not built yet)
+# Ferrite as library storage (built 2026-10-09)
 
 The music files live in a Ferrite folder instead of on the Magnetite server's disk. Magnetite reads and adds files through Ferrite's API (Ferrite's `docs/api.md`) with one folder-scoped token. Local folders stay the default and keep working.
 

@@ -80,7 +80,7 @@ Measured with four meters at once (full screen, headless Chrome, 60 fps): level 
 - True peak is a 49-tap Blackman-windowed sinc, 4x, each phase normalised to unity DC gain; phase 0 lands exactly on the input samples. Annex 2 of BS.1770 gives its own 48-tap coefficients; this is the same idea, not the same numbers, so it may differ from a certified meter by a few hundredths of a dB.
 - Correlation is `sum(LR) / sqrt(sum(LL) * sum(RR))` with a 0.3 s exponential average; the goniometer plots mid on the vertical axis and side across, scaled so a full-scale mono signal just reaches the circle, with the last 1024 samples (23 ms at 44.1 kHz) per message.
 - The worklet runs always, off the main thread; the `needs` contract only matters for what the main thread computes. Its output is silence connected to the destination, so the heard signal is untouched.
-- Verified: Node tests against analytic values (see `PLAN.md`) and headless Chrome on a real file (loud master: -9.3 LUFS, -0.4 dBTP, correlation 0.87). Not verified: Safari, or any comparison with a reference meter.
+- Verified: Node tests against analytic values (see `docs/history.md`) and headless Chrome on a real file (loud master: -9.3 LUFS, -0.4 dBTP, correlation 0.87). Not verified: Safari, or any comparison with a reference meter.
 - Gotcha found on the way: `php artisan serve` handles one request at a time, so `addModule` called after the audio request had started stayed pending forever. The file is therefore fetched in the engine constructor and loaded from a Blob URL.
 
 ## Third-octave analyser (2026-10-08)

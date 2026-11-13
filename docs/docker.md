@@ -22,7 +22,7 @@ What the start-up script (`docker/entrypoint.sh`) does: refuses to start without
 |---|---|---|
 | `/data` | SQLite database (users, library, sessions, cache, queue) | named volume `data` |
 | `/app/storage` | covers, ALAC conversions, framework files | named volume `storage` |
-| `/music` | the library; uploads are unpacked here | bind mount (`MAGNETITE_MUSIC_DIR`, default `./music`) |
+| `/music` | the library, one folder per user (`users/{username}`); each user's uploads are unpacked into their own folder | bind mount (`MAGNETITE_MUSIC_DIR`, default `./music`) |
 
 The processes run as `www-data` (uid 33), not root. The music folder has to be writable by that uid or uploads fail with "not writable". Back up `data` and the music folder; `storage` can be rebuilt (covers by a scan, conversions on first play).
 

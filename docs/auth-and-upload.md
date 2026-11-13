@@ -2,7 +2,7 @@
 
 ## Who can do what
 
-`/` (start page), `/themes`, `/about` and `/login` are public. `/library`, `/stream/{track}`, `/cover/{album}` and `/upload` need a signed-in user; guests are sent to `/login` and back afterwards. There are no roles: any user may upload.
+`/` (start page), `/themes` and `/login` are public. `/library`, `/stream/{track}`, `/cover/{album}` and `/upload` need a signed-in user; guests are sent to `/login` and back afterwards. There are no roles: any user may upload.
 
 Users sign in with a username and password (the e-mail column is optional, Magnetite sends no mail). There is no registration page:
 

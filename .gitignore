@@ -27,3 +27,6 @@ Homestead.yaml
 Thumbs.db
 .env.docker
 /music
+
+# Release APKs are copied to the server by hand (see docs/bare-metal.md)
+/public/downloads/*.apk

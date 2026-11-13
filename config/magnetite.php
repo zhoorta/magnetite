@@ -1,6 +1,14 @@
 <?php
 
 return [
+    // Where the start page's demo tracks are (FLAC files named in resources/demo/tracks.json). Not in git:
+    // `bin/prepare-demo.sh` makes them and they are copied to the server.
+    'demo_path' => env('MAGNETITE_DEMO_PATH', storage_path('app/demo')),
+
+    // Version of the Android app offered on the start page: the file public/downloads/magnetite-{version}.apk
+    // (not in git, copied to the server by hand). The page hides the download when the file is missing.
+    'apk_version' => env('MAGNETITE_APK_VERSION', '0.4.0'),
+
     // Folder scanned for audio files (recursively). Magnetite only writes to it when a signed-in user uploads a zip
     // (see `upload` below); existing files are never overwritten or modified.
     'music_path' => env('MAGNETITE_MUSIC_PATH', storage_path('app/music')),
