@@ -131,8 +131,6 @@
                             <span class="h-5 w-5 rounded-full border border-black/20" :style="{ background: t.colors[c] }"></span>
                         </template>
                     </div>
-                    <div class="mt-3 text-xs" :style="{ color: t.colors.muted }"
-                         x-text="$store.player.styles(t).map((v) => v.id).join(' + ')"></div>
                 </button>
             </template>
         </div>

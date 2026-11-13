@@ -278,18 +278,12 @@ Alpine.store('player', {
         safeStorage((s) => s.setItem(CUSTOM_KEY, JSON.stringify(this.themes.filter((t) => t.custom).map(({ custom, ...t }) => t))));
     },
 
-    /** The meters this theme gives a look to (palette tweaks for one meter); it does not choose which meters show. */
-    styles(theme) {
-        return theme.visualizers ?? (theme.visualizer ? [theme.visualizer] : []);
-    },
-
     /** Show these meters (known ones only, no repeats, at most MAX_PANELS), and remember them for a signed-in user. */
     setMeters(ids, save = true) {
-        const theme = themes.find((t) => t.id === this.themeId);
         const wanted = [...new Set(ids)].filter((id) => visualizers[id]).slice(0, MAX_PANELS);
 
         this.meterIds = wanted;
-        this.panels = wanted.map((id) => ({ id, params: this.styles(theme).find((v) => v.id === id)?.params ?? {} }));
+        this.panels = wanted.map((id) => ({ id, params: {} }));
         this.needs = [...new Set(this.panels.flatMap((p) => visualizers[p.id].needs))];
 
         if (save) this.saveMeters();
@@ -681,11 +675,10 @@ Alpine.store('player', {
 
         this.thumbsKey = key;
         this.thumbs = {};
-        const styles = this.styles(themes.find((t) => t.id === this.themeId));
         for (const { id, group } of this.visualizerList) {
             if (group !== 'Posters') continue;
             if (this.thumbsKey !== key) return; // the theme changed meanwhile: a newer run has taken over
-            this.thumbs = { ...this.thumbs, [id]: renderThumb(visualizers[id], this.colors, styles.find((v) => v.id === id)?.params ?? {}) };
+            this.thumbs = { ...this.thumbs, [id]: renderThumb(visualizers[id], this.colors, {}) };
             await new Promise((done) => setTimeout(done)); // one a turn, so the menu does not wait for all of them
         }
     },

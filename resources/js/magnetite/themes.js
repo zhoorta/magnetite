@@ -1,6 +1,4 @@
-import { METER_SCHEMAS } from './meter-schemas.js';
-
-// Themes as one JSON bundle: checking one that someone pasted or loaded, a safe id, the file to export, contrast. No DOM; Node tests it.
+// Themes as one JSON bundle: checking one that someone pasted or loaded, a safe id, the file to export. No DOM; Node tests it.
 
 export const COLOR_KEYS = ['bg', 'surface', 'text', 'muted', 'accent', 'accent2'];
 export const RADII = ['0rem', '0.15rem', '0.5rem', '0.75rem', '1rem'];
@@ -61,33 +59,6 @@ const fullHex = (c) => {
 };
 
 /**
- * A meter's params as the schema allows them: only its keys, numbers clamped to the range, colours as #rrggbb or null (follow the
- * theme). A value that does not fit is dropped, so the meter keeps its default.
- */
-function cleanParams(id, params) {
-    const schema = METER_SCHEMAS[id];
-    const plain = Object.entries(params).filter(([, x]) => ['number', 'string', 'boolean'].includes(typeof x) || x === null);
-    if (!schema) return Object.fromEntries(plain); // a meter without a schema: plain values, as before
-
-    const out = {};
-    for (const { key, type, min, max } of schema) {
-        const x = params[key];
-        if (type === 'number' && typeof x === 'number' && Number.isFinite(x)) out[key] = Math.min(max, Math.max(min, x));
-        else if (type === 'color' && x === null) out[key] = null;
-        else if (type === 'color' && typeof x === 'string' && HEX.test(x)) out[key] = fullHex(x);
-    }
-
-    return out;
-}
-
-/** The meter looks a theme may carry: ids and checked parameters only. */
-function cleanLooks(list) {
-    return list
-        .filter((v) => v && typeof v.id === 'string' && v.id.length <= 40)
-        .map((v) => ({ id: v.id, params: cleanParams(v.id, v.params && typeof v.params === 'object' && !Array.isArray(v.params) ? v.params : {}) }));
-}
-
-/**
  * Check a theme object. Returns `{ theme }` (cleaned: only the known keys, colours as lower-case #rrggbb, an id that is not in
  * `taken`) or `{ error }` with a sentence to show. Nothing is trusted: the values end up in CSS variables and in a font-family.
  */
@@ -117,9 +88,6 @@ export function validateTheme(input, taken = []) {
 
     const theme = { id, name, colors, radius, font };
     if (meterFont) theme.meterFont = meterFont;
-    if (Array.isArray(input.visualizers)) theme.visualizers = cleanLooks(input.visualizers);
-    else if (input.visualizer && typeof input.visualizer === 'object') theme.visualizer = cleanLooks([input.visualizer])[0] ?? undefined;
-    if (theme.visualizer === undefined) delete theme.visualizer;
 
     return { theme };
 }
@@ -138,20 +106,7 @@ export function parseTheme(text, taken = []) {
 
 /** The JSON a theme is shared as: the same keys as themes.json, nothing local (no `custom` flag). */
 export function exportTheme(theme) {
-    const { id, name, colors, radius, font, meterFont, visualizer, visualizers } = theme;
+    const { id, name, colors, radius, font, meterFont } = theme;
 
-    return JSON.stringify({ id, name, colors, radius, font, ...(meterFont ? { meterFont } : {}), ...(visualizers ? { visualizers } : visualizer ? { visualizer } : {}) }, null, 4);
-}
-
-/** WCAG contrast ratio of two hex colours (1 to 21). */
-export function contrast(a, b) {
-    const lum = (hex) => {
-        const h = fullHex(hex).slice(1);
-        const [r, g, bl] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
-
-        return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-    };
-    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-
-    return (hi + 0.05) / (lo + 0.05);
+    return JSON.stringify({ id, name, colors, radius, font, ...(meterFont ? { meterFont } : {}) }, null, 4);
 }

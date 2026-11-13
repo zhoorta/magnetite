@@ -1,6 +1,6 @@
 # Magnetite plan
 
-A player where the look is the product: themes are one JSON bundle (palette, radius, font, meter looks), meters are pluggable canvas modules that measure properly, and playback never stops while you navigate. Short status only; the dated log is `docs/history.md`, the detail is in the topic docs (`docs/README.md`).
+A player where the look is the product: themes are one JSON bundle (palette, radius, font), meters are pluggable canvas modules that measure properly, and playback never stops while you navigate. Short status only; the dated log is `docs/history.md`, the detail is in the topic docs (`docs/README.md`).
 
 ## Positioning (decided 2026-10-08, revisit)
 
@@ -15,7 +15,7 @@ Stay standalone with a thin library of our own (scanner, covers, ALAC conversion
 - [x] Playlists (private, shareable, drag-and-drop), keyboard shortcuts, resume after a reload
 - [x] Meters: nine of them, up to four at once, sample-accurate LUFS, true peak, correlation and goniometer in an AudioWorklet (`docs/meters-and-file-truth.md`)
 - [x] File truth: `magnetite:analyze`, dynamic range, findings, duplicates (`docs/file-truth.md`)
-- [x] Themes as JSON bundles, theme studio with live meter preview, per-browser custom themes
+- [x] Themes as JSON bundles, theme studio with live meter preview, per-browser custom themes (simplified 2026-11-13: themes no longer carry meter settings)
 - [x] Dense, keyboard-first library as the web UI: tree, tracks, command line, edit table, search, truth view (`docs/dense-library.md`)
 - [x] Ferrite as library storage (`docs/ferrite-storage.md`)
 - [x] Clients: Android phone, tablet and TV, released as 0.4.0 (`docs/android.md`); iOS in the simulator (`docs/ios.md`); terminal client in Rust (`docs/tui.md`)
