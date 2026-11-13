@@ -1,0 +1,270 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Circuit</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Circuit poster meter: a dark ground, the track set in soft rounded lowercase type flush right, and below it
+   a one-colour logic schematic that is the meter. Seven "straps" crossed by eight word lines are a 7 band spectrum (a strap
+   fills cell by cell, a paper-coloured tick holds the peak); the amplifier on each word line lights when any band reaches
+   that row; the gate behind it when two do; the two wide gates on the right fill with the left and right level; the domes
+   under the straps flash on each band's onsets, the four on the right count the strobe (bass onsets); the register boxes
+   at the bottom hold time played, length and format. Fake signal, no audio. Shapes are drawn here, nothing is copied
+   from the reference cover. */
+@font-face { font-family: 'Righteous'; font-display: block; src: url('../../node_modules/@fontsource/righteous/files/righteous-latin-400-normal.woff2') format('woff2'); }
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Circuit</h1>
+  <p>A textbook cover: album in small capitals, title and artist in rounded lowercase, flush right. The schematic below is the meter. The seven straps are seven bands and fill cell by cell (the pale tick holds the peak); an amplifier lights when any band reaches its row, the gate behind it when two do; the two wide gates fill with the left and right level; the domes flash on onsets and the four on the right count the strobe; the boxes hold time played, length and format.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const DISPLAY = '"Righteous", "Arial Rounded MT Bold", "Helvetica Neue", Arial, sans-serif';
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const SERIF = 'Georgia, "Times New Roman", serif';
+const PALS = [
+  ['Red and cream on blue-black', { bg:'#14161b', ink:'#ece4cf', line:'#e23a2c' }],
+  ['Green phosphor', { bg:'#0b110d', ink:'#e4ead8', line:'#48cf78' }],
+  ['Red and ink on paper', { bg:'#e9e2cf', ink:'#17150f', line:'#c2331f' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 7, ROWS = 8;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.9);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.37) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.2) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+// ---- geometry (600 x 800)
+const SX = (i) => 46 + i * 38;           // strap centre
+const RY = (r) => 412 + r * 30;          // word line, r = 0 is the top row
+const STRAP_TOP = 394, STRAP_BOT = 640;
+const AMP_X = 312, GATE_X = 430, GATE_W = 24, GATE_H = 20;
+const BUS_X = (k) => 350 + k * 14;       // the four vertical buses between amplifiers and gates
+const RDOME_X = (k) => 366 + k * 34;     // the four domes on the right
+const DOME_Y = 670, DOME_R = 13;
+const RAIL_Y = (j) => 694 + j * 12;      // three rails under the domes; the middle one is the strobe
+const OR_X = 536, OR_W = 52, OR_H = 64, OR_Y = [462, 582];
+
+function line(g, pts) { g.beginPath(); g.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i + 1]); g.stroke(); }
+function dot(g, x, y) { g.beginPath(); g.arc(x, y, 2.4, 0, TAU); g.fill(); }
+function lit(g, a) { if (a > 0.01) { g.save(); g.globalAlpha = clamp(a); g.fill(); g.restore(); } g.stroke(); }
+function gatePath(g, x, y, w, h) {
+  g.beginPath(); g.moveTo(x, y - h / 2); g.lineTo(x + w - h / 2, y - h / 2);
+  g.arc(x + w - h / 2, y, h / 2, -Math.PI / 2, Math.PI / 2); g.lineTo(x, y + h / 2); g.closePath();
+}
+function dome(g, cx, a, bg) {
+  g.beginPath(); g.arc(cx, DOME_Y, DOME_R, Math.PI, 0); g.closePath(); lit(g, a);
+  for (let j = 0; j < 3; j++) {
+    const x = cx - 7 + j * 7;
+    g.beginPath(); g.arc(x, DOME_Y + 3, 2.6, 0, TAU);
+    g.save(); g.fillStyle = bg; g.fill(); g.restore(); g.stroke();
+    line(g, [x, DOME_Y + 5.6, x, RAIL_Y(j)]);
+    dot(g, x, RAIL_Y(j));
+  }
+}
+
+function draw(c, pal, st, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+  const tr = TRACKS[ti];
+
+  // ---- state: smoothed bands, peak hold, onsets, strobe
+  const k = 1 - Math.exp(-o.dt / 0.09);
+  for (let i = 0; i < NB; i++) {
+    st.b[i] += (o.bands[i] - st.b[i]) * k;
+    st.pk[i] = Math.max(st.b[i], st.pk[i] - o.dt * 0.22);
+    st.slow[i] += (o.bands[i] - st.slow[i]) * (1 - Math.exp(-o.dt / 0.45));
+    const on = clamp((o.bands[i] - st.slow[i] - 0.06) * 6);
+    st.on[i] = Math.max(on, st.on[i] * Math.exp(-o.dt / 0.14));
+  }
+  st.cool -= o.dt;
+  if (st.on[0] > 0.6 && st.cool <= 0) { st.step = (st.step + 1) % 4; st.strobe = 1; st.cool = 0.28; }
+  st.strobe *= Math.exp(-o.dt / 0.2);
+  for (let j = 0; j < 4; j++) st.count[j] = j === st.step ? Math.max(st.count[j], st.strobe) : st.count[j] * Math.exp(-o.dt / 0.25);
+  st.l += (o.l - st.l) * k; st.r += (o.r - st.r) * k;
+
+  // cell(i, r): how much band i lights row r (0..1), r = 0 is the top
+  const cell = (i, r) => clamp(st.b[i] * ROWS - (ROWS - 1 - r));
+  const rowAny = [], rowTwo = [];
+  for (let r = 0; r < ROWS; r++) {
+    const a = Array.from({ length: NB }, (_, i) => cell(i, r)).sort((x, y) => y - x);
+    rowAny[r] = a[0]; rowTwo[r] = a[1];
+  }
+
+  g.fillStyle = pal.bg; g.fillRect(0, 0, W, H);
+  g.strokeStyle = pal.line; g.fillStyle = pal.line;
+  g.lineWidth = 1.5; g.lineJoin = 'round'; g.lineCap = 'round';
+  g.textBaseline = 'alphabetic';
+
+  // ---- the matrix: bracket, word lines, straps with their grounds
+  line(g, [22, 372, 22, 366, 118, 366]); line(g, [206, 366, 290, 366, 290, 372]);
+  for (let r = 0; r < ROWS; r++) line(g, [0, RY(r), AMP_X, RY(r)]);
+  for (let i = 0; i < NB; i++) {
+    const x = SX(i);
+    for (let r = 0; r < ROWS; r++) {
+      const a = cell(i, r);
+      if (a > 0.01) { g.save(); g.globalAlpha = a; g.fillRect(x - 4, RY(r) - 14, 8, 28); g.restore(); }
+    }
+    g.strokeRect(x - 4, STRAP_TOP, 8, STRAP_BOT - STRAP_TOP);
+    const py = STRAP_BOT - 4 - st.pk[i] * (STRAP_BOT - STRAP_TOP - 8);
+    g.save(); g.fillStyle = pal.ink; g.fillRect(x - 4, py - 2, 8, 4); g.restore();
+    line(g, [x, STRAP_TOP, x, 382, x - 14, 382, x - 14, 387]);            // hook to its ground
+    line(g, [x - 20, 387, x - 8, 387]); line(g, [x - 18, 390, x - 10, 390]); line(g, [x - 16, 393, x - 12, 393]);
+    line(g, [x, STRAP_BOT, x, DOME_Y - DOME_R]);
+    dome(g, x, st.on[i], pal.bg);
+  }
+
+  // ---- amplifiers, buses, gates
+  g.font = `italic 8px ${SERIF}`; g.textAlign = 'left';
+  for (let r = 0; r < ROWS; r++) {
+    const y = RY(r), gy = y + 5;
+    g.beginPath(); g.moveTo(AMP_X, y - 10); g.lineTo(AMP_X + 20, y); g.lineTo(AMP_X, y + 10); g.closePath(); lit(g, rowAny[r]);
+    g.save(); g.fillStyle = rowAny[r] > 0.5 ? pal.bg : pal.line; g.fillText('A', AMP_X + 3, y + 3); g.restore();
+    line(g, [AMP_X + 20, y, GATE_X, y]);
+    const bx = BUS_X(r % 4);
+    line(g, [bx, gy + 5, GATE_X, gy + 5]); dot(g, bx, gy + 5);
+    gatePath(g, GATE_X, gy, GATE_W, GATE_H); lit(g, rowTwo[r]);
+    // gate out, in a step, to its input on the wide gate
+    const half = r < 4 ? 0 : 1, j = r % 4;
+    const iy = OR_Y[half] - 24 + j * 16, vx = 478 + j * 10;
+    line(g, [GATE_X + GATE_W, gy, vx, gy, vx, iy, OR_X, iy]);
+  }
+  for (let q = 0; q < 4; q++) {
+    const bx = BUS_X(q), jog = 655 - q * 5;
+    line(g, [bx, RY(q) + 10, bx, jog, RDOME_X(q), jog, RDOME_X(q), DOME_Y - DOME_R]);
+    dome(g, RDOME_X(q), st.count[q], pal.bg);
+  }
+
+  // ---- the two wide gates: left and right level
+  [st.l, st.r].forEach((v, n) => {
+    const y = OR_Y[n];
+    g.save(); gatePath(g, OR_X, y, OR_W, OR_H); g.clip();
+    g.fillRect(OR_X, y - OR_H / 2, OR_W * clamp(v), OR_H); g.restore();
+    gatePath(g, OR_X, y, OR_W, OR_H); g.stroke();
+    line(g, [OR_X + OR_W, y, W, y]);
+  });
+
+  // ---- rails; the middle one is the strobe
+  line(g, [0, RAIL_Y(0), 500, RAIL_Y(0)]);
+  g.save(); g.lineWidth = 1.5 + 2.5 * st.strobe; line(g, [0, RAIL_Y(1), 530, RAIL_Y(1)]); g.restore();
+  line(g, [0, RAIL_Y(2), 500, RAIL_Y(2)]);
+
+  // ---- register boxes on a dashed bus
+  const cells = [mmss(o.played * tr.dur), mmss(tr.dur), tr.codec, tr.bits, tr.dr].filter(Boolean);
+  const bw = 58, gap = 8, x0 = 140;
+  g.save(); g.setLineDash([5, 4]);
+  line(g, [x0 - 12, RAIL_Y(2), x0 - 12, 738, x0 + cells.length * (bw + gap) - gap - bw / 2, 738]);
+  cells.forEach((_, n) => line(g, [x0 + n * (bw + gap) + bw / 2, 738, x0 + n * (bw + gap) + bw / 2, 752]));
+  g.restore();
+  dot(g, x0 - 12, RAIL_Y(2));
+  g.font = `700 13px ${SANS}`; g.textAlign = 'center';
+  cells.forEach((txt, n) => {
+    const x = x0 + n * (bw + gap);
+    g.strokeRect(x, 752, bw, 30);
+    if (o.text) g.fillText(txt, x + bw / 2, 772);
+  });
+
+  if (!o.text) { line(g, [118, 366, 206, 366]); return; }
+
+  // ---- small labels, the way a schematic names its parts
+  g.font = `italic 11px ${SERIF}`; g.textAlign = 'center';
+  g.fillText('40 Hz – 16 kHz', 162, 370);
+  g.textAlign = 'left';
+  g.fillText('Strobe', 536, RAIL_Y(1) + 4);
+  g.fillText('L', OR_X + 2, OR_Y[0] - OR_H / 2 - 6); g.fillText('R', OR_X + 2, OR_Y[1] - OR_H / 2 - 6);
+
+  // ---- the cover type, flush right
+  const RX = 562;
+  g.textAlign = 'right';
+  g.font = `500 13px ${SANS}`;
+  if ('letterSpacing' in g) g.letterSpacing = '1px';
+  g.fillText([tr.album, tr.year].filter(Boolean).join('  ·  ').toUpperCase() || tr.codec, RX, 62);
+  if ('letterSpacing' in g) g.letterSpacing = '0px';
+
+  g.fillStyle = pal.ink;
+  const { size, lines } = wrap(g, tr.title.toLowerCase(), 524);
+  lines.forEach((ln, n) => g.fillText(ln, RX, 76 + size * 0.86 + n * size * 0.98));
+  let as = 46; g.font = `${as}px ${DISPLAY}`;
+  const artist = tr.name.toLowerCase();
+  while (g.measureText(artist).width > 524 && as > 18) { as -= 1; g.font = `${as}px ${DISPLAY}`; }
+  g.fillText(artist, RX, 318);
+}
+
+// The largest size at which the title fits in two lines (three when it has to be small).
+function wrap(g, txt, maxW) {
+  const words = txt.split(/\s+/);
+  for (let size = 62; size >= 22; size -= 2) {
+    g.font = `${size}px ${DISPLAY}`;
+    const lines = []; let cur = '';
+    for (const w of words) {
+      const t = cur ? `${cur} ${w}` : w;
+      if (g.measureText(t).width <= maxW || !cur) cur = t; else { lines.push(cur); cur = w; }
+    }
+    lines.push(cur);
+    const fits = lines.every((ln) => g.measureText(ln).width <= maxW);
+    if (fits && lines.length <= (size > 44 ? 2 : 3)) return { size, lines };
+  }
+  return { size: 22, lines: [txt] };
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  const z = () => new Array(NB).fill(0);
+  return { c, pal, st: { b: z(), pk: z(), slow: z(), on: z(), count: [0, 0, 0, 0], step: 0, strobe: 0, cool: 0, l: 0, r: 0 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.15 : +$('lvl').value * 2);
+  const mean = bands.reduce((a, b) => a + b, 0) / NB;
+  const o = { dt, bands, l: clamp(mean * (1.45 + 0.3 * Math.sin(clock * 0.7))), r: clamp(mean * (1.45 - 0.3 * Math.sin(clock * 0.7))),
+    played: (clock % 40) / 40, text: $('text').checked };
+  cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+(document.fonts ? document.fonts.load(`40px Righteous`).catch(() => {}) : Promise.resolve()).then(() => requestAnimationFrame(frame));
+</script>

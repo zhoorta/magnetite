@@ -1,6 +1,6 @@
 # Poster meters
 
-Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Fourteen designs of the mockup and the Tunnel are built (`resources/js/magnetite/visualizers/poster-*.js`).
+Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Thirteen designs of the mockup, the Tunnel and the Circuit are built; Warp (stripes around an eye) was removed on 2026-11-13 and is kept on the `poster-warp` branch (`resources/js/magnetite/visualizers/poster-*.js`).
 
 Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 
@@ -9,7 +9,7 @@ Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 | Meter | What moves | Reads |
 |---|---|---|
 | Lens | Two discs, one per channel; the overlap is the stereo correlation, each disc grows with its level | levels, stereo |
-| Warp | Stripes part around an eye; the opening follows the level | levels |
+| Circuit | A textbook cover: title and artist in rounded lowercase, flush right, over a one-colour logic schematic. Seven straps fill cell by cell with seven ranges (a tick holds the peak); a row's amplifier lights when any range reaches it, its gate when two do; two wide gates fill with L and R; domes flash on onsets and four count the strobe (bass onsets); boxes hold time played, length and format | bands, levels, progress |
 | Lenses | One line per band group swells into a lens with its energy, and drifts | bands |
 | Arches | Six nested arches, low to high; height is energy | bands |
 | Fan | Twelve rays from a corner; length is energy | bands |
@@ -32,8 +32,8 @@ Themes carry no meter settings, so every poster uses its defaults (`theme` level
 
 - `poster.js` holds what they share: a poster is drawn in its own 600 x 800 space, scaled to fit the cell and centred on the paper colour (`begin`, which returns `{ scale, text }`), so a wide cell in the dock shows a smaller poster with margins. `groupBands` / `Bars` turn the 31 third-octave bands into N groups with rise and fall; `palette` gives the colours; `posterText` and `metaColumns` say what to print; `drawName` and `drawColumns` fit text. Pure parts are tested in `tests/js/poster.test.mjs`.
 - Every poster has the same settings plus its own colours: `text` (0 off, 1 on; text is also left out when the cell is too small, under 30% scale), `theme` (0 = the poster's own colours; 1, the default = paper, ink and the dark panel follow the theme, so the poster sits on the theme's background while its oranges, reds and greens stay; 2 = every colour follows the theme: paper = background, ink = text, a and b = the two accents), `range` (how many dB below the track's own peak still show; 40 for the band shapes, 30 for the level shapes, and a gentle curve keeps ordinary levels in the middle so only peaks reach the top), and rise and fall. The scale follows the track (`Reference` in `poster.js`: it follows the loudest band or channel quickly up and 2 dB a second down), so a quiet recording and a loud master move alike; Dials is the exception, it shows absolute LUFS and true peak. A colour set to null follows the theme too.
-- Text comes from the playing track (`artist`, `title`, `album`, `year`, `number`, `duration`, `codec` and the `truth` for bit depth, rate and DR; only the owner's own tracks have `truth`). With no artist the title becomes the name. Fonts: the theme's meter font (`colors.font`).
-- Overlaps (Lens, Slides) darken on a light paper and lighten (`screen`) on a dark one (Slides decides per row). Text and shapes that sit on a poster's own colour pick what reads best (`readableOn`, `darkest` in `poster.js`): the Facets text on its orange, the Warp pupil, the Lenses name on its panel.
+- Text comes from the playing track (`artist`, `title`, `album`, `year`, `number`, `duration`, `codec` and the `truth` for bit depth, rate and DR; only the owner's own tracks have `truth`). With no artist the title becomes the name. Fonts: the theme's meter font (`colors.font`); Circuit sets its title and artist in the bundled Righteous (asked for through `loadFont`), because the rounded lettering is the design, and its small labels in the meter font.
+- Overlaps (Lens, Slides) darken on a light paper and lighten (`screen`) on a dark one (Slides decides per row). Text and shapes that sit on a poster's own colour pick what reads best (`readableOn`, `darkest` in `poster.js`): the Facets text on its orange, the Lenses name on its panel.
 - Checked on the Terminal, Late-night FM and Paper & ink themes (2026-11-13); other themes are not checked one by one.
 - The module `label` is "Poster: Name". The meter menu in the player bar lists the other meters first, then "Posters" as a group that opens in place (`visualizers/menu.js`, tested; a group is open when one of its meters is on, and shows how many are on; Posters starts open). A new group is one line in `GROUPS` there.
 
