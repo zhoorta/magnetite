@@ -59,6 +59,19 @@
                 </template>
             </p>
 
+            {{-- The meters: the same drawing code as the player, with this theme's colours and settings; play something to see it move. --}}
+            <div class="mt-4">
+                <div class="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                    <label for="meter-pick" class="text-muted">Meter</label>
+                    <select id="meter-pick" x-model="meterId" class="rounded-theme border border-white/15 bg-surface px-2 py-1">
+                        <template x-for="m in meterChoices" :key="m[0]"><option :value="m[0]" x-text="m[1]"></option></template>
+                    </select>
+                    <span class="text-xs text-muted" x-text="live ? 'live' : 'at rest: play something to see it move'"></span>
+                </div>
+                <canvas x-ref="meterCanvas" class="h-44 w-full border border-white/10" :style="{ background: shown.colors.bg, borderRadius: shown.radius }" aria-hidden="true"></canvas>
+                <p x-show="previewError" x-cloak class="mt-1 text-xs text-red-500" role="alert" x-text="previewError"></p>
+            </div>
+
             <div x-show="! draft" class="mt-4 flex flex-wrap items-center gap-2 text-sm">
                 <button type="button" class="rounded-theme bg-accent px-3 py-1 font-medium text-bg disabled:opacity-50" :disabled="inUse" @click="use()" x-text="inUse ? 'In use' : 'Use this theme'"></button>
                 <button type="button" class="rounded-theme border border-white/15 px-3 py-1 hover:text-accent" @click="startEdit()" x-text="selected.custom ? 'Edit' : 'Edit a copy'"></button>
@@ -88,6 +101,22 @@
                         <template x-for="f in fonts" :key="f[1]"><option :value="f[1]" x-text="f[0]"></option></template>
                         <option x-show="! fonts.some((f) => f[1] === draft.font)" :value="draft.font" x-text="draft.font"></option>
                     </select></label>
+                <fieldset class="space-y-2 border-t border-white/10 pt-3">
+                    <legend class="text-muted" x-text="'Meter: ' + meterLabel + ' (pick another above)'"></legend>
+                    <template x-for="item in schema" :key="meterId + item.key">
+                        <div class="flex items-center gap-2">
+                            <span class="w-36 shrink-0 text-muted" x-text="item.label"></span>
+                            <template x-if="item.type === 'number'">
+                                <input type="range" :min="item.min" :max="item.max" :step="item.step" :value="paramValue(item)" @input="setParam(item.key, $event.target.value)" class="min-w-0 flex-1 accent-accent" :aria-label="item.label">
+                            </template>
+                            <template x-if="item.type === 'color'">
+                                <input type="color" :value="colorOf(item)" @input="setParam(item.key, $event.target.value)" class="h-7 w-9 shrink-0 cursor-pointer rounded-theme border border-white/15 bg-transparent p-0.5" :aria-label="item.label + ' colour'">
+                            </template>
+                            <span class="w-24 shrink-0 font-mono text-xs" :class="isSet(item) ? '' : 'text-muted'" x-text="shownOf(item)"></span>
+                            <button type="button" x-show="isSet(item)" x-cloak class="text-muted hover:text-accent" @click="resetParam(item.key)" :aria-label="'Reset ' + item.label" title="Back to the default">↺</button>
+                        </div>
+                    </template>
+                </fieldset>
                 <div class="flex gap-2">
                     <button type="submit" class="rounded-theme bg-accent px-3 py-1 font-medium text-bg" x-text="draft.custom ? 'Save' : 'Save as a new theme'"></button>
                     <button type="button" class="rounded-theme border border-white/15 px-3 py-1 hover:text-accent" @click="cancelEdit()">Cancel</button>

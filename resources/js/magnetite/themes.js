@@ -1,3 +1,5 @@
+import { METER_SCHEMAS } from './meter-schemas.js';
+
 // Themes as one JSON bundle: checking one that someone pasted or loaded, a safe id, the file to export, contrast. No DOM; Node tests it.
 
 export const COLOR_KEYS = ['bg', 'surface', 'text', 'muted', 'accent', 'accent2'];
@@ -25,14 +27,31 @@ const fullHex = (c) => {
     return h.length === 4 ? `#${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}` : h;
 };
 
-/** The meter looks a theme may carry: ids and plain parameters only. */
+/**
+ * A meter's params as the schema allows them: only its keys, numbers clamped to the range, colours as #rrggbb or null (follow the
+ * theme). A value that does not fit is dropped, so the meter keeps its default.
+ */
+function cleanParams(id, params) {
+    const schema = METER_SCHEMAS[id];
+    const plain = Object.entries(params).filter(([, x]) => ['number', 'string', 'boolean'].includes(typeof x) || x === null);
+    if (!schema) return Object.fromEntries(plain); // a meter without a schema (the picture scenes): plain values, as before
+
+    const out = {};
+    for (const { key, type, min, max } of schema) {
+        const x = params[key];
+        if (type === 'number' && typeof x === 'number' && Number.isFinite(x)) out[key] = Math.min(max, Math.max(min, x));
+        else if (type === 'color' && x === null) out[key] = null;
+        else if (type === 'color' && typeof x === 'string' && HEX.test(x)) out[key] = fullHex(x);
+    }
+
+    return out;
+}
+
+/** The meter looks a theme may carry: ids and checked parameters only. */
 function cleanLooks(list) {
     return list
         .filter((v) => v && typeof v.id === 'string' && v.id.length <= 40)
-        .map((v) => ({
-            id: v.id,
-            params: Object.fromEntries(Object.entries(v.params && typeof v.params === 'object' ? v.params : {}).filter(([, x]) => ['number', 'string', 'boolean'].includes(typeof x) || x === null)),
-        }));
+        .map((v) => ({ id: v.id, params: cleanParams(v.id, v.params && typeof v.params === 'object' && !Array.isArray(v.params) ? v.params : {}) }));
 }
 
 /**

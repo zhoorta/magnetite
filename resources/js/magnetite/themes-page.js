@@ -1,3 +1,6 @@
+import { SILENCE } from './engine';
+import { METER_SCHEMAS } from './meter-schemas';
+import { visualizers } from './visualizers';
 import { COLOR_KEYS, FONTS, RADII, contrast, exportTheme, parseTheme, slug, validateTheme } from './themes';
 
 /**
@@ -15,10 +18,122 @@ export default () => ({
     colorKeys: COLOR_KEYS,
     radii: RADII,
     fonts: FONTS,
+    meterId: 'vu-wide', // the meter the preview draws and the editor lists the settings of
+    raf: 0,
+    previewError: null,
 
     init() {
         this.selectedId = this.player.themeId;
+        this.meterId = this.player.meterIds.find((id) => METER_SCHEMAS[id]) ?? this.meterId;
+
+        let last = performance.now();
+        const frame = (now) => {
+            this.raf = requestAnimationFrame(frame);
+            const dt = Math.min(0.1, (now - last) / 1000);
+            last = now;
+            try {
+                this.drawMeter(dt);
+                if (this.previewError) this.previewError = null;
+            } catch (e) {
+                this.previewError = String(e?.message ?? e);
+                console.error(e);
+            }
+        };
+        this.raf = requestAnimationFrame(frame);
     },
+
+    destroy() {
+        cancelAnimationFrame(this.raf);
+    },
+
+    get meterChoices() {
+        return Object.keys(METER_SCHEMAS).filter((id) => visualizers[id]).map((id) => [id, visualizers[id].label]);
+    },
+
+    get schema() {
+        return METER_SCHEMAS[this.meterId] ?? [];
+    },
+
+    get meterLabel() {
+        return visualizers[this.meterId]?.label ?? this.meterId;
+    },
+
+    /** The meter looks a theme carries, whichever of the two keys it uses. */
+    looksOf(theme) {
+        return theme.visualizers ?? (theme.visualizer ? [theme.visualizer] : []);
+    },
+
+    /** What the shown theme (the draft while editing) sets on a meter: the rest is the meter's own default. */
+    paramsOf(id) {
+        return this.looksOf(this.shown).find((v) => v.id === id)?.params ?? {};
+    },
+
+    isSet(item) {
+        const v = this.paramsOf(this.meterId)[item.key];
+
+        return item.type === 'color' ? typeof v === 'string' : v !== undefined;
+    },
+
+    paramValue(item) {
+        return this.paramsOf(this.meterId)[item.key] ?? visualizers[this.meterId].params[item.key];
+    },
+
+    /** A colour field cannot show "the theme's colour", so an unset one shows grey and says so beside it. */
+    colorOf(item) {
+        const v = this.paramValue(item);
+
+        return typeof v === 'string' ? v : '#808080';
+    },
+
+    shownOf(item) {
+        const v = this.paramValue(item);
+
+        return item.type === 'color' ? (typeof v === 'string' ? v : 'theme') : `${v}${item.unit ? ' ' + item.unit : ''}`;
+    },
+
+    /** The draft's entry for a meter, made when the first setting is changed. */
+    entry(id, make = false) {
+        let e = this.draft.visualizers.find((v) => v.id === id);
+        if (!e && make) this.draft.visualizers.push((e = { id, params: {} }));
+
+        return e;
+    },
+
+    setParam(key, raw) {
+        const item = this.schema.find((i) => i.key === key);
+        if (!item || !this.draft) return;
+        const value = item.type === 'number' ? Number(raw) : String(raw).toLowerCase();
+        if (item.type === 'number' ? !Number.isFinite(value) : !/^#[0-9a-f]{6}$/.test(value)) return;
+        this.entry(this.meterId, true).params[key] = value;
+    },
+
+    resetParam(key) {
+        const e = this.entry(this.meterId);
+        if (!e) return;
+        delete e.params[key];
+        if (!Object.keys(e.params).length) this.draft.visualizers = this.draft.visualizers.filter((v) => v !== e);
+    },
+
+    /** The live preview: the same drawing code as the player, fed with the music that plays (silence when nothing does). */
+    drawMeter(dt) {
+        const canvas = this.$refs.meterCanvas;
+        const viz = visualizers[this.meterId];
+        if (!canvas || !viz || document.hidden) return;
+
+        const real = this.player.playing ? this.player.engine?.sample(viz.needs) : null;
+        this.live = !!real;
+
+        const dpr = window.devicePixelRatio || 1;
+        const w = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+        const h = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+        if (canvas.width !== w || canvas.height !== h) [canvas.width, canvas.height] = [w, h];
+
+        const g = canvas.getContext('2d');
+        g.clearRect(0, 0, w, h);
+        viz.draw(g, real ?? SILENCE, { w, h, colors: this.shown.colors, params: this.paramsOf(this.meterId), dt, progress: 0, track: null });
+    },
+
+    live: false,
 
     get player() {
         return this.$store.player;
@@ -63,7 +178,7 @@ export default () => ({
 
     startEdit() {
         const t = this.selected;
-        this.draft = { id: t.id, name: t.custom ? t.name : `${t.name} (copy)`, colors: { ...t.colors }, radius: t.radius, font: t.font, custom: !!t.custom, visualizer: t.visualizer, visualizers: t.visualizers };
+        this.draft = { id: t.id, name: t.custom ? t.name : `${t.name} (copy)`, colors: { ...t.colors }, radius: t.radius, font: t.font, custom: !!t.custom, visualizers: JSON.parse(JSON.stringify(this.looksOf(t))) };
     },
 
     cancelEdit() {
@@ -78,7 +193,7 @@ export default () => ({
     saveEdit() {
         const d = this.draft;
         const taken = this.player.themes.map((t) => t.id).filter((id) => !(d.custom && id === d.id));
-        const { theme, error } = validateTheme({ ...d, id: d.custom ? d.id : slug(d.name) }, taken);
+        const { theme, error } = validateTheme({ ...d, id: d.custom ? d.id : slug(d.name), visualizers: d.visualizers.length ? d.visualizers : undefined }, taken);
         if (error) return this.say(error);
         if (d.custom) this.player.replaceTheme(theme);
         else this.player.addTheme(theme);
