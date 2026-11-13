@@ -1,6 +1,6 @@
 # Poster meters
 
-Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. All fourteen designs of the mockup are built (`resources/js/magnetite/visualizers/poster-*.js`).
+Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Fourteen designs of the mockup and the Tunnel are built (`resources/js/magnetite/visualizers/poster-*.js`).
 
 Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 
@@ -22,6 +22,7 @@ Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 | Halftone | A halftone dot grid that is a scrolling spectrogram (dot size is energy), light and dark blocks, and two flat blocks that grow with L and R | bands, levels |
 | Heads | Sixteen heads, one per range, each swelling with energy; the red one is the loudest range (with hysteresis, so it does not flicker) | bands |
 | Slides | Four rows of half-discs, low to high; a dome and a bowl slide towards each other with the energy and overlap | bands |
+| Tunnel | Line only, one colour: ruled boxes with the track's text, a small spectrum, a globe that turns with the level and the time played; seven circles hang from one top edge and the gap between two is a frequency range (more energy, wider gap) | bands, progress |
 
 ## Themes
 
@@ -42,6 +43,7 @@ The meter menu shows the posters as a grid of pictures with the name under each.
 
 ## Ideas not done
 
+- Reel (a tape reel cropped by the bottom right corner, windows swelling with the levels, tape ring following progress) and Record (vinyl grooves as the spectrum, a cream sheen that swings with the stereo balance) exist only as mockups: `docs/mockups/poster-reel.html`, `docs/mockups/poster-record.html`. Tunnel was built from `docs/mockups/poster-tunnel.html`.
 - Halftone is the heaviest to draw (about 1,200 dots a frame, batched into two paths); not measured on a phone yet.
 - More bundled themes with poster palettes (red and black, teal and brown); names should not be brands.
 - Thumbnails for the other meters (they keep state at module level, so they would need the same per-canvas change).
