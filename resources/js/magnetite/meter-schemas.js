@@ -26,10 +26,6 @@ export const METER_SCHEMAS = {
         num('attack', 'Attack', 0.02, 0.5, 0.01, 's'), num('release', 'Release', 0.1, 1, 0.05, 's'), num('openAngle', 'Shadow when quiet', 30, 120, 1, '°'),
         colour('phosphor', 'Glow'), colour('glass', 'Glass'), colour('rim', 'Rim'),
     ],
-    cassette: [
-        colour('shell', 'Case'), colour('paper', 'Label'), colour('accent', 'Logo and head'), colour('pack', 'Tape'),
-        num('length', 'Tape length', 30, 120, 1, 'min'), num('speed', 'Hub speed', 0.5, 6, 0.1, 'rad/s'),
-    ],
     'third-octave': [
         num('min', 'Scale from', -96, -24, 1, 'dB'), num('max', 'Scale to', -24, 6, 1, 'dB'), num('segment', 'Segment', 1, 6, 0.5, 'dB'),
         num('release', 'Release', 0.05, 1.5, 0.05, 's'), num('hold', 'Peak hold', 0, 4, 0.1, 's'), num('fall', 'Peak fall', 3, 40, 1, 'dB/s'),

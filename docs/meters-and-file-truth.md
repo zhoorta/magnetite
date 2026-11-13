@@ -97,6 +97,6 @@ Measured with four meters at once (full screen, headless Chrome, 60 fps): level 
 - The picture is a canvas owned by the module, copied onto itself shifted left by the number of pixels the elapsed time asks for (14 s from edge to edge by default), and the new columns are written with `putImageData`. A resized cell starts a new picture. Only one spectrogram can exist at a time, as with the other meters that keep state per module.
 - Not done: a time axis, a choice of colour map, a frozen "capture" of the whole track at scan time (that would be a file-truth feature: the same picture, drawn offline from the decoded file).
 
-## Cassette (2026-11-11)
+## Cassette (removed 2026-11-13)
 
-`cassette` is a skeuomorphic meter: tape packs show the progress (left empties, right fills; the tape's area is conserved, `visualizers/tape.js`, tested), the small pack turns faster, the tape and the head glow with the level, it stops when paused, and the label shows the title and artist. For it the host passes `progress` (0..1) and `track` in the draw options next to `dt`; `sample.playing` was there already. Colours come from the theme (`surface`, `text`, `muted`, `accent`). Web only for now; the TUI, Android and iOS clients ignore unknown ids. Next: a reel-to-reel variant on the same geometry, then a turntable (needs the cover).
+The skeuomorphic `cassette` meter (tape packs showing the progress) was removed, with its geometry helper; saved lists that name it simply skip it. The host still passes `progress` and `track` in the draw options (the poster meters use `track`).

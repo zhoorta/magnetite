@@ -59,7 +59,7 @@ test('a meter without a schema (the picture scenes) keeps plain values', () => {
 });
 
 test('every schema key is a param of its meter, and its default fits the range', () => {
-    const files = { 'vu-wide': 'vu-wide', 'vu-needle': 'vu-needle', 'vu-leds': 'vu-leds', 'magic-eye': 'magic-eye', cassette: 'cassette', 'third-octave': 'third-octave', loudness: 'loudness', spectrogram: 'spectrogram', goniometer: 'goniometer', scope: 'scope' };
+    const files = { 'vu-wide': 'vu-wide', 'vu-needle': 'vu-needle', 'vu-leds': 'vu-leds', 'magic-eye': 'magic-eye', 'third-octave': 'third-octave', loudness: 'loudness', spectrogram: 'spectrogram', goniometer: 'goniometer', scope: 'scope' };
     assert.deepEqual(Object.keys(METER_SCHEMAS).sort(), Object.keys(files).sort());
     for (const [id, schema] of Object.entries(METER_SCHEMAS)) {
         const src = readFileSync(new URL(`../../resources/js/magnetite/visualizers/${files[id]}.js`, import.meta.url), 'utf8');
