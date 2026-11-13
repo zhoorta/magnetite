@@ -1210,8 +1210,7 @@ impl App {
         let mt = self.meter_theme(th);
         let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt, track: self.now.and_then(|i| self.queue.get(i)) };
         // no meters: like the web, the cover big in the middle above the title
-        let (cover_area, meters) = if self.panels.is_empty() { (Rect::new(meters.x, meters.y + 1, meters.width, meters.height.saturating_sub(2)), meters) } else { self.split_cover(meters) };
-        self.cover.draw(f, cover_area);
+        // with meters or posters: no cover, they fill the screen
         let pad = Rect::new(meters.x + 1, meters.y + 1, meters.width.saturating_sub(2), meters.height.saturating_sub(1));
         for (kind, cell) in self.panels.iter().zip(cells(self.panels.len(), pad)) {
             // a one-cell gutter between meters, like the web's cells
