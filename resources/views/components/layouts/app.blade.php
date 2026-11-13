@@ -164,11 +164,12 @@
                 </div>
             </div>
 
-            <div data-chrome :class="$store.player.expanded ? 'absolute inset-x-0 top-0 z-10 bg-linear-to-b from-bg/90 to-transparent px-[max(1rem,calc((100%-48rem)/2+1rem))] pb-6 pt-3 transition-opacity duration-300 ' + ($store.player.chromeHidden ? 'pointer-events-none opacity-0' : '') : 'order-1 py-3 ' + ($store.player.panels.length ? 'md:col-start-1 md:row-start-1' : 'md:col-span-2 md:row-start-1')"
+            {{-- Full screen: the names row, the seek bar and the buttons form the mini player over the bottom of the picture; the names row stays, the seek bar and buttons fade when idle. --}}
+            <div :class="$store.player.expanded ? 'absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-bg/90 via-bg/70 to-transparent pt-8' : 'contents'">
+            <div data-chrome :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pb-1 pt-3 ' : 'order-1 py-3 ' + ($store.player.panels.length ? 'md:col-start-1 md:row-start-1' : 'md:col-span-2 md:row-start-1')"
                  class="flex flex-col gap-2">
                 <div class="flex min-h-10 items-center justify-between text-sm">
-                    {{-- A poster prints the track itself, so in full screen the line over it would only repeat it. --}}
-                    <div x-show="! $store.player.expanded || ($store.player.panels.length && ! $store.player.panels.some((v) => v.id.startsWith('poster-')))" class="flex min-w-0 items-center gap-3">
+                    <div x-show="$store.player.panels.length || ! $store.player.expanded" class="flex min-w-0 items-center gap-3">
                         {{-- Full screen has no small cover: the meters, or the big cover when there are none, already fill the screen. --}}
                         <div x-show="! $store.player.expanded" class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
                             <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
@@ -275,7 +276,7 @@
 
             </div>
 
-            <div data-chrome :class="$store.player.expanded ? 'absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-bg/90 to-transparent px-[max(1rem,calc((100%-48rem)/2+1rem))] pb-3 pt-8 transition-opacity duration-300 ' + ($store.player.chromeHidden ? 'pointer-events-none opacity-0' : '') : 'order-3 pb-3 md:col-span-2 md:row-start-2'" class="flex flex-col gap-3">
+            <div data-chrome :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pb-3 transition-opacity duration-300 ' + ($store.player.chromeHidden ? 'pointer-events-none opacity-0' : '') : 'order-3 pb-3 md:col-span-2 md:row-start-2'" class="flex flex-col gap-3">
                 <div class="flex items-center gap-3 text-xs text-muted">
                     <span x-text="$store.player.fmt($store.player.time)" class="w-10 text-right tabular-nums"></span>
                     <input type="range" min="0" max="1000" class="seek flex-1" aria-label="Position in the track"
@@ -307,6 +308,7 @@
                         <span x-show="$store.player.repeat === 'one'" x-cloak class="absolute -right-1 -top-1.5 rounded-full bg-accent px-1 text-[10px] font-bold leading-4 text-bg" aria-hidden="true">1</span>
                     </button>
                 </div>
+            </div>
             </div>
 
             {{-- Full screen with the controls hidden: only a thin line of progress along the bottom edge. --}}
