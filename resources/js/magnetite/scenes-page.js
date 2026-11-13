@@ -40,6 +40,13 @@ export default () => ({
     presets: Object.keys(PRESETS),
     sliders: SLIDERS,
     effects: EFFECTS,
+
+    /** The slider rows ([key, label, min, max, step, hint]) for these keys, in the order given. */
+    rowsOf(keys) {
+        const all = [...EFFECTS, ...SLIDERS];
+
+        return keys.map((k) => all.find((r) => r[0] === k)).filter(Boolean);
+    },
     selectedId: null,
     spot: null, // index of the selected hotspot
     drawing: null, // { x0, y0, x1, y1 } while dragging out a new one, as fractions of the picture
