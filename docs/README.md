@@ -22,6 +22,7 @@ Start with `PLAN.md` (short status) at the repo root. `history.md` is the long d
 | `file-truth.md` | `magnetite:analyze`, findings and thresholds |
 | `editing.md`, `identify-albums.md`, `covers.md` | Fixing details, naming untagged albums, finding covers |
 | `scenes.md` | Pictures as visualizers |
+| `posters.md` | Meters drawn like posters and book covers, with the track's name printed on them (mockup in `mockups/`) |
 
 ## Clients
 

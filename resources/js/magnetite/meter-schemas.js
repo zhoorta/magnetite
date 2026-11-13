@@ -7,6 +7,13 @@ const colour = (key, label) => ({ key, label, type: 'color' });
 
 const scale = [num('min', 'Scale from', -60, 0, 1, 'dB'), num('max', 'Scale to', -12, 12, 1, 'dB')];
 
+// The poster meters (docs/posters.md): the same settings for all, then each one's own colours. `theme` on makes every colour follow the theme.
+const posterBands = [
+    num('min', 'Quiet at', -96, -30, 1, 'dB'), num('max', 'Loud at', -40, 0, 1, 'dB'), num('attack', 'Rise', 0.005, 0.5, 0.005, 's'), num('release', 'Fall', 0.05, 1.5, 0.05, 's'),
+];
+const posterLevels = [num('min', 'Quiet at', -80, -20, 1, 'dB'), num('max', 'Loud at', -20, 0, 1, 'dB'), num('response', 'Response', 0.05, 1.5, 0.05, 's')];
+const posterLook = [num('text', 'Text on the poster', 0, 1, 1), num('theme', 'Theme colours: 0 none, 1 paper and ink, 2 all', 0, 2, 1)];
+
 export const METER_SCHEMAS = {
     'vu-wide': [
         ...scale, num('response', 'Needle response', 0.05, 1.5, 0.05, 's'), num('redFrom', 'Red zone from', -24, 6, 1, 'dB'),
@@ -40,4 +47,24 @@ export const METER_SCHEMAS = {
     ],
     goniometer: [num('glow', 'Trace fade', 0.02, 0.5, 0.01, 's'), colour('warn', 'Warning')],
     scope: [num('thickness', 'Line weight', 1, 6, 0.5)],
+    'poster-lens': [...posterLevels, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Left disc'), colour('b', 'Right disc')],
+    'poster-warp': [...posterLevels, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Stripes'), colour('a', 'Iris')],
+    'poster-lenses': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('dark', 'Sky'), colour('a', 'Sun'), colour('c', 'Lines and lenses'), colour('ink', 'Small text')],
+    'poster-facets': [
+        num('min', 'Quiet at', -96, -30, 1, 'dB'), num('max', 'Loud at', -40, 0, 1, 'dB'), num('speed', 'Seconds per column', 0.04, 0.5, 0.01, 's'),
+        ...posterLook, colour('bg', 'Background'), colour('paper', 'Quiet cells'), colour('a', 'Loud cells'), colour('ink', 'Text'),
+    ],
+    'poster-arches': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Accent')],
+    'poster-fan': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Accent')],
+    'poster-overcome': [
+        ...posterBands, num('fall', 'Circle fall', 0.05, 2, 0.05, '/s'), ...posterLook,
+        colour('paper', 'Paper'), colour('ink', 'Lines and text'), colour('a', 'Left circle'), colour('b', 'Right circle'),
+    ],
+    'poster-pillars': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Text'), colour('a', 'Pillars'), colour('b', 'Lighter pillars')],
+    'poster-dials': [
+        num('min', 'Loudness scale from', -60, -20, 1, 'LUFS'), num('max', 'Loudness scale to', -20, 0, 1, 'LUFS'), num('response', 'Response', 0.05, 1.5, 0.05, 's'),
+        ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Accent'),
+    ],
+    'poster-columns': [...posterLevels, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Accent')],
+    'poster-slides': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Domes'), colour('b', 'Bowls'), colour('c', 'Bands')],
 };

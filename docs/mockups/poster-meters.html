@@ -1,0 +1,467 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster Meters</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of poster-style meters: a shared text frame (artist, title, album, year, format) around shapes that move with the music.
+   Fake signal, no audio. Lens, Warp, Lenses, Facets, Slides and Dials. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+code { font-family: var(--mono); font-size: 13px; background: #242424; padding: 1px 5px; }
+.bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bar > span { font: 13px var(--mono); color: var(--muted); }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+button[aria-pressed="true"] { border-color: #f0605d; color: #f0605d; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+figcaption b { color: var(--fg); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster meters</h1>
+  <p>One text frame (small columns on top, a big lowercase name, the shapes below). Overlaps use <code>multiply</code> so they darken in any palette. The sliders stand in for real readings; "next track" cycles names to test fitting long ones.</p>
+  <div class="bar">
+    <span>Palette</span>
+    <button data-pal="own" aria-pressed="true">Per poster</button>
+    <button data-pal="soundcraft" aria-pressed="false">Soundcraft</button>
+    <button data-pal="swissted" aria-pressed="false">Swissted</button>
+    <button data-pal="bauhaus" aria-pressed="false">Bauhaus</button>
+    <button data-pal="night" aria-pressed="false">Night</button>
+    <button id="next">next track</button>
+    <label>correlation <input id="corr" type="range" min="-1" max="1" step="0.01" value="0.6"></label>
+    <label>loudness <input id="lufs" type="range" min="-30" max="-4" step="0.1" value="-15"></label>
+    <label><input id="auto" type="checkbox" checked> auto</label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800;
+const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+
+// Palettes: bg (page), paper (cream shapes), ink, text (on bg), a/b/c accents, dark (night sky).
+const PALS = {
+  soundcraft: { bg:'#f6efdc', paper:'#f6efdc', ink:'#1a1a1a', text:'#1a1a1a', a:'#fb6a1c', b:'#ee2e2e', c:'#f7b21c', dark:'#1a1a1a' },
+  swissted:   { bg:'#dfe0d6', paper:'#dfe0d6', ink:'#05050f', text:'#05050f', a:'#ee3224', b:'#f26a1b', c:'#ffd21a', dark:'#05050f' },
+  bauhaus:    { bg:'#efe9dc', paper:'#efe9dc', ink:'#111111', text:'#111111', a:'#e8581f', b:'#e3262e', c:'#f5a800', dark:'#14202a' },
+  night:      { bg:'#16181d', paper:'#2a2d35', ink:'#000000', text:'#d8d8d8', a:'#4ab3c4', b:'#7a6ad8', c:'#e8d36a', dark:'#0a0b0e' },
+};
+const OWN = {
+  lens:    PALS.soundcraft,
+  warp:    { bg:'#efe8d8', paper:'#efe8d8', ink:'#0b0b0b', text:'#0b0b0b', a:'#d92a1f', b:'#d92a1f', c:'#efe8d8', dark:'#0b0b0b' },
+  lenses:  { bg:'#dcd2b2', paper:'#e8dfc6', ink:'#141f26', text:'#141f26', a:'#e2412a', b:'#e2412a', c:'#e8dfc6', dark:'#141f26' },
+  facets:  { bg:'#f2500f', paper:'#dfe0d6', ink:'#1a1a1a', text:'#1a1a1a', a:'#ffd21a', b:'#f2500f', c:'#dfe0d6', dark:'#1a1a1a' },
+  slides:  PALS.bauhaus,
+  pillars:  { bg:'#f3e6c6', paper:'#f3e6c6', ink:'#1a1a1a', text:'#f3e6c6', a:'#f26a14', b:'#f58a2a', c:'#f3e6c6', dark:'#1a1a1a' },
+  halftone: { bg:'#f1ead8', paper:'#f1ead8', ink:'#0e0e0e', text:'#0e0e0e', a:'#f2512b', b:'#18b84a', c:'#0e0e0e', dark:'#0e0e0e' },
+  heads:    { bg:'#f3dcbc', paper:'#f3dcbc', ink:'#1a1a1a', text:'#1a1a1a', a:'#f04a24', b:'#1d6f8a', c:'#1d6f8a', dark:'#1a1a1a' },
+  human:    { bg:'#fff6d6', paper:'#fff6d6', ink:'#0a0a0a', text:'#0a0a0a', a:'#f99a0a', b:'#f99a0a', c:'#0a0a0a', dark:'#0a0a0a' },
+  fan:      { bg:'#efe6d2', paper:'#efe6d2', ink:'#111111', text:'#111111', a:'#12a84a', b:'#111111', c:'#efe6d2', dark:'#111111' },
+  arches:   { bg:'#f1ece0', paper:'#f1ece0', ink:'#111111', text:'#111111', a:'#f4601a', b:'#111111', c:'#f1ece0', dark:'#111111' },
+  rings:    { bg:'#f0e6c8', paper:'#f0e6c8', ink:'#14283d', text:'#14283d', a:'#f08a12', b:'#f08a12', c:'#f3e8c0', dark:'#14283d' },
+  overcome: { bg:'#e8cdb0', paper:'#e8cdb0', ink:'#4a2a12', text:'#4a2a12', a:'#1f63b0', b:'#ee2a24', c:'#e8cdb0', dark:'#4a2a12' },
+  dials:   { bg:'#dfe0d6', paper:'#dfe0d6', ink:'#050505', text:'#050505', a:'#e8372c', b:'#e8372c', c:'#050505', dark:'#050505' },
+};
+let palMode = 'own';
+const P = id => palMode === 'own' ? OWN[id] : PALS[palMode];
+document.querySelectorAll('[data-pal]').forEach(b => b.onclick = () => {
+  palMode = b.dataset.pal;
+  document.querySelectorAll('[data-pal]').forEach(x => x.setAttribute('aria-pressed', x === b));
+});
+
+const TRACKS = [
+  { name:'new order', title:'blue monday', album:'power, corruption & lies', year:'1983', no:'a1', dur:'7:29', fmt:'flac 24/96', dr:'dr 9' },
+  { name:'the clash', title:'london calling', album:'london calling', year:'1979', no:'a1', dur:'3:19', fmt:'flac 16/44', dr:'dr 11' },
+  { name:'godspeed you! black emperor', title:'storm', album:"lift your skinny fists like antennas to heaven", year:'2000', no:'d1', dur:'22:34', fmt:'alac 16/44', dr:'dr 14' },
+];
+let ti = 0;
+document.getElementById('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+
+// ---- text helpers -------------------------------------------------------------------------------
+const setLS = (g, v) => { if ('letterSpacing' in g) g.letterSpacing = v; };
+function fit(g, text, weight, maxW, size, min = 12) {
+  g.font = `${weight} ${size}px ${HELV}`;
+  while (size > min && g.measureText(text).width > maxW) { size -= 2; g.font = `${weight} ${size}px ${HELV}`; }
+  return size;
+}
+function name(g, text, x, y, maxW, size, color, weight = 700, caps = false, spacing = '0px') {
+  setLS(g, spacing);
+  if (caps) text = text.toUpperCase();
+  fit(g, text, weight, maxW, size);
+  g.fillStyle = color; g.textBaseline = 'alphabetic'; g.fillText(text, x, y);
+  setLS(g, '0px');
+}
+function small(g, cols, y, color, size = 14, xs = [28, W * .34, W * .7]) {
+  g.font = `500 ${size}px ${HELV}`; g.fillStyle = color; g.textBaseline = 'alphabetic';
+  cols.forEach((lines, i) => lines.forEach((l, k) => {
+    let s = l; const maxW = (xs[i + 1] ?? W - 20) - xs[i] - 12;
+    while (s.length > 3 && g.measureText(s).width > maxW) s = s.slice(0, -2);
+    g.fillText(s === l ? s : s.trimEnd() + '…', xs[i], y + k * (size + 4));
+  }));
+}
+const meta = t => [[t.year, `${t.no} · ${t.dur}`], [t.album], [t.fmt, t.dr]];
+
+// ---- fake signal --------------------------------------------------------------------------------
+let t = 0, hist = Array.from({ length: 16 }, () => new Array(13).fill(0)), histT = 0;
+const S = { corr:.6, lufs:-15, peak:-6, dr:9, lvl:.5, lvlL:.5, lvlR:.5, bands:new Array(32).fill(.3), beat:0 };
+const $ = id => document.getElementById(id);
+const sm = (o, n, k) => o + (n - o) * k;
+function fake(dt) {
+  if ($('auto').checked) {
+    $('corr').value = Math.sin(t * .35) * .7 + .15;
+    $('lufs').value = -15 + Math.sin(t * .8) * 4 + Math.sin(t * 3.1) * 1.5;
+  }
+  S.corr = sm(S.corr, +$('corr').value, .08);
+  S.lufs = sm(S.lufs, +$('lufs').value, .06);
+  S.beat = Math.max(0, Math.sin(t * 6.3)) ** 6;
+  S.peak = sm(S.peak, S.lufs + 7 + 5 * S.beat, .2);
+  S.dr = 9 + 3 * Math.sin(t * .2);
+  S.bands = S.bands.map((v, i) => {
+    const n = i / 31;
+    const tg = (1 - n * .65) * (.35 + .35 * Math.sin(t * (1.1 + n * 3.2) + i * .7)) + (i < 6 ? .3 * S.beat : 0);
+    return sm(v, Math.max(.04, Math.min(1, tg)), .14);
+  });
+  S.lvl = S.bands.reduce((a, b, i) => a + b * (1 - i / 40), 0) / 18;
+  S.lvl = Math.min(1, S.lvl);
+  S.lvlL = sm(S.lvlL, .5 + .22 * Math.sin(t * 1.3) + .15 * S.beat, .1);
+  S.lvlR = sm(S.lvlR, .5 + .22 * Math.sin(t * 1.1 + 1) + .15 * S.beat, .1);
+  histT += dt;
+  if (histT > .14) {
+    histT = 0; hist.shift();
+    hist.push(Array.from({ length: 13 }, (_, r) => Math.min(1, S.bands[Math.floor(r / 13 * 32)] * 1.25 + Math.random() * .08)));
+  }
+}
+const grp = (a, b) => { let s = 0; for (let i = a; i < b; i++) s += S.bands[i]; return s / (b - a); };
+
+// ---- posters ------------------------------------------------------------------------------------
+const POSTERS = [];
+function add(id, title, text, draw) { POSTERS.push({ id, title, text, draw }); }
+
+// Lens (Soundcraft): L and R discs, overlap = correlation, size = level.
+add('lens', 'Lens', 'overlap width is the stereo correlation; each disc grows with its channel level', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  small(g, meta(tr), 40, p.text);
+  name(g, tr.name, 28, 176, W - 56, 104, p.text);
+  name(g, tr.title, 28, 222, W - 56, 24, p.text, 500);
+  const ax = 28, ay = 250, aw = W - 56, ah = H - ay - 28;
+  g.save(); g.beginPath(); g.rect(ax, ay, aw, ah); g.clip();
+  const cy = ay + ah / 2, base = aw * .26, gap = (1 - S.corr) / 2;
+  const dx = base * (.2 + gap * 1.5);
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = p.a; g.beginPath(); g.arc(W / 2 - dx, cy, base * (.8 + S.lvlL * .4), 0, 7); g.fill();
+  g.fillStyle = p.b; g.beginPath(); g.arc(W / 2 + dx, cy, base * (.8 + S.lvlR * .4), 0, 7); g.fill();
+  g.restore();
+  g.strokeStyle = p.text; g.lineWidth = 2; g.strokeRect(ax, ay, aw, ah);
+  g.font = `600 14px ${HELV}`; g.fillStyle = p.text;
+  g.fillText('L', ax + 10, ay + ah - 10); g.fillText('R', ax + aw - 22, ay + ah - 10);
+  g.fillText((S.corr >= 0 ? '+' : '') + S.corr.toFixed(2), W / 2 - 18, ay + ah - 10);
+});
+
+// Warp (Bauhaus stripes): stripes bend around an eye; opening = level, iris clipped by the stripes.
+add('warp', 'Warp', 'black stripes part around an eye; the opening follows the level, a slow ripple runs through the rest', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const ax = 28, ay = 24, aw = W - 56, ah = H - 24 - 100, N = 32, pitch = ah / N;
+  const cx = W / 2, cy = ay + ah * .46, hw = aw * .44;
+  const open = 4 + S.lvl * 52 + S.beat * 8;
+  const ir = aw * .095;
+  g.save(); g.beginPath(); g.rect(ax, ay, aw, ah); g.clip();
+  g.fillStyle = p.a; g.beginPath(); g.arc(cx, cy, ir, 0, 7); g.fill();
+  g.fillStyle = p.ink; g.beginPath(); g.arc(cx, cy, ir * (.55 - .2 * S.lvl), 0, 7); g.fill();
+  g.fillStyle = p.ink;
+  for (let i = 0; i < N; i++) {
+    const y0 = ay + (i + .5) * pitch, dy = y0 - cy, sg = dy < 0 ? -1 : 1;
+    const fall = Math.exp(-Math.abs(dy) / (ah * .2));
+    const th = pitch * .52, pts = [];
+    for (let x = ax; x <= ax + aw + 1; x += 8) {
+      const u = (x - cx) / hw, shape = Math.abs(u) < 1 ? (1 - u * u) ** 1.5 : 0;
+      const rip = Math.sin(x * .014 + i * .35 + t * 1.2) * 3.2 * (1 - fall * .6);
+      pts.push([x, y0 + sg * shape * open * fall * 1.6 + rip]);
+    }
+    g.beginPath();
+    pts.forEach(([x, y], k) => k ? g.lineTo(x, y - th / 2) : g.moveTo(x, y - th / 2));
+    for (let k = pts.length - 1; k >= 0; k--) g.lineTo(pts[k][0], pts[k][1] + th / 2);
+    g.closePath(); g.fill();
+  }
+  g.restore();
+  name(g, tr.name, 28, H - 52, W * .62, 40, p.text, 800, true, '4px');
+  g.font = `600 40px ${HELV}`; setLS(g, '4px'); g.textAlign = 'right'; g.fillStyle = p.text; g.fillText(tr.year, W - 28, H - 52);
+  g.textAlign = 'left'; setLS(g, '0px');
+  small(g, [[tr.title + ' · ' + tr.album]], H - 24, p.text, 13, [28]);
+});
+
+// Lenses (red sun): one fine line per band, swelling into a lens where there is energy.
+add('lenses', 'Lenses', 'one line per band group; each swells into a cream lens with its energy and drifts slowly. The quietest of the set', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const px = 28, py = 28, pw = W - 56, ph = H - 28 - 76;
+  g.save(); g.beginPath(); g.rect(px, py, pw, ph); g.clip();
+  g.fillStyle = p.dark; g.fillRect(px, py, pw, ph);
+  const R = pw * .78, top = py + ph * .42;
+  g.fillStyle = p.a; g.beginPath(); g.arc(W / 2, top + R, R, 0, 7); g.fill();
+  const M = 9, l0 = py + ph * .6, l1 = py + ph - 18, gap = (l1 - l0) / M;
+  for (let j = 0; j < M; j++) {
+    const y = l0 + (j + .5) * gap, e = grp(Math.floor(j * 32 / M), Math.floor((j + 1) * 32 / M));
+    g.strokeStyle = p.c; g.lineWidth = 1.5; g.globalAlpha = .85;
+    g.beginPath(); g.moveTo(px, y); g.lineTo(px + pw, y); g.stroke(); g.globalAlpha = 1;
+    const lx = px + pw * (.5 + .36 * Math.sin(t * .13 * (1 + j * .17) + j * 1.9));
+    const wd = pw * (.07 + .17 * e), hh = gap * (.15 + e * 1.5);
+    for (const [k, grow] of [[0, 0], [1, 5]]) {
+      g.beginPath();
+      for (let s = 0; s <= 40; s++) { const u = s / 20 - 1, x = lx + u * (wd + grow); const b = (1 - u * u) ** 2; s ? g.lineTo(x, y - (hh + grow) * b) : g.moveTo(x, y - (hh + grow) * b); }
+      for (let s = 40; s >= 0; s--) { const u = s / 20 - 1, x = lx + u * (wd + grow); const b = (1 - u * u) ** 2; g.lineTo(x, y + (hh + grow) * b); }
+      g.closePath();
+      if (k) { g.strokeStyle = p.c; g.lineWidth = 1.2; g.stroke(); } else { g.fillStyle = p.c; g.fill(); }
+    }
+  }
+  g.restore();
+  name(g, tr.name, px + 16, py + 54, pw * .6, 34, p.c, 600);
+  small(g, [[`${tr.name} — ${tr.title} · ${tr.album} · ${tr.year} · ${tr.fmt}`]], H - 34, p.text, 12, [28]);
+});
+
+// Facets (Talking Heads): triangle grid scrolling like a coarse three-state spectrogram.
+add('facets', 'Facets', 'a triangle grid that scrolls like a spectrogram in three states: paper, yellow, full square', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const cols = 16, rows = 13, cw = W / cols;
+  for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+    const v = hist[c][r], x = c * cw, y = (rows - 1 - r) * cw;
+    if (v > .82) { g.fillStyle = p.a; g.fillRect(x, y, cw, cw); continue; }
+    g.fillStyle = v < .4 ? p.paper : p.a;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + cw, y); g.lineTo(x, y + cw); g.closePath(); g.fill();
+    if (v > .6) { g.fillStyle = p.a; g.beginPath(); g.moveTo(x + cw, y); g.lineTo(x + cw, y + cw); g.lineTo(x, y + cw); g.closePath(); g.fill(); }
+  }
+  const ay = rows * cw;
+  name(g, tr.name, 28, ay + 84, W - 56, 70, p.ink);
+  name(g, tr.title, 28, ay + 118, W - 56, 20, p.ink, 500);
+  small(g, meta(tr), H - 40, p.ink, 13);
+});
+
+// Slides (Bauhaus Ausstellung): half-discs slide with band energy, rows = frequency ranges, overlaps multiply.
+add('slides', 'Slides', 'four rows (low to high); the dome and the bowl of each slide towards each other with that range\'s energy', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const R = W * .25, y0 = 56, rows = 4;
+  g.font = `600 16px ${HELV}`; g.fillStyle = p.text; g.textAlign = 'right'; g.fillText(tr.year, W - 28, 36); g.textAlign = 'left';
+  for (let k = 0; k < rows; k++) {
+    const ry = y0 + k * R, e = Math.min(1, grp(k * 8, k * 8 + 8) * 1.4), span = W / 2 - R;
+    g.fillStyle = k % 2 ? p.paper : p.c; g.fillRect(0, ry, W, R);
+    const left = k % 2 === 0, c1 = left ? R + e * span : W - R - e * span, c2 = left ? W - R - e * span : R + e * span;
+    g.save(); g.beginPath(); g.rect(0, ry, W, R); g.clip(); g.globalCompositeOperation = 'multiply';
+    g.fillStyle = p.a; g.beginPath(); g.arc(c1, ry + R, R, Math.PI, 0); g.fill();
+    g.fillStyle = p.b; g.beginPath(); g.arc(c2, ry, R, 0, Math.PI); g.fill();
+    g.restore();
+  }
+  const by = y0 + rows * R;
+  name(g, tr.name, 28, by + 64, W - 56, 46, p.text, 800, true, '3px');
+  small(g, [[tr.title + ' · ' + tr.album]], by + 94, p.text, 14, [28]);
+});
+
+// Dials (The Beatles): four circles in a checkerboard, each filled to a reading along a fixed diagonal.
+add('dials', 'Dials', 'four readings (loudness, true peak, correlation, DR); each circle fills along the diagonal', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  small(g, meta(tr), 40, p.text);
+  name(g, tr.name, 28, 152, W - 56, 84, p.text);
+  name(g, tr.title, 28, 196, W - 56, 24, p.text, 700);
+  small(g, [[tr.album]], 220, p.text, 14, [28]);
+  const top = 250, cw = W / 2, ch = (H - top) / 2, r = Math.min(cw, ch) * .43;
+  const items = [
+    ['lufs', (S.lufs + 30) / 26, S.lufs.toFixed(1)],
+    ['true peak', (S.peak + 40) / 40, S.peak.toFixed(1)],
+    ['correlation', (S.corr + 1) / 2, (S.corr >= 0 ? '+' : '') + S.corr.toFixed(2)],
+    ['dr', (S.dr - 4) / 16, S.dr.toFixed(0)],
+  ];
+  items.forEach(([label, v, txt], i) => {
+    const cx0 = (i % 2) * cw, cy0 = top + Math.floor(i / 2) * ch, dark = (i % 2 + Math.floor(i / 2)) % 2 === 0;
+    const cell = dark ? p.ink : p.a, other = dark ? p.a : p.ink;
+    g.fillStyle = cell; g.fillRect(cx0, cy0, cw, ch);
+    const cx = cx0 + cw / 2, cy = cy0 + ch / 2, vv = Math.max(0, Math.min(1, v));
+    g.save(); g.beginPath(); g.arc(cx, cy, r, 0, 7); g.clip();
+    g.fillStyle = other; g.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+    g.translate(cx, cy); g.rotate(-Math.PI / 4);
+    g.fillStyle = p.paper; const off = (1 - 2 * vv) * r; g.fillRect(-r, off, 2 * r, r - off);
+    g.restore();
+    g.font = `600 13px ${HELV}`; g.fillStyle = p.paper; g.fillText(label, cx0 + 14, cy0 + 24); g.fillText(txt, cx0 + 14, cy0 + ch - 14);
+  });
+});
+
+// Fan (André Breton cover): wedges from a corner, one per band; the name runs along every ray.
+add('fan', 'Fan', 'one clean ray per band, length is its energy; name, title and album in a caption at the bottom', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const ox = W * .86, oy = H * .075, N = 12, a0 = 185 * Math.PI / 180, a1 = 72 * Math.PI / 180, dth = (a0 - a1) / N, r0 = 26;
+  const P = (r, th) => [ox + r * Math.cos(th), oy + r * Math.sin(th)];
+  for (let i = 0; i < N; i++) {
+    const e = Math.min(1, grp(Math.floor(i * 32 / N), Math.floor((i + 1) * 32 / N)) * 1.5);
+    const th0 = a0 - i * dth, th1 = th0 - dth, L = H * (.3 + .6 * e), dark = i % 2 === 0;
+    g.fillStyle = dark ? p.ink : p.a;
+    g.beginPath(); g.moveTo(...P(r0, th0)); g.lineTo(...P(L, th0)); g.lineTo(...P(L, th1)); g.lineTo(...P(r0, th1)); g.closePath(); g.fill();
+  }
+  g.fillStyle = p.bg; g.beginPath(); g.arc(ox, oy, r0 * .85, 0, 7); g.fill();
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  name(g, tr.name, 28, H - 96, W * .7, 40, p.text, 800);
+  name(g, tr.title, 28, H - 66, W * .7, 20, p.a, 700);
+  small(g, [[tr.album + ' · ' + tr.year], [tr.fmt + ' · ' + tr.dur]], H - 42, p.text, 13, [28]);
+});
+
+// Arches (Jazz Improvisation): six nested arches, left to right low to high; height is band energy. Frame: cover.
+add('arches', 'Arches', 'six nested arches from low to high frequencies; height is energy. Uses the cover frame (title, accent subtitle, album line)', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  name(g, tr.name, 28, 82, W - 56, 56, p.text, 700);
+  name(g, tr.title, 28, 124, W - 56, 28, p.a, 500);
+  small(g, [[tr.album + ' · ' + tr.year]], 154, p.text, 15, [28]);
+  const ax = 30, aw = (W - 60) / 6, top = 190, base = H - 30, hmax = base - top, gap = aw * .03;
+  g.save(); g.beginPath(); g.rect(0, top - 2, W, hmax + 4); g.clip();
+  for (let i = 0; i < 6; i++) {
+    const e = Math.min(1, grp(i * 5, i * 5 + 5) * 1.5), h = hmax * (.22 + .78 * e);
+    const x = ax + i * aw + gap / 2, w = aw - gap, yT = base - h, step = w * .085;
+    [p.ink, p.a, p.ink, p.a, p.ink, p.bg].forEach((c, k) => {
+      const xk = x + k * step, wk = w - 2 * k * step, yk = yT + k * step, r = wk / 2;
+      g.fillStyle = c; g.beginPath(); g.moveTo(xk, base + 4); g.lineTo(xk, yk + r); g.arc(xk + r, yk + r, r, Math.PI, 0);
+      g.lineTo(xk + wk, base + 4); g.closePath(); g.fill();
+    });
+  }
+  g.restore();
+});
+
+// Rings (2010): a planet and curved stripes; each stripe is a band, thickness follows energy.
+add('rings', 'Rings', 'a planet that grows slightly with level, and stripes passing in front and behind it; stripe thickness is band energy. Caption frame', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const m = 14, px = m, py = m, pw = W - 2 * m, ph = H - 2 * m;
+  g.save(); g.beginPath(); g.rect(px, py, pw, ph); g.clip();
+  g.fillStyle = p.dark; g.fillRect(px, py, pw, ph);
+  const pcx = W * .1, pcy = H * .72, pr = W * .46 * (.96 + .08 * S.lvl), M = 9;
+  const ring = (i, front) => {
+    const e = Math.min(1, grp(Math.floor(i * 32 / M), Math.floor((i + 1) * 32 / M)) * 1.5);
+    const rx = pr * 1.3 + i * 27, ry = rx * .3;
+    g.save(); g.translate(pcx, pcy); g.rotate(-.4);
+    g.strokeStyle = p.c; g.lineWidth = 2 + e * 11;
+    g.beginPath(); g.ellipse(0, 0, rx, ry, 0, front ? 0 : Math.PI, front ? Math.PI : 2 * Math.PI); g.stroke(); g.restore();
+  };
+  for (let i = 0; i < M; i++) ring(i, false);
+  g.fillStyle = p.a; g.beginPath(); g.arc(pcx, pcy, pr, 0, 7); g.fill();
+  for (let i = 0; i < M; i++) ring(i, true);
+  g.restore();
+  name(g, tr.name, px + 26, py + 66, pw - 60, 40, p.c, 700);
+  small(g, [[tr.title + ' · ' + tr.album + ' · ' + tr.year]], py + 90, p.c, 13, [px + 26]);
+});
+
+// Overcome: hairlines whose height follows the bands, two circles (L and R) held at the peak and clearing the lines around them.
+add('overcome', 'Overcome', 'one hairline per band, height is energy; two circles ride the L and R peak and clear a halo in the lines. Pill caption', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const x0 = W * .1, x1 = W * .89, y0 = H * .087, y1 = H * .915, N = 40, step = (x1 - x0) / (N - 1);
+  g.fillStyle = p.ink;
+  for (let i = 0; i < N; i++) {
+    const e = Math.min(1, S.bands[Math.floor(i / N * 32)] * 1.3), yT = y0 + (1 - (.7 + .3 * e)) * (y1 - y0);
+    g.fillRect(x0 + i * step - 2, yT, 4, y1 - yT);
+  }
+  const r = W * .075;
+  [[p.a, x0 + (x1 - x0) * (.2 + .06 * Math.sin(t * .2)), S.lvlL], [p.b, x0 + (x1 - x0) * (.78 + .06 * Math.sin(t * .17 + 2)), S.lvlR]].forEach(([c, x, lv]) => {
+    const y = y1 - r - 14 - Math.min(1, lv * 1.15) * (y1 - y0 - 2 * r - 28);
+    g.fillStyle = p.bg; g.beginPath(); g.arc(x, y, r + 9, 0, 7); g.fill();
+    g.fillStyle = c; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  });
+  const txt = tr.name, fs = fit(g, txt, 600, (x1 - x0) * .6, 40, 16), tw = g.measureText(txt).width, py = H * .72;
+  g.fillStyle = p.bg; g.beginPath(); g.roundRect(x0 + 10, py - fs - 6, tw + 28, fs + 24, (fs + 24) / 2); g.fill();
+  g.fillStyle = p.text; g.fillText(txt, x0 + 24, py);
+  g.font = `500 28px ${HELV}`; g.textAlign = 'right'; g.fillText(`/${tr.no}/${tr.dur}`, W - 54, H - 36); g.textAlign = 'left';
+});
+
+// Pillars (Paul Pre sleeve): a square sleeve of rounded pillars; height is band energy, the corner circle pulses with the beat.
+add('pillars', 'Pillars', 'a square sleeve (also the shape for menu thumbnails): seven rounded pillars rise with band energy, the corner circle pulses with the beat', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  const px = 28, py = 28, pw = W - 56, N = 7, gap = 5, w = (pw - gap * (N - 1)) / N;
+  g.save(); g.beginPath(); g.roundRect(px, py, pw, pw, 36); g.clip();
+  g.fillStyle = p.bg; g.fillRect(px, py, pw, pw);
+  for (let i = 0; i < N; i++) {
+    const e = Math.min(1, grp(Math.floor(i * 32 / N), Math.floor((i + 1) * 32 / N)) * 1.5), h = pw * (.35 + .65 * e);
+    const x = px + i * (w + gap), yT = py + pw - h, r = w / 2;
+    g.fillStyle = i % 2 ? p.b : p.a;
+    g.beginPath(); g.moveTo(x, py + pw + 2); g.lineTo(x, yT + r); g.arc(x + r, yT + r, r, Math.PI, 0); g.lineTo(x + w, py + pw + 2); g.closePath(); g.fill();
+  }
+  const cr = pw * .12 * (1 + .22 * S.beat + .12 * S.lvl), cx = px + pw - cr - 26, cy = py + cr + 26;
+  g.fillStyle = p.bg; g.beginPath(); g.arc(cx, cy, cr + 7, 0, 7); g.fill();
+  g.fillStyle = p.a; g.beginPath(); g.arc(cx, cy, cr, 0, 7); g.fill();
+  g.restore();
+  name(g, tr.name, 28, py + pw + 76, W - 56, 52, p.ink, 800, true, '2px');
+  small(g, [[tr.title + ' · ' + tr.album], [tr.year + ' · ' + tr.fmt + ' · ' + tr.dur]], py + pw + 108, p.ink, 15, [28]);
+});
+
+// Halftone (Psychic Energy): a dot grid that is a spectrogram; dot size is energy. Two coloured blocks follow L and R.
+add('halftone', 'Halftone', 'dot size is a scrolling spectrogram, drawn in light and dark blocks; the orange block follows L, the green one R. Cover frame', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  name(g, tr.name, 28, 70, W - 56, 52, p.text, 800);
+  name(g, tr.title, 28, 106, W - 56, 22, p.a, 500);
+  small(g, [[tr.album + ' · ' + tr.year]], 134, p.text, 14, [28]);
+  const ay = 156, ah = H - ay, n = 34, cs = W / n, rows = Math.floor(ah / cs);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < n; c++) {
+    const dark = (Math.floor(c / (n / 2)) + Math.floor(r / 6)) % 2 === 1;
+    if (c % 17 === 0 && r % 6 === 0) { g.fillStyle = dark ? p.ink : p.paper; g.fillRect(c * cs, ay + r * cs, cs * 17, cs * Math.min(6, rows - r)); }
+  }
+  for (let r = 0; r < rows; r++) for (let c = 0; c < n; c++) {
+    const dark = (Math.floor(c / (n / 2)) + Math.floor(r / 6)) % 2 === 1;
+    const v = hist[Math.floor(c / n * 16)][Math.floor((rows - 1 - r) / rows * 13)], rad = cs * .5 * (.12 + .88 * v);
+    g.fillStyle = dark ? p.paper : p.ink; g.beginPath(); g.arc(c * cs + cs / 2, ay + r * cs + cs / 2, rad, 0, 7); g.fill();
+  }
+  const hl = ah * (.12 + .14 * S.lvlL), hr = ah * (.12 + .14 * S.lvlR);
+  g.fillStyle = p.a; g.fillRect(W * .25, ay + ah * .22 - hl / 2, W * .5, hl);
+  g.fillStyle = p.b; g.fillRect(W * .25, ay + ah * .7 - hr / 2, W * .5, hr);
+});
+
+// Heads (The Uncommitted): a grid of head silhouettes; the one in the accent colour is the loudest band.
+let hot = 0;
+function head(g, x, y, s) {
+  g.save(); g.translate(x, y); g.scale(s, s);
+  g.beginPath(); g.moveTo(10, 110); g.lineTo(12, 78);
+  g.bezierCurveTo(-4, 62, 0, 18, 40, 6); g.bezierCurveTo(72, -4, 98, 26, 92, 52);
+  g.lineTo(100, 66); g.lineTo(92, 72); g.lineTo(95, 82); g.lineTo(86, 90); g.lineTo(88, 100); g.lineTo(66, 104); g.lineTo(66, 110); g.closePath();
+  g.fill(); g.restore();
+}
+add('heads', 'Heads', 'sixteen bands as sixteen heads that swell slightly; the red one is the loudest band right now. Cover frame, deliberately restrained', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  name(g, tr.name, 28, 70, W - 56, 56, p.text, 800);
+  name(g, tr.title, 28, 112, W - 56, 30, p.a, 600);
+  small(g, [[tr.album + ' · ' + tr.year]], 150, p.text, 16, [28]);
+  const vals = Array.from({ length: 16 }, (_, i) => grp(i * 2, i * 2 + 2));
+  const top = vals.indexOf(Math.max(...vals));
+  if (vals[top] > vals[hot] + .08) hot = top;
+  const ay = 200, cw = W / 4, ch = (H - ay - 16) / 4, sc = Math.min(cw * .78 / 100, ch * .95 / 110);
+  vals.forEach((v, i) => {
+    const s = sc * (.88 + .12 * Math.min(1, v * 1.6)), cx = (i % 4) * cw + cw / 2, cy = ay + Math.floor(i / 4) * ch + ch / 2;
+    g.fillStyle = i === hot ? p.a : p.b; head(g, cx - 50 * s, cy - 55 * s, s);
+  });
+});
+
+// Columns and circles (Human Performance): L and R columns; a circle with a diagonal stripe rides the level up its column.
+add('human', 'Columns', 'two sets of columns, left and right channel; each circle, cut by a diagonal stripe, rides its channel level. Boxed cover frame', (g, p, tr) => {
+  g.fillStyle = p.bg; g.fillRect(0, 0, W, H);
+  g.strokeStyle = p.ink; g.lineWidth = 2;
+  g.strokeRect(14, 14, W - 28, 196); g.beginPath(); g.moveTo(14, 112); g.lineTo(W - 14, 112); g.moveTo(W * .5, 112); g.lineTo(W * .5, 210); g.moveTo(W * .82, 112); g.lineTo(W * .82, 210); g.stroke();
+  name(g, tr.name, 30, 84, W - 60, 56, p.ink, 800);
+  small(g, [[tr.title.toUpperCase()], [tr.album.toUpperCase()], [tr.fmt.toUpperCase(), tr.dr.toUpperCase()]], 146, p.ink, 13, [30, W * .5 + 14, W * .82 + 12]);
+  const ay = 224, ah = H - ay - 14, hw = W / 2, r = hw * .3;
+  g.fillStyle = p.a; g.fillRect(0, ay, hw, ah); g.fillStyle = p.ink; g.fillRect(hw / 3, ay, hw / 3, ah);
+  g.fillRect(hw, ay, hw, ah); g.fillStyle = p.paper; g.fillRect(hw + hw / 3, ay, hw / 3, ah);
+  [[hw / 2, S.lvlL, p.ink, p.paper], [hw * 1.5, S.lvlR, p.a, p.ink]].forEach(([cx, lv, base, stripe]) => {
+    const cy = ay + ah - r - 12 - Math.min(1, lv * 1.15) * (ah - 2 * r - 24);
+    g.save(); g.beginPath(); g.arc(cx, cy, r, 0, 7); g.clip();
+    g.fillStyle = base; g.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+    g.translate(cx, cy); g.rotate(Math.PI / 4); g.fillStyle = stripe; g.fillRect(-r * 1.5, -r * .28, r * 3, r * .56); g.restore();
+  });
+});
+
+// ---- page ---------------------------------------------------------------------------------------
+const grid = $('grid');
+POSTERS.forEach(po => {
+  const f = document.createElement('figure');
+  f.innerHTML = `<canvas width="${W}" height="${H}"></canvas><figcaption><b>${po.title}</b>: ${po.text}</figcaption>`;
+  grid.append(f); po.g = f.querySelector('canvas').getContext('2d');
+});
+let last = performance.now();
+(function loop(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now; t += dt;
+  fake(dt);
+  POSTERS.forEach(po => { po.g.globalCompositeOperation = 'source-over'; po.g.textAlign = 'left'; po.draw(po.g, P(po.id), TRACKS[ti]); });
+  requestAnimationFrame(loop);
+})(last);
+</script>
