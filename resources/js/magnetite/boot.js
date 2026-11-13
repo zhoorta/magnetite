@@ -22,6 +22,8 @@ const STORAGE_KEY = 'magnetite.theme';
 const DEFAULT_THEME = 'terminal'; // keep the :root fallbacks in app.css in step
 const VARS_KEY = 'magnetite.vars';
 const CUSTOM_KEY = 'magnetite.themes'; // the themes this browser added (imported or edited)
+const IDLE_MS = 3000; // full screen: how long nothing may move before the controls fade out
+let idleTimer = null; // outside the store: it must not be reactive
 const MAX_SAVED_QUEUE = 500; // tracks kept for the restore after a reload
 /** A 404 means the saved track is gone for good; other failures (offline, server busy) keep the saved state for next time. */
 function forgetIf(status, forget) {
@@ -145,6 +147,8 @@ Alpine.store('player', {
     time: 0,
     duration: 0,
     expanded: false,
+    idle: false, // full screen only: nothing has moved for a few seconds, so the controls are hidden (see wake)
+    pinned: false, // key H: keep the controls showing in full screen
     helpOpen: false, // the keyboard shortcut list
     error: null,
     audioState: 'idle', // AudioContext state once the graph exists: running, suspended, interrupted
@@ -181,6 +185,32 @@ Alpine.store('player', {
         return this.queue[this.index] ?? null;
     },
 
+    /** Full screen with nothing moving: the controls fade out and the poster gets the whole window. */
+    get chromeHidden() {
+        return this.expanded && this.idle && !this.pinned;
+    },
+
+    /** Any sign of life in full screen shows the controls again and restarts the countdown. */
+    wake() {
+        this.idle = false;
+        clearTimeout(idleTimer);
+        if (this.expanded) idleTimer = setTimeout(() => this.settle(), IDLE_MS);
+    },
+
+    /** The countdown ended: hide the controls, unless they are in use (the pointer on them, a menu open, the seek bar held) or say something. */
+    settle() {
+        const busy = this.error || this.helpOpen || (this.playing && ['suspended', 'interrupted'].includes(this.audioState))
+            || document.querySelector('[data-chrome]:hover, [data-chrome] [aria-haspopup="menu"][aria-expanded="true"], [data-chrome] :active');
+        if (busy) idleTimer = setTimeout(() => this.settle(), IDLE_MS);
+        else this.idle = true;
+    },
+
+    togglePin() {
+        this.pinned = !this.pinned;
+        this.say(this.pinned ? 'Controls stay in full screen' : 'Controls hide in full screen when idle');
+        this.wake();
+    },
+
     mount(audio, canvas) {
         if (this.engine) return;
 
@@ -193,6 +223,24 @@ Alpine.store('player', {
             document.addEventListener(type, unlock, { passive: true });
         }
         this.canvas = canvas;
+
+        // Full screen hides the controls after IDLE_MS without a move, touch or key; a tap on the picture (touch) hides them at once.
+        Alpine.effect(() => {
+            if (this.expanded) this.wake();
+            else {
+                clearTimeout(idleTimer);
+                this.idle = false;
+            }
+        });
+        for (const type of ['pointermove', 'pointerdown', 'keydown', 'wheel']) {
+            document.addEventListener(type, (e) => {
+                if (!this.expanded) return;
+                if (e.type === 'pointerdown' && e.pointerType === 'touch' && e.target === this.canvas && !this.idle) {
+                    clearTimeout(idleTimer);
+                    this.idle = true;
+                } else this.wake();
+            }, { passive: true });
+        }
 
         // The height of the docked player, for the pages that fit themselves above it (--dock-h); in full screen it is the whole window, so not then.
         const dock = canvas.closest('.fixed');
@@ -637,6 +685,7 @@ Alpine.store('player', {
         else if (key === 'p') act(() => this.prev());
         else if (key === 'Z') act(() => this.cycleShuffle()); // the library's lowercase s, r and the other letters are taken, so these two are capitals
         else if (key === 'R') act(() => this.cycleRepeat());
+        else if (key === 'H') act(() => this.togglePin()); // keep the controls showing in full screen
         else if (key === 'I') act(() => Alpine.store('ui').cycleInfo()); // how much the lists and the player say about the files
         else if (key === 'f' || key === 'F') act(() => (this.expanded = !this.expanded));
         else if (key === 'm') act(() => this.cycleMeter(1)); // the terminal client's keys: m / M change the meter, + and - the number of meters

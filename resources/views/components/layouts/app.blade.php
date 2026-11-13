@@ -51,13 +51,13 @@
     @persist('player')
         <div x-data
              x-init="$store.player.mount($refs.audio, $refs.canvas)"
-             :class="$store.player.expanded ? 'inset-0 flex flex-col bg-bg' : 'inset-x-0 bg-bg px-[max(1rem,calc((100vw-80rem)/2+1rem))] pb-1 pt-3'"
+             :class="$store.player.expanded ? 'inset-0 flex flex-col bg-bg' + ($store.player.chromeHidden ? ' cursor-none' : '') : 'inset-x-0 bg-bg px-[max(1rem,calc((100vw-80rem)/2+1rem))] pb-1 pt-3'"
              :style="$store.player.expanded ? '' : 'bottom: var(--status-h, 0px)'"
              class="fixed z-10">
             <audio x-ref="audio" preload="metadata"></audio>
 
             {{-- Docked, as in docs/mockups/dense-library.html: a "Now playing" box with the track on the left, the meters on the right, and the progress and buttons under both. Full screen: the meters fill the screen. --}}
-            <div :class="$store.player.expanded ? 'flex min-h-0 flex-1 flex-col' : 'relative grid grid-cols-1 gap-x-4 rounded-theme border border-white/15 px-3 md:grid-cols-2'">
+            <div :class="$store.player.expanded ? 'relative flex min-h-0 flex-1 flex-col' : 'relative grid grid-cols-1 gap-x-4 rounded-theme border border-white/15 px-3 md:grid-cols-2'">
             <span x-show="! $store.player.expanded" class="absolute -top-2.5 left-3 bg-bg px-1.5 text-xs text-muted">Now playing</span>
 
             <canvas x-ref="canvas" x-show="$store.player.panels.length"
@@ -123,7 +123,8 @@
                             '[ / ]' => 'Choose the panel m changes (Tab in full screen)',
                             'c' => 'Meter colours from the playing cover',
                             't / T' => 'Next / previous theme',
-                            'F' => 'Full screen',
+                            'F' => 'Full screen (the controls hide after 3 s without a move)',
+                            'Shift + H' => 'Keep the controls showing in full screen',
                             'Esc' => 'Close full screen or this list',
                             '?' => 'This list',
                         ] as $keys => $what)
@@ -163,10 +164,11 @@
                 </div>
             </div>
 
-            <div :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pt-3' : 'order-1 py-3 ' + ($store.player.panels.length ? 'md:col-start-1 md:row-start-1' : 'md:col-span-2 md:row-start-1')"
+            <div data-chrome :class="$store.player.expanded ? 'absolute inset-x-0 top-0 z-10 bg-linear-to-b from-bg/90 to-transparent px-[max(1rem,calc((100%-48rem)/2+1rem))] pb-6 pt-3 transition-opacity duration-300 ' + ($store.player.chromeHidden ? 'pointer-events-none opacity-0' : '') : 'order-1 py-3 ' + ($store.player.panels.length ? 'md:col-start-1 md:row-start-1' : 'md:col-span-2 md:row-start-1')"
                  class="flex flex-col gap-2">
                 <div class="flex min-h-10 items-center justify-between text-sm">
-                    <div x-show="$store.player.panels.length || ! $store.player.expanded" class="flex min-w-0 items-center gap-3">
+                    {{-- A poster prints the track itself, so in full screen the line over it would only repeat it. --}}
+                    <div x-show="! $store.player.expanded || ($store.player.panels.length && ! $store.player.panels.some((v) => v.id.startsWith('poster-')))" class="flex min-w-0 items-center gap-3">
                         {{-- Full screen has no small cover: the meters, or the big cover when there are none, already fill the screen. --}}
                         <div x-show="! $store.player.expanded" class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
                             <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
@@ -273,7 +275,7 @@
 
             </div>
 
-            <div :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pb-3' : 'order-3 pb-3 md:col-span-2 md:row-start-2'" class="flex flex-col gap-3">
+            <div data-chrome :class="$store.player.expanded ? 'absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-bg/90 to-transparent px-[max(1rem,calc((100%-48rem)/2+1rem))] pb-3 pt-8 transition-opacity duration-300 ' + ($store.player.chromeHidden ? 'pointer-events-none opacity-0' : '') : 'order-3 pb-3 md:col-span-2 md:row-start-2'" class="flex flex-col gap-3">
                 <div class="flex items-center gap-3 text-xs text-muted">
                     <span x-text="$store.player.fmt($store.player.time)" class="w-10 text-right tabular-nums"></span>
                     <input type="range" min="0" max="1000" class="seek flex-1" aria-label="Position in the track"
@@ -305,6 +307,13 @@
                         <span x-show="$store.player.repeat === 'one'" x-cloak class="absolute -right-1 -top-1.5 rounded-full bg-accent px-1 text-[10px] font-bold leading-4 text-bg" aria-hidden="true">1</span>
                     </button>
                 </div>
+            </div>
+
+            {{-- Full screen with the controls hidden: only a thin line of progress along the bottom edge. --}}
+            <div x-show="$store.player.expanded" x-cloak aria-hidden="true"
+                 class="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-0.5 bg-white/10 transition-opacity duration-300"
+                 :class="$store.player.chromeHidden ? 'opacity-100' : 'opacity-0'">
+                <div class="h-full bg-accent" :style="'width: ' + ($store.player.duration ? Math.min(100, $store.player.time / $store.player.duration * 100) : 0) + '%'"></div>
             </div>
             </div>
         </div>
