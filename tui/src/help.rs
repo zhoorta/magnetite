@@ -30,6 +30,7 @@ const PLAYBACK: Section = ("Playback", &[
 const METERS: Section = ("Meters", &[
     ("tab", "choose the panel m changes"),
     ("m / M", "next / previous meter"),
+    ("w / W", "next / previous poster"),
     ("+ / -", "add / remove a panel (0 to 4)"),
     ("c", "meter colours from the cover"),
     ("t / T", "next / previous theme"),

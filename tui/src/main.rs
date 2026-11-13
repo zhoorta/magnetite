@@ -11,6 +11,7 @@ mod loudness;
 mod media;
 mod meters;
 mod panels;
+mod posters;
 mod search;
 mod stream;
 mod theme;
@@ -353,10 +354,13 @@ impl App {
             (KeyCode::Char('n'), _) => self.step(1, false),
             (KeyCode::Char('p'), _) => self.previous(),
             (KeyCode::Tab, _) => self.active = (self.active + 1) % self.panels.len().max(1),
-            (KeyCode::Char('m' | 'M'), _) if self.panels.is_empty() => self.add_meter(),
-            (KeyCode::Char('m'), _) => self.cycle_meter(1),
-            (KeyCode::Char('M'), _) => self.cycle_meter(-1),
-            (KeyCode::Char('+'), _) => self.add_meter(),
+            (KeyCode::Char('m' | 'M'), _) if self.panels.is_empty() => self.add_meter(false),
+            (KeyCode::Char('w' | 'W'), _) if self.panels.is_empty() => self.add_meter(true),
+            (KeyCode::Char('m'), _) => self.cycle_meter(1, false),
+            (KeyCode::Char('M'), _) => self.cycle_meter(-1, false),
+            (KeyCode::Char('w'), _) => self.cycle_meter(1, true),
+            (KeyCode::Char('W'), _) => self.cycle_meter(-1, true),
+            (KeyCode::Char('+'), _) => self.add_meter(false),
             (KeyCode::Char('-'), _) => self.remove_meter(),
             (KeyCode::Char('L'), _) => {
                 self.loud = self.loud.next();
@@ -1050,17 +1054,19 @@ impl App {
     }
 
     fn save_meters(&mut self) {
-        self.status = if self.panels.is_empty() { "meters: none (m or + brings them back)".into() } else { format!("meters: {}", self.panels.iter().map(|k| k.label()).collect::<Vec<_>>().join(" + ")) };
+        self.status = if self.panels.is_empty() { "meters: none (m, w or + brings them back)".into() } else { format!("meters: {}", self.panels.iter().map(|k| k.label()).collect::<Vec<_>>().join(" + ")) };
         self.cfg.meters = Some(self.panels.iter().map(|k| k.id().to_string()).collect());
         let _ = config::save(&self.cfg);
     }
 
-    /// The active panel gets the next (or previous) kind that no other panel shows.
-    fn cycle_meter(&mut self, d: i32) {
-        let n = Kind::ALL.len() as i32;
-        let start = Kind::ALL.iter().position(|k| *k == self.panels[self.active]).unwrap_or(0) as i32;
+    /// The active panel gets the next (or previous) plain meter, or poster when `posters`, that no other panel shows; from the
+    /// other group it starts at that group's first (or last) one.
+    fn cycle_meter(&mut self, d: i32, posters: bool) {
+        let pool: Vec<Kind> = Kind::ALL.into_iter().filter(|k| k.is_poster() == posters).collect();
+        let n = pool.len() as i32;
+        let start = pool.iter().position(|k| *k == self.panels[self.active]).map_or(if d > 0 { n - 1 } else { 0 }, |i| i as i32);
         for step in 1..=n {
-            let k = Kind::ALL[(start + d * step).rem_euclid(n) as usize];
+            let k = pool[(start + d * step).rem_euclid(n) as usize];
             if !self.panels.iter().enumerate().any(|(i, p)| i != self.active && *p == k) {
                 self.panels[self.active] = k;
                 break;
@@ -1069,10 +1075,10 @@ impl App {
         self.save_meters();
     }
 
-    /// Up to four meters at once, like the web.
-    fn add_meter(&mut self) {
+    /// Up to four meters at once, like the web: the first plain meter (or poster) not shown yet.
+    fn add_meter(&mut self, posters: bool) {
         if self.panels.len() < 4 {
-            if let Some(k) = Kind::ALL.iter().find(|k| !self.panels.contains(k)) {
+            if let Some(k) = Kind::ALL.iter().find(|k| k.is_poster() == posters && !self.panels.contains(k)) {
                 self.panels.push(*k);
             }
         }
@@ -1196,13 +1202,13 @@ impl App {
             let [body, prog, foot] = Layout::vertical([Constraint::Min(3), Constraint::Length(1), Constraint::Length(1)]).areas(f.area());
             self.draw_summary_full(f, Rect::new(body.x, body.y + 1, body.width, body.height.saturating_sub(1)), th);
             self.draw_progress(f, prog, th);
-            let hint = if self.status.is_empty() { " f/esc close · space pause · n/p · ,/. seek · m or + brings the meters back · t theme".to_string() } else { self.status.clone() };
+            let hint = if self.status.is_empty() { " f/esc close · space pause · n/p · ,/. seek · m, w or + brings the meters back · t theme".to_string() } else { self.status.clone() };
             f.render_widget(Paragraph::new(hint).style(Style::new().fg(muted)), foot);
             return;
         }
         let [meters, title, prog, foot] = Layout::vertical([Constraint::Min(3), Constraint::Length(2), Constraint::Length(1), Constraint::Length(1)]).areas(f.area());
         let mt = self.meter_theme(th);
-        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt };
+        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt, track: self.now.and_then(|i| self.queue.get(i)) };
         // no meters: like the web, the cover big in the middle above the title
         let (cover_area, meters) = if self.panels.is_empty() { (Rect::new(meters.x, meters.y + 1, meters.width, meters.height.saturating_sub(2)), meters) } else { self.split_cover(meters) };
         self.cover.draw(f, cover_area);
@@ -1362,7 +1368,7 @@ impl App {
         );
 
         let mt = self.meter_theme(th);
-        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt };
+        let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt, track: self.now.and_then(|i| self.queue.get(i)) };
         let (cover_area, mid) = self.split_cover(mid);
         self.cover.draw(f, cover_area);
         for (i, (kind, cell)) in self.panels.iter().zip(cells(self.panels.len(), mid)).enumerate() {

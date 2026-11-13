@@ -29,6 +29,7 @@ pub struct Meters {
     pub history: VecDeque<[f32; THIRD]>, // spectrogram columns, newest last
     pub lufs: Loudness,
     pub lufs_history: VecDeque<f32>, // momentary, every half second
+    pub poster: crate::posters::State, // what the poster meters remember between frames
     peak_age: (f32, f32),
     column_clock: f32,
     lufs_clock: f32,
@@ -58,6 +59,7 @@ impl Meters {
             history: VecDeque::new(),
             lufs: Loudness::default(),
             lufs_history: VecDeque::new(),
+            poster: crate::posters::State::new(),
             peak_age: (0.0, 0.0),
             column_clock: 0.0,
             lufs_clock: 0.0,
@@ -81,6 +83,12 @@ impl Meters {
         self.rms = (-90.0, -90.0);
         self.peak = (self.peak.0 - dt * 20.0, self.peak.1 - dt * 20.0);
         self.ballistics(dt);
+        self.posters(dt, false);
+    }
+
+    fn posters(&mut self, dt: f32, playing: bool) {
+        let loud = self.lufs.short_term.or(self.lufs.momentary);
+        self.poster.update(&self.third, self.rms, self.corr, loud, self.peak, playing, dt);
     }
 
     /// Needle and eye follow the RMS like the web's `Meter`: `tau = response / 4.6`, so 99% of the way in `response` seconds.
@@ -173,6 +181,7 @@ impl Meters {
             let tilt = 3.0 * (fc / 1000.0).log2();
             smooth(&mut self.third[b], ((20.0 * v.max(1e-6).log10() + tilt + 80.0) / 80.0).clamp(0.0, 1.0), dt);
         }
+        self.posters(dt, true);
         self.column_clock += dt;
         if self.column_clock >= 0.1 {
             self.column_clock = 0.0;

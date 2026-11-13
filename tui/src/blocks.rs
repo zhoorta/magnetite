@@ -206,8 +206,7 @@ pub fn render_with(img: &RgbImage, shape: Shape, indexed: bool, tune: Tuning) ->
     out
 }
 
-/// The RGB of a colour that `render` produced (for tests).
-#[cfg(test)]
+/// The RGB of a colour that `render` produced.
 pub fn rgb_of(c: Color) -> (u8, u8, u8) {
     match c {
         Color::Rgb(r, g, b) => (r, g, b),

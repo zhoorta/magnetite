@@ -1,7 +1,9 @@
 //! The meters as text: one function per kind, drawn into the cell a panel is given (the contract of the web visualizers:
 //! use only the width and height you get).
 use crate::{
+    api::Track,
     meters::{Meters, BANDS, THIRD},
+    posters::{self, Poster},
     theme::{c, lerp, Rgb, Theme},
 };
 use ratatui::{
@@ -24,10 +26,50 @@ pub enum Kind {
     Loudness,
     VuNeedle,
     MagicEye,
+    PosterPillars,
+    PosterArches,
+    PosterLens,
+    PosterFan,
+    PosterSlides,
+    PosterDials,
+    PosterRings,
+    PosterTunnel,
+    PosterLenses,
+    PosterOvercome,
+    PosterFacets,
+    PosterHeads,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 10] = [Kind::VuWide, Kind::VuLeds, Kind::VuNeedle, Kind::MagicEye, Kind::Spectrum, Kind::ThirdOctave, Kind::Spectrogram, Kind::Scope, Kind::Goniometer, Kind::Loudness];
+    /// The plain meters first, then the posters (`m` walks through the first group, `w` through the second).
+    pub const ALL: [Kind; 22] = [
+        Kind::VuWide, Kind::VuLeds, Kind::VuNeedle, Kind::MagicEye, Kind::Spectrum, Kind::ThirdOctave, Kind::Spectrogram, Kind::Scope, Kind::Goniometer, Kind::Loudness,
+        Kind::PosterPillars, Kind::PosterArches, Kind::PosterLens, Kind::PosterFan, Kind::PosterSlides, Kind::PosterDials, Kind::PosterRings,
+        Kind::PosterTunnel, Kind::PosterLenses, Kind::PosterOvercome, Kind::PosterFacets, Kind::PosterHeads,
+    ];
+
+    pub fn is_poster(self) -> bool {
+        self.poster().is_some()
+    }
+
+    /// The poster this kind is, if it is one (`posters.rs` draws those).
+    pub fn poster(self) -> Option<Poster> {
+        Some(match self {
+            Kind::PosterPillars => Poster::Pillars,
+            Kind::PosterArches => Poster::Arches,
+            Kind::PosterLens => Poster::Lens,
+            Kind::PosterFan => Poster::Fan,
+            Kind::PosterSlides => Poster::Slides,
+            Kind::PosterDials => Poster::Dials,
+            Kind::PosterRings => Poster::Rings,
+            Kind::PosterTunnel => Poster::Tunnel,
+            Kind::PosterLenses => Poster::Lenses,
+            Kind::PosterOvercome => Poster::Overcome,
+            Kind::PosterFacets => Poster::Facets,
+            Kind::PosterHeads => Poster::Heads,
+            _ => return None,
+        })
+    }
 
     /// The ids are the web's where a meter exists there (`spectrum` is terminal-only).
     pub fn id(self) -> &'static str {
@@ -42,6 +84,18 @@ impl Kind {
             Kind::Loudness => "loudness",
             Kind::VuNeedle => "vu-needle",
             Kind::MagicEye => "magic-eye",
+            Kind::PosterPillars => "poster-pillars",
+            Kind::PosterArches => "poster-arches",
+            Kind::PosterLens => "poster-lens",
+            Kind::PosterFan => "poster-fan",
+            Kind::PosterSlides => "poster-slides",
+            Kind::PosterDials => "poster-dials",
+            Kind::PosterRings => "poster-rings",
+            Kind::PosterTunnel => "poster-tunnel",
+            Kind::PosterLenses => "poster-lenses",
+            Kind::PosterOvercome => "poster-overcome",
+            Kind::PosterFacets => "poster-facets",
+            Kind::PosterHeads => "poster-heads",
         }
     }
 
@@ -57,6 +111,18 @@ impl Kind {
             Kind::Loudness => "Loudness (LUFS)",
             Kind::VuNeedle => "VU needles",
             Kind::MagicEye => "Magic eyes",
+            Kind::PosterPillars => "Poster: Pillars",
+            Kind::PosterArches => "Poster: Arches",
+            Kind::PosterLens => "Poster: Lens",
+            Kind::PosterFan => "Poster: Fan",
+            Kind::PosterSlides => "Poster: Slides",
+            Kind::PosterDials => "Poster: Dials",
+            Kind::PosterRings => "Poster: Rings",
+            Kind::PosterTunnel => "Poster: Tunnel",
+            Kind::PosterLenses => "Poster: Lenses",
+            Kind::PosterOvercome => "Poster: Overcome",
+            Kind::PosterFacets => "Poster: Facets",
+            Kind::PosterHeads => "Poster: Heads",
         }
     }
 
@@ -70,11 +136,16 @@ pub struct Ctx<'a> {
     pub tap: &'a [f32], // interleaved stereo, newest last
     pub rate: u32,
     pub th: &'a Theme,
+    /// The playing track, for the posters' text.
+    pub track: Option<&'a Track>,
 }
 
 pub fn draw(f: &mut Frame, area: Rect, kind: Kind, cx: &Ctx) {
     if area.width < 4 || area.height < 1 {
         return;
+    }
+    if let Some(poster) = kind.poster() {
+        return posters::draw(f, area, poster, cx);
     }
     let lines = match kind {
         Kind::VuWide => vu_wide(cx, area),
@@ -87,6 +158,7 @@ pub fn draw(f: &mut Frame, area: Rect, kind: Kind, cx: &Ctx) {
         Kind::Loudness => loudness(cx, area),
         Kind::VuNeedle => needles(cx, area),
         Kind::MagicEye => eyes(cx, area),
+        _ => return,
     };
     f.render_widget(Paragraph::new(lines), area);
 }
@@ -551,7 +623,7 @@ mod tests {
             for (w, h) in [(60u16, 5u16), (30, 3), (12, 1), (5, 2), (100, 12)] {
                 let mut term = Terminal::new(TestBackend::new(w + 4, h + 2)).unwrap();
                 term
-                    .draw(|f| draw(f, Rect::new(2, 1, w, h), kind, &Ctx { m: &m, tap: &tap, rate, th: &th }))
+                    .draw(|f| draw(f, Rect::new(2, 1, w, h), kind, &Ctx { m: &m, tap: &tap, rate, th: &th, track: None }))
                     .unwrap_or_else(|e| panic!("{kind:?} {w}x{h}: {e}"));
                 // nothing outside the cell
                 let t = text(&term);
@@ -569,7 +641,7 @@ mod tests {
         let th = crate::theme::builtin().remove(0);
         let m = Meters::new();
         let mut term = Terminal::new(TestBackend::new(20, 8)).unwrap();
-        term.draw(|f| draw(f, Rect::new(0, 0, 20, 8), Kind::Goniometer, &Ctx { m: &m, tap: &tap, rate, th: &th })).unwrap();
+        term.draw(|f| draw(f, Rect::new(0, 0, 20, 8), Kind::Goniometer, &Ctx { m: &m, tap: &tap, rate, th: &th, track: None })).unwrap();
         let t = text(&term);
         // column 10 holds the mid axis; outside the row of axis ticks (row 4) nothing lands beside it
         for (y, l) in t.lines().enumerate().filter(|(y, _)| *y != 4) {
@@ -577,7 +649,7 @@ mod tests {
         }
         assert!(t.lines().nth(4).unwrap().chars().nth(10).unwrap() != '\u{2800}');
         let mut term = Terminal::new(TestBackend::new(40, 4)).unwrap();
-        term.draw(|f| draw(f, Rect::new(0, 0, 40, 4), Kind::Loudness, &Ctx { m: &m, tap: &[], rate, th: &th })).unwrap();
+        term.draw(|f| draw(f, Rect::new(0, 0, 40, 4), Kind::Loudness, &Ctx { m: &m, tap: &[], rate, th: &th, track: None })).unwrap();
         assert!(text(&term).contains("LUFS"));
     }
 
@@ -609,7 +681,7 @@ mod preview {
         for kind in [Kind::VuNeedle] {
             for (w, h) in [(50u16, 16u16), (28, 6)] {
                 let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
-                t.draw(|f| draw(f, Rect::new(0, 0, w, h), kind, &Ctx { m: &m, tap: &[], rate, th: &th })).unwrap();
+                t.draw(|f| draw(f, Rect::new(0, 0, w, h), kind, &Ctx { m: &m, tap: &[], rate, th: &th, track: None })).unwrap();
                 let b = t.backend().buffer();
                 for y in 0..h { println!("{}", (0..w).map(|x| b[(x, y)].symbol().to_string()).collect::<String>()); }
                 println!("----");
