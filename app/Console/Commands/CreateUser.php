@@ -7,8 +7,9 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
-#[Signature('magnetite:user {username : Name to sign in with} {--password= : Password (asked for when left out, which keeps it out of the shell history)} {--reset : Change the password of an existing user} {--admin : Make the user an administrator}')]
+#[Signature('magnetite:user {username : Name to sign in with} {--password= : Password (asked for when left out, which keeps it out of the shell history)} {--generate : Make a random password and print it once} {--if-missing : Do nothing, successfully, when the user already exists (for set-up scripts)} {--reset : Change the password of an existing user} {--admin : Make the user an administrator}')]
 #[Description('Create a user, or reset the password of an existing one')]
 class CreateUser extends Command
 {
@@ -16,6 +17,12 @@ class CreateUser extends Command
     {
         $username = mb_strtolower(trim((string) $this->argument('username')));
         $existing = User::where('username', $username)->first();
+
+        if ($existing && $this->option('if-missing')) {
+            $this->line("User '{$username}' exists already.");
+
+            return self::SUCCESS;
+        }
 
         if ($existing && $this->option('admin') && ! $this->option('reset') && $this->option('password') === null) {
             $existing->forceFill(['is_admin' => true])->save();
@@ -36,7 +43,8 @@ class CreateUser extends Command
             return self::FAILURE;
         }
 
-        $password = $this->option('password') ?? $this->askForPassword();
+        $generated = $this->option('generate') && $this->option('password') === null;
+        $password = $generated ? Str::password(20, symbols: false) : ($this->option('password') ?? $this->askForPassword());
 
         $validator = Validator::make(
             ['username' => $username, 'password' => $password],
@@ -54,6 +62,7 @@ class CreateUser extends Command
         if ($existing) {
             $existing->update(['password' => $password]);
             $this->info("Password changed for '{$username}'.");
+            $generated && $this->line("Password: {$password}");
 
             return self::SUCCESS;
         }
@@ -62,6 +71,11 @@ class CreateUser extends Command
         $user->is_admin = (bool) $this->option('admin');
         $user->save();
         $this->info("User '{$username}' created.");
+
+        if ($generated) {
+            $this->line("Password: {$password}");
+            $this->line('It is shown only now. Change it with: php artisan magnetite:user '.$username.' --reset');
+        }
 
         return self::SUCCESS;
     }

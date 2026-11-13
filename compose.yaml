@@ -1,43 +1,42 @@
-# Magnetite: the web container and a queue worker (library scans) from one image.
-#   cp .env.docker.example .env.docker   # then fill in APP_KEY and APP_URL
-#   docker compose up -d --build
-#   docker compose exec app php artisan magnetite:user jose
-x-magnetite: &magnetite
-  build: .
-  image: magnetite:latest
-  env_file: .env.docker
-  environment:
-    DB_CONNECTION: sqlite
-    DB_DATABASE: /data/database.sqlite
-    MAGNETITE_MUSIC_PATH: /music
-    SESSION_DRIVER: database
-    QUEUE_CONNECTION: database
-    CACHE_STORE: database
-    # The proxy in front of the container is on a private network; Laravel then trusts its forwarded headers.
-    TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
-  volumes:
-    - data:/data
-    - storage:/app/storage
-    # Your music folder. It must be writable by uid 33 (www-data) for uploads: chown -R 33:33 ./music
-    - ${MAGNETITE_MUSIC_DIR:-./music}:/music
-  restart: unless-stopped
-
+# Magnetite in one container: the web server (FrankenPHP, which is Caddy with PHP) and a queue worker for library scans.
+#
+#   MAGNETITE_USER=jose docker compose up -d --build
+#   docker compose logs app          # the password of the first user is printed once (or set MAGNETITE_PASSWORD)
+#   then open http://localhost:8080
+#
+# Nothing else is needed: the application key is made on the first start and kept in the data volume. Settings that
+# differ from the defaults go in a file named .env.docker (see .env.docker.example).
 services:
   app:
-    <<: *magnetite
+    build: .
+    image: magnetite:latest
+    env_file:
+      - path: .env.docker
+        required: false
+    environment:
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /data/database.sqlite
+      MAGNETITE_MUSIC_PATH: /music
+      SESSION_DRIVER: database
+      QUEUE_CONNECTION: database
+      CACHE_STORE: database
+      # The proxy in front of the container is on a private network; Laravel then trusts its forwarded headers.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      # Passed through from the shell when set: the first user (the password is generated and printed when left out).
+      MAGNETITE_USER:
+      MAGNETITE_PASSWORD:
+    volumes:
+      - data:/data
+      - storage:/app/storage
+      # The music. By default a volume, so uploads work at once; for a folder that already has music use
+      # MAGNETITE_MUSIC_DIR=/path/to/music (it must be writable by uid 33, www-data, for uploads: chown -R 33:33).
+      - ${MAGNETITE_MUSIC_DIR:-music}:/music
     # Bound to the host's loopback: put a reverse proxy (nginx, Caddy, Traefik) with TLS in front.
     ports:
       - "127.0.0.1:${MAGNETITE_PORT:-8080}:8080"
-
-  worker:
-    <<: *magnetite
-    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=0", "--sleep=3", "--max-time=3600"]
-    depends_on:
-      app:
-        condition: service_healthy
-    healthcheck:
-      disable: true
+    restart: unless-stopped
 
 volumes:
   data:
   storage:
+  music:

@@ -22,3 +22,6 @@ docs
 Dockerfile
 compose.yaml
 android
+ios
+tui
+public/downloads
