@@ -3,7 +3,7 @@ import { AudioEngine, SILENCE } from './engine';
 import { visualizers, meterList } from './visualizers';
 import { meterGroups } from './visualizers/menu';
 import { renderThumb } from './visualizers/thumb';
-import { layout, MAX_PANELS } from './layout';
+import { layout, aspectOf, MAX_PANELS } from './layout';
 import builtinThemes from './themes.json';
 import { validateTheme } from './themes';
 import themeStudio from './themes-page';
@@ -742,7 +742,7 @@ Alpine.store('player', {
             // Each panel draws into its own clipped cell, so a visualizer only ever sees its own w and h.
             const panels = this.panels;
             const colors = Alpine.store('ui').shade(this.colors, this.current?.cover ?? null, dt); // the theme's, or the cover's with the tint on
-            const cells = layout(panels.length, w, h);
+            const cells = layout(panels.length, w, h, aspectOf(panels.map((p) => p.id)));
             for (let i = 0; i < panels.length; i++) {
                 const { x, y, w: cw, h: ch } = cells[i];
                 g.save();
