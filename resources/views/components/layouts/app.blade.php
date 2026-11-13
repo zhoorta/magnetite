@@ -200,6 +200,8 @@
                                     <span class="tabular-nums" x-text="$store.player.panels.length"></span>
                                 </button>
                             </x-slot:trigger>
+                            {{-- The whole list scrolls when it is taller than the screen, so no group hides its last items. --}}
+                            <div class="max-h-[min(32rem,70vh)] overflow-y-auto">
                             <p class="px-3 pb-1 pt-0.5 text-xs text-muted" x-text="'Up to ' + $store.player.maxPanels + ' at once'"></p>
 {{-- The meters in the main list, then the poster meters and the scenes as submenus that open in place (a nested group, so it also works on a phone). --}}
                             <template x-for="v in $store.player.visualizerList.filter((v) => ! v.group)" :key="v.id">
@@ -219,7 +221,7 @@
                                         <span x-text="g.name"></span>
                                         <span class="ml-auto text-xs text-accent tabular-nums" x-text="g.items.filter((v) => $store.player.hasMeter(v.id)).length || ''"></span>
                                     </button>
-                                    <div x-show="open" x-cloak role="group" :aria-label="g.name" class="max-h-72 overflow-y-auto">
+                                    <div x-show="open" x-cloak role="group" :aria-label="g.name">
                                         <template x-for="v in g.items" :key="v.id">
                                             <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)"
                                         :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
@@ -232,6 +234,7 @@
                                     </div>
                                 </div>
                             </template>
+                        </div>
                         </x-menu>
                         <button type="button" class="rounded-theme border border-white/10 p-1.5 hover:text-accent"
                                 :title="$store.player.expanded ? 'Close full screen (F)' : 'Full screen (F)'"
