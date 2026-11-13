@@ -1,7 +1,8 @@
-import { W, H, Bars, begin, drawColumns, drawName, overlap, palette, posterText, showText } from './poster.js';
+import { W, H, stateOf, Bars, begin, drawColumns, drawName, overlap, palette, posterText } from './poster.js';
 
 const ROWS = 4;
-const bars = new Bars(ROWS);
+
+const make = () => ({ bars: new Bars(ROWS) });
 
 /**
  * Four rows of half-discs, low frequencies at the top. In each row a dome and a bowl slide towards each other as that range gets louder,
@@ -12,8 +13,7 @@ export default {
     needs: ['bands'],
     label: 'Poster: Slides',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         attack: 0.08,
         release: 0.6,
         text: 1,
@@ -27,11 +27,12 @@ export default {
 
     draw(g, { bands }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a', 'b', 'c']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         const e = bars.update(bands, dt, p);
-        const txt = showText(p, s);
+        const txt = view.text;
         const r = W * 0.25;
         const y0 = txt ? 56 : (H - ROWS * r) / 2;
         const span = W / 2 - r;

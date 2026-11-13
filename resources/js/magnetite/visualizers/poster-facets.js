@@ -1,10 +1,9 @@
-import { W, H, Bars, begin, drawColumns, drawName, metaColumns, palette, posterText, readableOn, showText } from './poster.js';
+import { W, H, stateOf, Bars, begin, drawColumns, drawName, metaColumns, palette, posterText, readableOn } from './poster.js';
 
 const COLS = 16;
 const ROWS = 13;
-const bars = new Bars(ROWS);
-const history = Array.from({ length: COLS }, () => new Float32Array(ROWS));
-const st = { acc: 0 };
+
+const make = () => ({ bars: new Bars(ROWS), history: Array.from({ length: COLS }, () => new Float32Array(ROWS)), st: { acc: 0 } });
 
 /**
  * A grid of triangles that scrolls like a coarse spectrogram: time runs to the left, low frequencies are at the bottom, and every cell
@@ -15,8 +14,7 @@ export default {
     needs: ['bands'],
     label: 'Poster: Facets',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         speed: 0.14,
         text: 1,
         theme: 1,
@@ -28,10 +26,11 @@ export default {
 
     draw(g, { bands, playing }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars, history, st } = stateOf(g, make);
         const look = palette(p, colors, ['bg', 'paper', 'a', 'ink']);
-        const s = begin(g, w, h, look.bg);
+        const view = begin(g, w, h, look.bg, { p });
 
-        const v = bars.update(bands, dt, { min: p.min, max: p.max, attack: 0.04, release: 0.2 });
+        const v = bars.update(bands, dt, { range: p.range, attack: 0.04, release: 0.2 });
         if (playing) {
             st.acc += dt;
             if (st.acc >= p.speed) {
@@ -42,7 +41,7 @@ export default {
         }
 
         const ink = readableOn(look.bg, [look.ink, '#1a1a1a', '#f6efdc']);
-        const txt = showText(p, s);
+        const txt = view.text;
         const cell = W / COLS;
         const art = txt ? ROWS * cell : H;
         const rows = txt ? ROWS : Math.floor(H / cell);

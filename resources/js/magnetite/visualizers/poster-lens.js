@@ -1,6 +1,8 @@
-import { W, H, begin, drawColumns, drawName, follow, level01, metaColumns, overlap, palette, posterText, showText } from './poster.js';
+import { toDb } from './meter.js';
+import { W, H, stateOf, Reference, begin, drawColumns, drawName, follow, metaColumns, overlap, palette, posterText } from './poster.js';
 
-const st = { l: 0, r: 0, corr: 0 };
+
+const make = () => ({ ref: new Reference(), st: { l: 0, r: 0, corr: 0 } });
 
 /**
  * Two overlapping discs, one per channel, where the overlap darkens (or lightens, on a dark paper): its width is the stereo correlation (stacked is mono, apart is out of
@@ -11,8 +13,7 @@ export default {
     needs: ['levels', 'stereo'],
     label: 'Poster: Lens',
     params: {
-        min: -50,
-        max: -6,
+        range: 30,
         response: 0.25,
         text: 1,
         theme: 1,
@@ -24,15 +25,17 @@ export default {
 
     draw(g, { levels, stereo }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { st, ref } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a', 'b']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
-        st.l = follow(st.l, level01(levels.l.rms, p.min, p.max), dt, p.response);
-        st.r = follow(st.r, level01(levels.r.rms, p.min, p.max), dt, p.response);
+        ref.update(toDb(Math.max(levels.l.rms, levels.r.rms)), dt);
+        st.l = follow(st.l, ref.norm(toDb(levels.l.rms), p.range), dt, p.response);
+        st.r = follow(st.r, ref.norm(toDb(levels.r.rms), p.range), dt, p.response);
         st.corr = follow(st.corr, Math.max(-1, Math.min(1, stereo.corr)), dt, p.response);
 
         let top = 28;
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             drawColumns(g, metaColumns(say), 40, { font: colors.font, color: look.ink });
             drawName(g, say.name, 28, 176, { font: colors.font, maxW: W - 56, size: 104, color: look.ink });

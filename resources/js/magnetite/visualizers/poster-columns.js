@@ -1,6 +1,8 @@
-import { W, H, begin, drawColumns, drawName, follow, level01, palette, posterText, showText } from './poster.js';
+import { toDb } from './meter.js';
+import { W, H, stateOf, Reference, begin, drawColumns, drawName, follow, palette, posterText } from './poster.js';
 
-const st = { l: 0, r: 0 };
+
+const make = () => ({ ref: new Reference(), st: { l: 0, r: 0 } });
 
 /**
  * Two sets of tall columns, left and right channel, and in each a circle cut by a diagonal stripe that rides up its column with the level.
@@ -11,8 +13,7 @@ export default {
     needs: ['levels'],
     label: 'Poster: Columns',
     params: {
-        min: -50,
-        max: -6,
+        range: 30,
         response: 0.25,
         text: 1,
         theme: 1,
@@ -23,14 +24,16 @@ export default {
 
     draw(g, { levels }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { st, ref } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
-        st.l = follow(st.l, level01(levels.l.rms, p.min, p.max), dt, p.response);
-        st.r = follow(st.r, level01(levels.r.rms, p.min, p.max), dt, p.response);
+        ref.update(toDb(Math.max(levels.l.rms, levels.r.rms)), dt);
+        st.l = follow(st.l, ref.norm(toDb(levels.l.rms), p.range), dt, p.response);
+        st.r = follow(st.r, ref.norm(toDb(levels.r.rms), p.range), dt, p.response);
 
         let top = 0;
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             g.strokeStyle = look.ink;
             g.lineWidth = 2;

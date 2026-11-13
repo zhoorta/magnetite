@@ -1,8 +1,8 @@
-import { W, H, Bars, begin, drawName, drawColumns, palette, posterText, readableOn, showText } from './poster.js';
+import { W, H, stateOf, Bars, begin, drawName, drawColumns, palette, posterText, readableOn } from './poster.js';
 
 const RINGS = 9;
-const bars = new Bars(RINGS);
-const st = { lvl: 0 };
+
+const make = () => ({ bars: new Bars(RINGS), st: { lvl: 0 } });
 
 /**
  * A planet on a dark sky with curved stripes passing behind and in front of it, like an astronomy poster. Each stripe is a frequency range and
@@ -13,8 +13,7 @@ export default {
     needs: ['bands'],
     label: 'Poster: Rings',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         attack: 0.06,
         release: 0.5,
         text: 1,
@@ -28,8 +27,9 @@ export default {
 
     draw(g, { bands }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars, st } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'dark', 'a', 'c', 'ink']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         const e = bars.update(bands, dt, p);
         st.lvl = e.reduce((sum, v) => sum + v, 0) / RINGS;
@@ -70,7 +70,7 @@ export default {
         for (let i = 0; i < RINGS; i++) ring(i, true);
         g.restore();
 
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             const on = readableOn(look.dark, [look.c, look.ink, look.paper]);
             drawName(g, say.name, px + 26, py + 66, { font: colors.font, maxW: pw - 60, size: 40, color: on });

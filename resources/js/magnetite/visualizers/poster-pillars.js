@@ -1,7 +1,8 @@
-import { W, H, Bars, begin, drawColumns, drawName, palette, posterText, showText } from './poster.js';
+import { W, H, stateOf, Bars, begin, drawColumns, drawName, palette, posterText } from './poster.js';
 
 const PILLARS = 7;
-const bars = new Bars(PILLARS);
+
+const make = () => ({ bars: new Bars(PILLARS) });
 
 /**
  * A square sleeve of seven rounded pillars in two oranges, rising with the energy of their frequency ranges, and a circle in the corner
@@ -12,8 +13,7 @@ export default {
     needs: ['bands'],
     label: 'Poster: Pillars',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         attack: 0.04,
         release: 0.35,
         text: 1,
@@ -26,11 +26,12 @@ export default {
 
     draw(g, { bands }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a', 'b']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         const e = bars.update(bands, dt, p);
-        const txt = showText(p, s);
+        const txt = view.text;
         const size = txt ? W - 56 : Math.min(W - 56, H - 56);
         const px = (W - size) / 2;
         const py = txt ? 28 : (H - size) / 2;

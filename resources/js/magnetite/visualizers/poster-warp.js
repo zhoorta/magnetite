@@ -1,6 +1,8 @@
-import { W, H, begin, darkest, drawName, follow, level01, palette, posterText, showText } from './poster.js';
+import { toDb } from './meter.js';
+import { W, H, stateOf, Reference, begin, darkest, drawName, follow, palette, posterText } from './poster.js';
 
-const st = { lvl: 0, t: 0 };
+
+const make = () => ({ ref: new Reference(), st: { lvl: 0, t: 0 } });
 
 /**
  * Black stripes that part around an eye, like a printed optical poster: the opening follows the level, the red iris is cut by the stripes, and a
@@ -11,8 +13,7 @@ export default {
     needs: ['levels'],
     label: 'Poster: Warp',
     params: {
-        min: -50,
-        max: -6,
+        range: 30,
         response: 0.2,
         text: 1,
         theme: 1,
@@ -23,13 +24,16 @@ export default {
 
     draw(g, { levels }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { st, ref } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         st.t += dt;
-        st.lvl = follow(st.lvl, level01(Math.max(levels.l.rms, levels.r.rms), p.min, p.max), dt, p.response);
+        const loudest = toDb(Math.max(levels.l.rms, levels.r.rms));
+        ref.update(loudest, dt);
+        st.lvl = follow(st.lvl, ref.norm(loudest, p.range), dt, p.response);
 
-        const txt = showText(p, s);
+        const txt = view.text;
         const ax = 28;
         const ay = 24;
         const aw = W - 56;

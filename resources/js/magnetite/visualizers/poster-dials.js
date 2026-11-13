@@ -1,7 +1,8 @@
 import { toDb } from './meter.js';
-import { W, H, begin, drawColumns, drawName, follow, metaColumns, palette, posterText, showText } from './poster.js';
+import { W, H, stateOf, begin, drawColumns, drawName, follow, metaColumns, palette, posterText } from './poster.js';
 
-const st = { loud: 0, peak: 0, corr: 0, dr: 0 };
+
+const make = () => ({ st: { loud: 0, peak: 0, corr: 0, dr: 0 } });
 
 /**
  * Four circles on a checkerboard, each filled along a diagonal like a gauge: loudness (short-term LUFS), true peak, stereo correlation and
@@ -24,8 +25,9 @@ export default {
 
     draw(g, { lufs, stereo }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { st } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         const loud = Number.isFinite(lufs.s) ? lufs.s : Number.isFinite(lufs.m) ? lufs.m : -Infinity;
         const peakDb = toDb(Math.max(lufs.tpL ?? 0, lufs.tpR ?? 0));
@@ -36,7 +38,7 @@ export default {
         st.dr = follow(st.dr, typeof drValue === 'number' ? (drValue - 4) / 16 : 0, dt, 0.6);
 
         let top = 0;
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             drawColumns(g, metaColumns(say), 40, { font: colors.font, color: look.ink });
             drawName(g, say.name, 28, 152, { font: colors.font, maxW: W - 56, size: 84, color: look.ink });

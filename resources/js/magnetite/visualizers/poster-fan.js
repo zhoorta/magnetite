@@ -1,7 +1,8 @@
-import { W, H, Bars, begin, drawColumns, drawName, palette, posterText, showText } from './poster.js';
+import { W, H, stateOf, Bars, begin, drawColumns, drawName, palette, posterText } from './poster.js';
 
 const RAYS = 12;
-const bars = new Bars(RAYS);
+
+const make = () => ({ bars: new Bars(RAYS) });
 
 /**
  * Twelve rays fanning out from the top right corner in alternating colours, one per frequency range, as long as its energy. The shapes stay
@@ -12,8 +13,7 @@ export default {
     needs: ['bands'],
     label: 'Poster: Fan',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         attack: 0.05,
         release: 0.4,
         text: 1,
@@ -25,8 +25,9 @@ export default {
 
     draw(g, { bands }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         const e = bars.update(bands, dt, p);
         const ox = W * 0.86;
@@ -55,7 +56,7 @@ export default {
         g.arc(ox, oy, hub * 0.85, 0, 7);
         g.fill();
 
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             drawName(g, say.name, 28, H - 96, { font: colors.font, maxW: W * 0.7, size: 40, color: look.ink, weight: 800 });
             drawName(g, say.title, 28, H - 66, { font: colors.font, maxW: W * 0.7, size: 20, color: look.a });

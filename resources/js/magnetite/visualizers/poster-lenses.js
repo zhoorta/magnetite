@@ -1,8 +1,8 @@
-import { W, H, Bars, begin, drawColumns, drawName, palette, posterText, readableOn, showText } from './poster.js';
+import { W, H, stateOf, Bars, begin, drawColumns, drawName, palette, posterText, readableOn } from './poster.js';
 
 const GROUPS = 9;
-const bars = new Bars(GROUPS);
-const st = { t: 0 };
+
+const make = () => ({ bars: new Bars(GROUPS), st: { t: 0 } });
 
 /**
  * A dark panel with a red sun and fine lines across it, one per band group. Each line swells into a cream lens where its band has energy, and
@@ -13,8 +13,7 @@ export default {
     needs: ['bands'],
     label: 'Poster: Lenses',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         attack: 0.06,
         release: 0.45,
         text: 1,
@@ -28,12 +27,13 @@ export default {
 
     draw(g, { bands }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars, st } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'dark', 'a', 'c', 'ink']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         st.t += dt;
         const e = bars.update(bands, dt, p);
-        const txt = showText(p, s);
+        const txt = view.text;
 
         const px = 28;
         const py = 28;

@@ -1,7 +1,7 @@
 // Shared pieces of the poster meters (docs/posters.md): the poster's own 600 x 800 space, band groups with ballistics, the colours (the poster's own, or
 // the theme's), the track's text. Imports carry their file extension so Node can test this file.
 
-import { toDb, clamp01 } from './meter.js';
+import { clamp01 } from './meter.js';
 import { formatText, drText } from '../dense/info.js';
 
 export const W = 600;
@@ -10,15 +10,15 @@ export const H = 800;
 /** Below this scale (poster pixels per cell pixel) the text would be unreadable, so only the shapes are drawn. */
 const TEXT_MIN_SCALE = 0.3;
 
-/** `n` groups of the 31 third-octave bands (in dB), each the loudest band it covers, as 0..1 between `min` and `max` dB. */
-export function groupBands(bands, n, min, max, out = new Float32Array(n)) {
+/** `n` groups of the 31 third-octave bands (in dB), each the loudest band it covers, in dB. */
+export function groupDb(bands, n, out = new Float32Array(n)) {
     const count = bands.length;
     for (let i = 0; i < n; i++) {
         const from = Math.floor((i * count) / n);
         const to = Math.max(from + 1, Math.floor(((i + 1) * count) / n));
         let loudest = -Infinity;
         for (let k = from; k < to && k < count; k++) if (bands[k] > loudest) loudest = bands[k];
-        out[i] = clamp01((loudest - min) / (max - min));
+        out[i] = loudest;
     }
 
     return out;
@@ -29,22 +29,48 @@ export function follow(value, target, dt, seconds) {
     return value + (target - value) * (1 - Math.exp(-dt / (Math.max(seconds, 0.001) / 4.6)));
 }
 
-/** A linear RMS as 0..1 between `min` and `max` dBFS. */
-export function level01(rms, min, max) {
-    return clamp01((toDb(rms) - min) / (max - min));
+/**
+ * What "full" means for a track: a level in dB that follows the track's own peaks, so quiet and loud recordings move alike (a fixed scale
+ * leaves a loud master pinned at the top). It rises quickly with the signal (and at once to within 30 dB of a first loud sound) and falls
+ * slowly, 2 dB a second, when the music gets quieter. `norm` puts a level on 0..1 over `range` dB below it, with a curve (`gamma`) that keeps
+ * ordinary levels in the middle and lets only the peaks reach the top.
+ */
+export class Reference {
+    constructor(db = -90) {
+        this.db = db;
+    }
+
+    update(peakDb, dt, rise = 40, fall = 2) {
+        const floor = Math.max(this.db, peakDb - 30);
+        this.db = peakDb > floor ? Math.min(peakDb, floor + rise * dt) : Math.max(peakDb, floor - fall * dt);
+
+        return this.db;
+    }
+
+    norm(db, range, gamma = 1.5) {
+        return clamp01((db - (this.db - range)) / range) ** gamma;
+    }
 }
 
-/** Band groups that rise and fall like a meter: `v` holds the smoothed 0..1 values. */
+/** Band groups that rise and fall like a meter, scaled against the track's own peak: `v` holds the smoothed 0..1 values. */
 export class Bars {
     constructor(n) {
         this.n = n;
+        this.db = new Float32Array(n);
         this.raw = new Float32Array(n);
         this.v = new Float32Array(n);
+        this.ref = new Reference();
     }
 
-    update(bands, dt, { min, max, attack, release }) {
-        groupBands(bands, this.n, min, max, this.raw);
-        for (let i = 0; i < this.n; i++) this.v[i] = follow(this.v[i], this.raw[i], dt, this.raw[i] > this.v[i] ? attack : release);
+    update(bands, dt, { range, attack, release }) {
+        groupDb(bands, this.n, this.db);
+        let peak = -Infinity;
+        for (let i = 0; i < bands.length; i++) if (bands[i] > peak) peak = bands[i];
+        this.ref.update(peak, dt);
+        for (let i = 0; i < this.n; i++) {
+            this.raw[i] = this.ref.norm(this.db[i], range);
+            this.v[i] = follow(this.v[i], this.raw[i], dt, this.raw[i] > this.v[i] ? attack : release);
+        }
 
         return this.v;
     }
@@ -142,10 +168,24 @@ export function metaColumns(say) {
 }
 
 /**
- * Fills the cell with the paper colour and opens the poster's own 600 x 800 space, as large as fits and centred; returns the scale.
+ * One state object per canvas context and per poster (`make` is the poster's own factory, so it names the poster): the player draws every
+ * meter on one canvas, and a thumbnail is drawn on a canvas of its own, so neither ever disturbs the other.
+ */
+const states = new WeakMap();
+export function stateOf(owner, make) {
+    let byPoster = states.get(owner);
+    if (!byPoster) states.set(owner, (byPoster = new Map()));
+    if (!byPoster.has(make)) byPoster.set(make, make());
+
+    return byPoster.get(make);
+}
+
+/**
+ * Fills the cell with the paper colour and opens the poster's own 600 x 800 space, as large as fits and centred; returns `{ scale, text }`:
+ * `text` says whether the poster should print its own text (it is on and the cell is big enough to read it). `o.p` is the meter's settings.
  * The caller closes it with `g.restore()`.
  */
-export function begin(g, w, h, paper) {
+export function begin(g, w, h, paper, o) {
     const scale = Math.min(w / W, h / H);
     g.fillStyle = paper;
     g.fillRect(0, 0, w, h);
@@ -156,7 +196,7 @@ export function begin(g, w, h, paper) {
     g.rect(0, 0, W, H);
     g.clip();
 
-    return scale;
+    return { scale, text: showText(o.p, scale) };
 }
 
 /** Text is on when the poster asks for it and the cell is big enough to read it. */

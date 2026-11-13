@@ -8,10 +8,9 @@ const colour = (key, label) => ({ key, label, type: 'color' });
 const scale = [num('min', 'Scale from', -60, 0, 1, 'dB'), num('max', 'Scale to', -12, 12, 1, 'dB')];
 
 // The poster meters (docs/posters.md): the same settings for all, then each one's own colours. `theme` on makes every colour follow the theme.
-const posterBands = [
-    num('min', 'Quiet at', -96, -30, 1, 'dB'), num('max', 'Loud at', -40, 0, 1, 'dB'), num('attack', 'Rise', 0.005, 0.5, 0.005, 's'), num('release', 'Fall', 0.05, 1.5, 0.05, 's'),
-];
-const posterLevels = [num('min', 'Quiet at', -80, -20, 1, 'dB'), num('max', 'Loud at', -20, 0, 1, 'dB'), num('response', 'Response', 0.05, 1.5, 0.05, 's')];
+// The level shapes are scaled to the track's own peaks, so a quiet and a loud recording move alike: `range` is how many dB below the peak still show.
+const posterBands = [num('range', 'Range below the peak', 20, 80, 1, 'dB'), num('attack', 'Rise', 0.005, 0.5, 0.005, 's'), num('release', 'Fall', 0.05, 1.5, 0.05, 's')];
+const posterLevels = [num('range', 'Range below the peak', 15, 60, 1, 'dB'), num('response', 'Response', 0.05, 1.5, 0.05, 's')];
 const posterLook = [num('text', 'Text on the poster', 0, 1, 1), num('theme', 'Theme colours: 0 none, 1 paper and ink, 2 all', 0, 2, 1)];
 
 export const METER_SCHEMAS = {
@@ -51,7 +50,7 @@ export const METER_SCHEMAS = {
     'poster-warp': [...posterLevels, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Stripes'), colour('a', 'Iris')],
     'poster-lenses': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('dark', 'Sky'), colour('a', 'Sun'), colour('c', 'Lines and lenses'), colour('ink', 'Small text')],
     'poster-facets': [
-        num('min', 'Quiet at', -96, -30, 1, 'dB'), num('max', 'Loud at', -40, 0, 1, 'dB'), num('speed', 'Seconds per column', 0.04, 0.5, 0.01, 's'),
+        num('range', 'Range below the peak', 20, 80, 1, 'dB'), num('speed', 'Seconds per column', 0.04, 0.5, 0.01, 's'),
         ...posterLook, colour('bg', 'Background'), colour('paper', 'Quiet cells'), colour('a', 'Loud cells'), colour('ink', 'Text'),
     ],
     'poster-arches': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Accent')],
@@ -69,7 +68,7 @@ export const METER_SCHEMAS = {
     'poster-slides': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Domes'), colour('b', 'Bowls'), colour('c', 'Bands')],
     'poster-rings': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('dark', 'Sky'), colour('a', 'Planet'), colour('c', 'Stripes'), colour('ink', 'Small text')],
     'poster-halftone': [
-        num('min', 'Quiet at', -96, -30, 1, 'dB'), num('max', 'Loud at', -40, 0, 1, 'dB'), num('speed', 'Seconds per column', 0.04, 0.5, 0.01, 's'),
+        num('range', 'Range below the peak', 20, 80, 1, 'dB'), num('speed', 'Seconds per column', 0.04, 0.5, 0.01, 's'),
         ...posterLook, colour('paper', 'Paper'), colour('ink', 'Dots and dark blocks'), colour('a', 'Left block'), colour('b', 'Right block'),
     ],
     'poster-heads': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Text'), colour('a', 'Loudest head'), colour('b', 'Heads')],

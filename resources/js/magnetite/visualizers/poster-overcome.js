@@ -1,8 +1,9 @@
-import { W, H, Bars, begin, fitSize, follow, level01, palette, posterText, showText } from './poster.js';
+import { toDb } from './meter.js';
+import { W, H, stateOf, Reference, Bars, begin, fitSize, follow, palette, posterText } from './poster.js';
 
 const LINES = 31;
-const bars = new Bars(LINES);
-const st = { t: 0, l: 0, r: 0 };
+
+const make = () => ({ ref: new Reference(), bars: new Bars(LINES), st: { t: 0, l: 0, r: 0 } });
 
 /**
  * One hairline per third-octave band, as tall as its energy. Two circles (left channel in one colour, right in the other) ride the
@@ -13,8 +14,7 @@ export default {
     needs: ['bands', 'levels'],
     label: 'Poster: Overcome',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         attack: 0.05,
         release: 0.4,
         fall: 0.35,
@@ -28,13 +28,15 @@ export default {
 
     draw(g, { bands, levels }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars, st, ref } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a', 'b']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         st.t += dt;
         const e = bars.update(bands, dt, p);
-        st.l = Math.max(level01(levels.l.peak, -40, -3), st.l - p.fall * dt);
-        st.r = Math.max(level01(levels.r.peak, -40, -3), st.r - p.fall * dt);
+        ref.update(toDb(Math.max(levels.l.peak, levels.r.peak)), dt);
+        st.l = Math.max(ref.norm(toDb(levels.l.peak), p.range), st.l - p.fall * dt);
+        st.r = Math.max(ref.norm(toDb(levels.r.peak), p.range), st.r - p.fall * dt);
 
         const x0 = W * 0.1;
         const x1 = W * 0.89;
@@ -61,7 +63,7 @@ export default {
             g.fill();
         });
 
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             const size = fitSize(g, say.name, 600, colors.font, (x1 - x0) * 0.6, 40, 16);
             const width = g.measureText(say.name).width;

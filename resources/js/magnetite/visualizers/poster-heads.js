@@ -1,8 +1,6 @@
-import { W, H, Bars, begin, drawColumns, drawName, palette, posterText, showText } from './poster.js';
+import { W, H, stateOf, Bars, begin, drawColumns, drawName, palette, posterText } from './poster.js';
 
 const HEADS = 16;
-const bars = new Bars(HEADS);
-const st = { hot: 0 };
 
 /** One head in profile, facing right, in a 100 x 110 box with its corner at (x, y), scaled by `scale`. */
 function head(g, x, y, scale) {
@@ -26,6 +24,8 @@ function head(g, x, y, scale) {
     g.restore();
 }
 
+const make = () => ({ bars: new Bars(HEADS), st: { hot: 0 } });
+
 /**
  * Sixteen heads in a grid, one per frequency range; each swells a little with its energy, and the one in the accent colour is the loudest
  * range right now (it only changes when another is clearly louder, so it does not flicker). It has the look of a paperback cover.
@@ -35,8 +35,7 @@ export default {
     needs: ['bands'],
     label: 'Poster: Heads',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         attack: 0.08,
         release: 0.5,
         text: 1,
@@ -49,8 +48,9 @@ export default {
 
     draw(g, { bands }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars, st } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a', 'b']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
         const e = bars.update(bands, dt, p);
         let loudest = 0;
@@ -58,7 +58,7 @@ export default {
         if (e[loudest] > e[st.hot] + 0.08) st.hot = loudest;
 
         let top = 24;
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             drawName(g, say.name, 28, 70, { font: colors.font, maxW: W - 56, size: 56, color: look.ink, weight: 800 });
             drawName(g, say.title, 28, 112, { font: colors.font, maxW: W - 56, size: 30, color: look.a, weight: 600 });

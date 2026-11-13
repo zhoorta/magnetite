@@ -1,12 +1,12 @@
-import { W, H, Bars, begin, drawColumns, drawName, follow, level01, palette, posterText, showText } from './poster.js';
+import { toDb } from './meter.js';
+import { W, H, stateOf, Reference, Bars, begin, drawColumns, drawName, follow, palette, posterText } from './poster.js';
 
 const COLS = 16;
 const ROWS = 13;
-const bars = new Bars(ROWS);
-const history = Array.from({ length: COLS }, () => new Float32Array(ROWS));
-const st = { acc: 0, l: 0, r: 0 };
 const GRID = 34;
 const BLOCK_ROWS = 6;
+
+const make = () => ({ ref: new Reference(), bars: new Bars(ROWS), history: Array.from({ length: COLS }, () => new Float32Array(ROWS)), st: { acc: 0, l: 0, r: 0 } });
 
 /**
  * A halftone print: a grid of dots, light and dark blocks side by side, where each dot's size is a spectrogram cell (time to the left, low
@@ -17,8 +17,7 @@ export default {
     needs: ['bands', 'levels'],
     label: 'Poster: Halftone',
     params: {
-        min: -75,
-        max: -25,
+        range: 40,
         speed: 0.14,
         text: 1,
         theme: 1,
@@ -30,10 +29,11 @@ export default {
 
     draw(g, { bands, levels, playing }, { w, h, colors, params, dt, track }) {
         const p = { ...this.params, ...params };
+        const { bars, history, st, ref } = stateOf(g, make);
         const look = palette(p, colors, ['paper', 'ink', 'a', 'b']);
-        const s = begin(g, w, h, look.paper);
+        const view = begin(g, w, h, look.paper, { p });
 
-        const v = bars.update(bands, dt, { min: p.min, max: p.max, attack: 0.04, release: 0.2 });
+        const v = bars.update(bands, dt, { range: p.range, attack: 0.04, release: 0.2 });
         if (playing) {
             st.acc += dt;
             if (st.acc >= p.speed) {
@@ -42,11 +42,12 @@ export default {
                 history[COLS - 1].set(v);
             }
         }
-        st.l = follow(st.l, level01(levels.l.rms, -50, -6), dt, 0.25);
-        st.r = follow(st.r, level01(levels.r.rms, -50, -6), dt, 0.25);
+        ref.update(toDb(Math.max(levels.l.rms, levels.r.rms)), dt);
+        st.l = follow(st.l, ref.norm(toDb(levels.l.rms), 30), dt, 0.25);
+        st.r = follow(st.r, ref.norm(toDb(levels.r.rms), 30), dt, 0.25);
 
         let top = 0;
-        if (showText(p, s)) {
+        if (view.text) {
             const say = posterText(track);
             drawName(g, say.name, 28, 70, { font: colors.font, maxW: W - 56, size: 52, color: look.ink, weight: 800 });
             drawName(g, say.title, 28, 106, { font: colors.font, maxW: W - 56, size: 22, color: look.a, weight: 500 });
