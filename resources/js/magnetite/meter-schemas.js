@@ -67,4 +67,10 @@ export const METER_SCHEMAS = {
     ],
     'poster-columns': [...posterLevels, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Accent')],
     'poster-slides': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Ink'), colour('a', 'Domes'), colour('b', 'Bowls'), colour('c', 'Bands')],
+    'poster-rings': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('dark', 'Sky'), colour('a', 'Planet'), colour('c', 'Stripes'), colour('ink', 'Small text')],
+    'poster-halftone': [
+        num('min', 'Quiet at', -96, -30, 1, 'dB'), num('max', 'Loud at', -40, 0, 1, 'dB'), num('speed', 'Seconds per column', 0.04, 0.5, 0.01, 's'),
+        ...posterLook, colour('paper', 'Paper'), colour('ink', 'Dots and dark blocks'), colour('a', 'Left block'), colour('b', 'Right block'),
+    ],
+    'poster-heads': [...posterBands, ...posterLook, colour('paper', 'Paper'), colour('ink', 'Text'), colour('a', 'Loudest head'), colour('b', 'Heads')],
 };

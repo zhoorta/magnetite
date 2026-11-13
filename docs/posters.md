@@ -1,8 +1,8 @@
 # Poster meters
 
-Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Eleven are built (`resources/js/magnetite/visualizers/poster-*.js`); three from the mockup are not.
+Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. All fourteen designs of the mockup are built (`resources/js/magnetite/visualizers/poster-*.js`).
 
-Mockup with all fourteen, on a fake signal: `docs/mockups/poster-meters.html`.
+Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 
 ## The built ones
 
@@ -18,9 +18,10 @@ Mockup with all fourteen, on a fake signal: `docs/mockups/poster-meters.html`.
 | Facets | A triangle grid that scrolls like a spectrogram (only while playing) | bands |
 | Dials | Four circles filled along a diagonal like gauges: short-term LUFS, true peak, correlation, DR (DR only for your own, measured tracks) | lufs, stereo |
 | Columns | Two sets of columns, L and R; a circle cut by a diagonal stripe rides each with its level | levels |
+| Rings | A planet and nine curved stripes behind and in front of it; stripe thickness is band energy, the planet swells with the level | bands |
+| Halftone | A halftone dot grid that is a scrolling spectrogram (dot size is energy), light and dark blocks, and two flat blocks that grow with L and R | bands, levels |
+| Heads | Sixteen heads, one per range, each swelling with energy; the red one is the loudest range (with hysteresis, so it does not flicker) | bands |
 | Slides | Four rows of half-discs, low to high; a dome and a bowl slide towards each other with the energy and overlap | bands |
-
-Not built, drawn in the mockup: Rings (a planet with stripes, close to Lenses), Halftone (dots as a spectrogram, the heaviest to draw), Heads (the loudest band is the red head).
 
 ## Themes
 
@@ -37,6 +38,7 @@ The bundled themes **Night** (charcoal, teal and violet) and **Cream & orange** 
 
 ## Ideas not done
 
+- Halftone is the heaviest to draw (about 1,200 dots a frame, batched into two paths); not measured on a phone yet.
 - A landscape composition for the dock (text on the left, shapes on the right) instead of a small centred poster; today the dock shows shapes only, because the text is too small.
 - More bundled themes with poster palettes (red and black, teal and brown); names should not be brands.
 - Thumbnails in the meter menu.

@@ -217,6 +217,24 @@
                 "params": {
                     "theme": 2
                 }
+            },
+            {
+                "id": "poster-rings",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-halftone",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-heads",
+                "params": {
+                    "theme": 2
+                }
             }
         ]
     },
@@ -296,6 +314,24 @@
             },
             {
                 "id": "poster-slides",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-rings",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-halftone",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-heads",
                 "params": {
                     "theme": 2
                 }
