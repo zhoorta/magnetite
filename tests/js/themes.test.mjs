@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { METER_SCHEMAS } from '../../resources/js/magnetite/meter-schemas.js';
-import { contrast, exportTheme, parseTheme, slug, validateTheme } from '../../resources/js/magnetite/themes.js';
+import { FONTS, FONT_GROUPS, contrast, exportTheme, parseTheme, slug, validateTheme } from '../../resources/js/magnetite/themes.js';
 
 const builtIn = JSON.parse(readFileSync(new URL('../../resources/js/magnetite/themes.json', import.meta.url)));
 const good = { name: 'My theme', colors: { bg: '#000', surface: '#111111', text: '#EEE', muted: '#888888', accent: '#ff0000', accent2: '#00ff00' }, radius: '0.5rem', font: 'Georgia, serif' };
@@ -86,4 +86,53 @@ test('slug and contrast', () => {
     assert.equal(slug('  Late-night FM! '), 'late-night-fm');
     assert.ok(Math.abs(contrast('#000000', '#ffffff') - 21) < 1e-9);
     assert.ok(contrast('#777', '#888') < 1.5);
+});
+
+test('every font the studio offers passes the check, and every bundled one is declared in fonts.css with its file', () => {
+    const css = readFileSync(new URL('../../resources/css/fonts.css', import.meta.url), 'utf8');
+    assert.ok(FONTS.length >= 20);
+    assert.equal(new Set(FONTS.map((f) => f[1])).size, FONTS.length, 'no stack twice');
+
+    for (const [label, stack, group] of FONTS) {
+        assert.equal(validateTheme({ ...good, font: stack }).error, undefined, label);
+        if (group === 'System') continue; // what the device has
+
+        const first = stack.match(/^'([^']+)'/)?.[1];
+        assert.equal(first, label, `${label}: the stack starts with the bundled family`);
+        assert.ok(css.includes(`font-family: '${first}'`), `${label} is not declared in fonts.css`);
+    }
+
+    // every file fonts.css points to is there (a font package that moved a file would otherwise fail only in the build)
+    const files = [...css.matchAll(/url\('([^']+)'\)/g)].map((m) => m[1]);
+    assert.ok(files.length >= 15);
+    for (const f of files) assert.ok(existsSync(new URL(f, new URL('../../resources/css/', import.meta.url))), f);
+});
+
+test('the pickers get the fonts in groups, each font once', () => {
+    assert.deepEqual(FONT_GROUPS.map((g) => g[0]), ['Sans', 'Rounded and display', 'Serif', 'Mono', 'Pixel and terminal', 'System']);
+    assert.equal(FONT_GROUPS.reduce((n, g) => n + g[1].length, 0), FONTS.length);
+});
+
+test('the fonts the built-in themes use are offered, so the studio shows their name', () => {
+    const stacks = FONTS.map((f) => f[1]);
+    for (const t of builtIn) assert.ok(stacks.includes(t.font), `${t.id}: ${t.font}`);
+});
+
+test('a theme may name a font for the meters; left out or empty, it is not stored', () => {
+    const mono = "'JetBrains Mono', ui-monospace, monospace";
+    assert.equal(validateTheme({ ...good, meterFont: mono }).theme.meterFont, mono);
+    assert.equal('meterFont' in validateTheme(good).theme, false);
+    assert.equal('meterFont' in validateTheme({ ...good, meterFont: '' }).theme, false);
+    assert.equal('meterFont' in validateTheme({ ...good, meterFont: '   ' }).theme, false);
+});
+
+test('the meter font gets the same check as the font, and exports and imports back', () => {
+    assert.match(validateTheme({ ...good, meterFont: 'x; background: url(//evil)' }).error, /meterFont/);
+    assert.equal('meterFont' in validateTheme({ ...good, meterFont: 5 }).theme, false); // a non-string is ignored, not an error
+
+    const mono = "'IBM Plex Mono', monospace";
+    const { theme } = validateTheme({ ...good, meterFont: mono });
+    assert.equal(JSON.parse(exportTheme(theme)).meterFont, mono);
+    assert.equal(parseTheme(exportTheme(theme)).theme.meterFont, mono);
+    assert.equal('meterFont' in JSON.parse(exportTheme(validateTheme(good).theme)), false);
 });

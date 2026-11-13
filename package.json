@@ -1,6 +1,7 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "private": true,
+    "license": "AGPL-3.0-or-later",
     "type": "module",
     "scripts": {
         "build": "vite build",
@@ -8,6 +9,22 @@
         "test:js": "node --test tests/js/*.test.mjs"
     },
     "devDependencies": {
+        "@fontsource-variable/fraunces": "^5.3.0",
+        "@fontsource-variable/ibm-plex-sans": "^5.3.0",
+        "@fontsource-variable/inter": "^5.3.0",
+        "@fontsource-variable/jetbrains-mono": "^5.3.0",
+        "@fontsource-variable/lora": "^5.3.0",
+        "@fontsource-variable/outfit": "^5.3.0",
+        "@fontsource-variable/pixelify-sans": "^5.3.0",
+        "@fontsource-variable/quicksand": "^5.3.0",
+        "@fontsource-variable/space-grotesk": "^5.3.0",
+        "@fontsource/courier-prime": "^5.3.0",
+        "@fontsource/ibm-plex-mono": "^5.3.0",
+        "@fontsource/press-start-2p": "^5.3.0",
+        "@fontsource/righteous": "^5.3.0",
+        "@fontsource/share-tech-mono": "^5.3.0",
+        "@fontsource/silkscreen": "^5.3.0",
+        "@fontsource/vt323": "^5.3.0",
         "@tailwindcss/vite": "^4.0.0",
         "concurrently": "^10.0.3",
         "laravel-vite-plugin": "^3.1",

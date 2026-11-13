@@ -11,6 +11,7 @@ import storage from './storage';
 import { send } from './http';
 import { scenesStore } from './scenes';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
+import { loadFont } from './font-load';
 import dense from './dense/component';
 import { uiStore } from './dense/ui';
 import { dockInfo, trackPosition } from './dense/info';
@@ -57,6 +58,10 @@ function applyTheme(theme) {
     }
     root.style.setProperty('--radius', theme.radius);
     root.style.setProperty('--font-ui', theme.font);
+    // The meters' own font, when the theme has one; otherwise the var is absent and they follow --font-ui.
+    if (theme.meterFont) root.style.setProperty('--font-meter', theme.meterFont);
+    else root.style.removeProperty('--font-meter');
+    loadFont(theme.meterFont || theme.font);
     root.dataset.theme = theme.id;
 }
 
@@ -70,7 +75,8 @@ function readColors() {
         muted: get('muted'),
         accent: get('accent'),
         accent2: get('accent2'),
-        font: cs.getPropertyValue('--font-ui').trim() || 'sans-serif',
+        // What the meters write with: the theme's meter font, else its font.
+        font: cs.getPropertyValue('--font-meter').trim() || cs.getPropertyValue('--font-ui').trim() || 'sans-serif',
     };
 }
 
@@ -224,6 +230,8 @@ Alpine.store('player', {
         document.addEventListener('visibilitychange', () => document.hidden && this.savePlayback());
         document.addEventListener('submit', (e) => e.target.action?.endsWith('/logout') && this.forgetPlayback(true));
         this.restorePlayback();
+        // A page asked for a track to be ready before the player existed (see preload): load it now, paused.
+        if (this.current && !this.engine.el.src) this.engine.load(this.current.url, this.time);
 
         new ResizeObserver(() => this.resize()).observe(canvas);
         this.loop();
@@ -240,7 +248,7 @@ Alpine.store('player', {
         safeStorage((s) => {
             s.setItem(STORAGE_KEY, id);
             // Read by the inline script in the layout's <head> to avoid a flash on full reloads.
-            s.setItem(VARS_KEY, JSON.stringify({ colors: theme.colors, radius: theme.radius, font: theme.font }));
+            s.setItem(VARS_KEY, JSON.stringify({ colors: theme.colors, radius: theme.radius, font: theme.font, meterFont: theme.meterFont ?? null }));
         });
     },
 
@@ -461,7 +469,7 @@ Alpine.store('player', {
     savePlayback(time = this.engine?.el.currentTime ?? this.time) {
         const key = this.playbackKey;
         this.savedAt = performance.now();
-        if (!key || !this.current || this.signingOut) return;
+        if (!key || !this.current || this.current.demo || this.signingOut) return; // the demo music is not a queue to come back to
 
         // A very long queue keeps the part around the current track.
         const from = Math.max(0, Math.min(this.index - MAX_SAVED_QUEUE / 2, this.queue.length - MAX_SAVED_QUEUE));
@@ -476,6 +484,22 @@ Alpine.store('player', {
 
         const key = this.playbackKey;
         key && safeStorage((s) => s.removeItem(key));
+    },
+
+    /**
+     * Have `tracks[0]` ready to play, paused (the start page does this with its demo music). Nothing happens when something
+     * is already loaded or this person has a saved queue to come back to, so it never replaces what they were doing, and it
+     * never starts sound: the first Play does.
+     */
+    preload(tracks) {
+        const key = this.playbackKey;
+        if (this.current || !tracks?.length || (key && safeStorage((s) => s.getItem(key)))) return;
+
+        this.queue = [...tracks];
+        this.index = 0;
+        this.time = 0;
+        this.duration = tracks[0].duration ?? 0;
+        if (this.engine) this.engine.load(tracks[0].url);
     },
 
     /** Load the saved track, paused, at the saved position. Browsers do not allow sound to start by itself, so it waits for Play. */

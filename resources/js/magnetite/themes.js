@@ -4,12 +4,45 @@ import { METER_SCHEMAS } from './meter-schemas.js';
 
 export const COLOR_KEYS = ['bg', 'surface', 'text', 'muted', 'accent', 'accent2'];
 export const RADII = ['0rem', '0.15rem', '0.5rem', '0.75rem', '1rem'];
+/** The font a theme gets when it names none: the system's sans. */
+export const DEFAULT_FONT = 'ui-sans-serif, system-ui, sans-serif';
+
+/**
+ * The fonts the theme studio offers: [label, font-family stack, group]. Every group but "System" is bundled (declared in
+ * `resources/css/fonts.css`, downloaded only when used); "System" is whatever the device has. A theme file stores the
+ * stack, so a bundled name in an imported theme works too, and any other name falls back to the next in its stack.
+ */
 export const FONTS = [
-    ['Space Grotesk', "'Space Grotesk', ui-sans-serif, system-ui, sans-serif"],
-    ['System', 'ui-sans-serif, system-ui, sans-serif'],
-    ['Serif', "Georgia, 'Times New Roman', serif"],
-    ['Mono', "'Courier New', ui-monospace, monospace"],
+    ['Inter', "'Inter', ui-sans-serif, system-ui, sans-serif", 'Sans'],
+    ['Space Grotesk', "'Space Grotesk', ui-sans-serif, system-ui, sans-serif", 'Sans'],
+    ['IBM Plex Sans', "'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif", 'Sans'],
+    ['Outfit', "'Outfit', ui-sans-serif, system-ui, sans-serif", 'Sans'],
+    ['Quicksand', "'Quicksand', ui-rounded, ui-sans-serif, system-ui, sans-serif", 'Rounded and display'],
+    ['Righteous', "'Righteous', ui-sans-serif, system-ui, sans-serif", 'Rounded and display'],
+    ['Fraunces', "'Fraunces', Georgia, 'Times New Roman', serif", 'Serif'],
+    ['Lora', "'Lora', Georgia, 'Times New Roman', serif", 'Serif'],
+    ['JetBrains Mono', "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace", 'Mono'],
+    ['IBM Plex Mono', "'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace", 'Mono'],
+    ['Courier Prime', "'Courier Prime', 'Courier New', Courier, monospace", 'Mono'],
+    ['Share Tech Mono', "'Share Tech Mono', ui-monospace, 'SF Mono', Menlo, monospace", 'Mono'],
+    ['VT323', "'VT323', ui-monospace, 'SF Mono', Menlo, monospace", 'Pixel and terminal'],
+    ['Silkscreen', "'Silkscreen', ui-monospace, 'SF Mono', Menlo, monospace", 'Pixel and terminal'],
+    ['Press Start 2P', "'Press Start 2P', ui-monospace, 'SF Mono', Menlo, monospace", 'Pixel and terminal'],
+    ['Pixelify Sans', "'Pixelify Sans', ui-monospace, 'SF Mono', Menlo, monospace", 'Pixel and terminal'],
+    ['System sans', DEFAULT_FONT, 'System'],
+    ['Helvetica', "'Helvetica Neue', Helvetica, Arial, sans-serif", 'System'],
+    ['System serif', "Georgia, 'Times New Roman', serif", 'System'],
+    ['System mono', "ui-monospace, 'SF Mono', Menlo, monospace", 'System'],
+    ['Courier', "'Courier New', ui-monospace, monospace", 'System'],
 ];
+
+/** FONTS as [[group, [[label, stack], ...]], ...], in order, for the pickers. */
+export const FONT_GROUPS = FONTS.reduce((groups, [label, stack, group]) => {
+    const g = groups.find((x) => x[0] === group);
+    g ? g[1].push([label, stack]) : groups.push([group, [[label, stack]]]);
+
+    return groups;
+}, []);
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const RADIUS = /^\d{1,2}(\.\d{1,3})?(rem|px)$/;
@@ -72,13 +105,18 @@ export function validateTheme(input, taken = []) {
     }
     const radius = typeof input.radius === 'string' ? input.radius.trim() : '0.5rem';
     if (!RADIUS.test(radius)) return { error: 'The "radius" must be like 0.5rem or 8px.' };
-    const font = typeof input.font === 'string' ? input.font.trim() : FONTS[1][1];
+    const font = typeof input.font === 'string' ? input.font.trim() : DEFAULT_FONT;
     if (!FONT.test(font)) return { error: 'The "font" may only hold letters, digits, spaces, commas, quotes, hyphens and dots.' };
+
+    // The font of the text the meters draw (scales, labels, numbers); left out, they follow `font`.
+    const meterFont = typeof input.meterFont === 'string' ? input.meterFont.trim() : '';
+    if (meterFont && !FONT.test(meterFont)) return { error: 'The "meterFont" may only hold letters, digits, spaces, commas, quotes, hyphens and dots.' };
 
     let id = slug(input.id) || slug(name) || 'theme';
     for (let n = 2; taken.includes(id); n++) id = `${slug(input.id) || slug(name) || 'theme'}-${n}`.slice(0, 44);
 
     const theme = { id, name, colors, radius, font };
+    if (meterFont) theme.meterFont = meterFont;
     if (Array.isArray(input.visualizers)) theme.visualizers = cleanLooks(input.visualizers);
     else if (input.visualizer && typeof input.visualizer === 'object') theme.visualizer = cleanLooks([input.visualizer])[0] ?? undefined;
     if (theme.visualizer === undefined) delete theme.visualizer;
@@ -100,9 +138,9 @@ export function parseTheme(text, taken = []) {
 
 /** The JSON a theme is shared as: the same keys as themes.json, nothing local (no `custom` flag). */
 export function exportTheme(theme) {
-    const { id, name, colors, radius, font, visualizer, visualizers } = theme;
+    const { id, name, colors, radius, font, meterFont, visualizer, visualizers } = theme;
 
-    return JSON.stringify({ id, name, colors, radius, font, ...(visualizers ? { visualizers } : visualizer ? { visualizer } : {}) }, null, 4);
+    return JSON.stringify({ id, name, colors, radius, font, ...(meterFont ? { meterFont } : {}), ...(visualizers ? { visualizers } : visualizer ? { visualizer } : {}) }, null, 4);
 }
 
 /** WCAG contrast ratio of two hex colours (1 to 21). */

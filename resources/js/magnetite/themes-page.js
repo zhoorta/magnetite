@@ -1,7 +1,8 @@
 import { SILENCE } from './engine';
 import { METER_SCHEMAS } from './meter-schemas';
 import { visualizers } from './visualizers';
-import { COLOR_KEYS, FONTS, RADII, contrast, exportTheme, parseTheme, slug, validateTheme } from './themes';
+import { loadFont } from './font-load';
+import { COLOR_KEYS, FONTS, FONT_GROUPS, RADII, contrast, exportTheme, parseTheme, slug, validateTheme } from './themes';
 
 /**
  * The themes page: pick a theme to see it in the preview, use it, edit it (a copy, when it is a built-in one), download or copy
@@ -10,7 +11,7 @@ import { COLOR_KEYS, FONTS, RADII, contrast, exportTheme, parseTheme, slug, vali
  */
 export default () => ({
     selectedId: null,
-    draft: null, // the theme being edited: { id, name, colors, radius, font, custom }, or null
+    draft: null, // the theme being edited: { id, name, colors, radius, font, meterFont ('' = same as font), custom }, or null
     note: '',
     importOpen: false,
     importText: '',
@@ -18,6 +19,7 @@ export default () => ({
     colorKeys: COLOR_KEYS,
     radii: RADII,
     fonts: FONTS,
+    fontGroups: FONT_GROUPS,
     meterId: 'vu-wide', // the meter the preview draws and the editor lists the settings of
     raf: 0,
     previewError: null,
@@ -130,7 +132,9 @@ export default () => ({
 
         const g = canvas.getContext('2d');
         g.clearRect(0, 0, w, h);
-        viz.draw(g, real ?? SILENCE, { w, h, colors: this.shown.colors, params: this.paramsOf(this.meterId), dt, progress: 0, track: null });
+        const font = this.shown.meterFont || this.shown.font;
+        loadFont(font);
+        viz.draw(g, real ?? SILENCE, { w, h, colors: { ...this.shown.colors, font }, params: this.paramsOf(this.meterId), dt, progress: 0, track: null });
     },
 
     live: false,
@@ -178,7 +182,7 @@ export default () => ({
 
     startEdit() {
         const t = this.selected;
-        this.draft = { id: t.id, name: t.custom ? t.name : `${t.name} (copy)`, colors: { ...t.colors }, radius: t.radius, font: t.font, custom: !!t.custom, visualizers: JSON.parse(JSON.stringify(this.looksOf(t))) };
+        this.draft = { id: t.id, name: t.custom ? t.name : `${t.name} (copy)`, colors: { ...t.colors }, radius: t.radius, font: t.font, meterFont: t.meterFont ?? '', custom: !!t.custom, visualizers: JSON.parse(JSON.stringify(this.looksOf(t))) };
     },
 
     cancelEdit() {
