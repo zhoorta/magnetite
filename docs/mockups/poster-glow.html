@@ -1,0 +1,220 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Glow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Glow poster meter: one colour of line on black, with the bloom of a vector display. A large disc holds a grid
+   whose upright lines are bent by the waveform (more level, deeper bend); a block of dots is four bands, four steps each; a
+   striped ball turns with the level and leans with the balance; a small globe with a crosshair closes to a line when the
+   sound is mono; two rays over a ruler are the RMS and the peak level (the angle between them is the crest), and the tall
+   tick on the ruler is the time played. The title is the wide wordmark. Fake signal, no audio. Shapes are drawn here,
+   nothing is copied from the reference picture. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Glow</h1>
+  <p>Glowing line on black. The big disc is the waveform: its upright lines bend with it, deeper when louder. The dots are four bands in four steps. The striped ball turns with the level and leans with the balance; the globe under it closes to a line when the sound is mono. The two rays are RMS and peak, the tall tick on the ruler is the time played. Album and format sit between the top rules, the title is the wordmark.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>glow <input id="glow" type="range" min="0" max="1" step="0.01" value="0.7"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const PALS = [
+  ['Amber', { bg:'#0a0807', ink:'#ff7d1f' }],
+  ['Green phosphor', { bg:'#050906', ink:'#58f58a' }],
+  ['Ice', { bg:'#06080c', ink:'#86c8ff' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: 4 }, (_, i) => {
+    const v = 0.45 + 0.25 * Math.sin(t * (0.9 + i * 0.37) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.3) + i * 0.9)), 6);
+    return clamp(v * (1 - i * 0.12) * base);
+  });
+}
+
+const line = (g, ...p) => { g.beginPath(); g.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) g.lineTo(p[i], p[i + 1]); g.stroke(); };
+const ring = (g, x, y, r) => { g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke(); };
+
+// Everything that glows is drawn on `layer` (transparent), then laid on the black three times: a wide halo, a tight one, the sharp line.
+function shapes(g, st, o, tr) {
+  g.lineWidth = 2.6; g.lineJoin = 'round'; g.lineCap = 'round';
+
+  // ---- top double rule, bottom rule
+  line(g, 40, 70, 560, 70); line(g, 40, 92, 560, 92);
+  line(g, 40, 716, 560, 716);
+
+  // ---- the disc: level lines, and upright lines bent by the waveform
+  const cx = 252, cy = 322, R = 206;
+  g.save();
+  g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.clip();
+  g.lineWidth = 2.2;
+  for (let i = 1; i < 24; i++) { const y = cy - R + (i / 24) * 2 * R; line(g, cx - R, y, cx + R, y); }
+  const bend = (u) => (26 + 74 * st.level) * Math.sin(TAU * u * 0.9 + st.t * 0.7) + 9 * st.level * Math.sin(TAU * u * 2.6 - st.t * 2.3);
+  for (let k = -6; k <= 22; k++) {
+    const x0 = cx - R + (k / 16) * 2 * R;
+    g.beginPath();
+    for (let n = 0; n <= 48; n++) { const u = n / 48; const x = x0 + bend(u), y = cy - R + u * 2 * R; n ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+  }
+  g.restore();
+  g.lineWidth = 2.8; ring(g, cx, cy, R);
+
+  // ---- the dots: four bands (two small columns, two large), four steps each, lit from the bottom
+  g.lineWidth = 2.2;
+  const colX = [486, 503, 526, 552], rad = [4.2, 4.2, 8, 8];
+  for (let c = 0; c < 4; c++) for (let row = 0; row < 4; row++) {
+    const y = 122 + row * 21;
+    g.beginPath(); g.arc(colX[c], y, rad[c], 0, TAU); g.stroke();
+    const a = clamp(st.b[c] * 4 - (3 - row));
+    if (a > 0.02) { g.save(); g.globalAlpha = a; g.fill(); g.restore(); }
+  }
+
+  // ---- the striped ball: turns with the level, leans with the balance
+  const bx = 502, by = 548, br = 44;
+  g.lineWidth = 2.6; ring(g, bx, by, br);
+  g.save();
+  g.beginPath(); g.arc(bx, by, br, 0, TAU); g.clip();
+  for (let k = 0; k < 6; k++) {
+    const a = st.spin + (k * Math.PI) / 6;
+    g.beginPath(); g.ellipse(bx, by, Math.max(0.6, Math.abs(Math.cos(a)) * br), br, Math.PI / 4 + st.bal * 0.6, 0, TAU); g.stroke();
+  }
+  g.restore();
+
+  // ---- the globe with a crosshair: wide when the channels differ, a single line when the sound is mono
+  const gx = 502, gy = 648, gr = 32;
+  line(g, gx - gr - 22, gy, gx + gr + 22, gy); line(g, gx, gy - gr - 22, gx, gy + gr + 22);
+  g.lineWidth = 2.2; ring(g, gx, gy, gr);
+  const wide = 1 - clamp(st.corr);
+  [0.38, 0.72, 1].forEach((f) => { g.beginPath(); g.ellipse(gx, gy, Math.max(0.6, gr * f * (0.12 + 0.88 * wide)), gr, 0, 0, TAU); g.stroke(); });
+  [-0.5, 0.5].forEach((f) => { const half = Math.sqrt(1 - f * f) * gr; line(g, gx - half, gy + f * gr, gx + half, gy + f * gr); });
+
+  // ---- two rays over a ruler: RMS and peak; the tall tick is the time played
+  const vx = 42, vy = 700;
+  g.lineWidth = 2.6;
+  const aR = (8 + 40 * st.rms) * Math.PI / 180, aP = Math.max(aR + 0.1, (12 + 62 * st.peak) * Math.PI / 180);
+  line(g, vx, vy, vx + 226 * Math.cos(aR), vy - 226 * Math.sin(aR));
+  line(g, vx, vy, vx + 172 * Math.cos(aP), vy - 172 * Math.sin(aP));
+  g.beginPath(); g.arc(vx, vy, 44, -aR, 0); g.stroke();
+  g.beginPath(); g.arc(vx, vy, 92, -aP, -aR); g.stroke();
+  line(g, vx, vy, 404, vy);
+  g.lineWidth = 2.2;
+  for (let i = 1; i <= 10; i++) { const x = vx + (i / 10) * 362; line(g, x, vy, x, vy - (i % 5 ? 8 : 14)); }
+  const px = vx + o.played * 362;
+  g.lineWidth = 3; line(g, px, vy, px, vy - 34);
+
+  if (!o.text) return;
+
+  // ---- text: album and format between the top rules, artist and time bottom left, the title as the wordmark
+  g.textBaseline = 'alphabetic';
+  g.font = `700 11px ${SANS}`;
+  if ('letterSpacing' in g) g.letterSpacing = '2px';
+  g.textAlign = 'left';
+  g.fillText([tr.album, tr.year].filter(Boolean).join(' · ').toUpperCase(), 42, 85);
+  g.textAlign = 'right';
+  g.fillText([tr.codec, tr.bits, tr.dr].filter(Boolean).join(' · '), 558, 85);
+  g.textAlign = 'left';
+  g.font = `700 13px ${SANS}`;
+  g.fillText(tr.name.toUpperCase(), 42, 752);
+  g.fillText(`${mmss(o.played * tr.dur)} / ${mmss(tr.dur)}`, 42, 774);
+  if ('letterSpacing' in g) g.letterSpacing = '0px';
+
+  // the wordmark: heavy capitals drawn wide, with a line cut through them
+  const word = tr.title.toUpperCase(), stretch = 1.45, maxW = 340;
+  let size = 46; g.font = `900 ${size}px ${SANS}`;
+  while (g.measureText(word).width * stretch > maxW && size > 12) { size -= 1; g.font = `900 ${size}px ${SANS}`; }
+  const ww = g.measureText(word).width * stretch, base = 776;
+  g.save(); g.translate(560, base); g.scale(stretch, 1); g.textAlign = 'right'; g.fillText(word, 0, 0); g.restore();
+  g.save(); g.globalCompositeOperation = 'destination-out';
+  g.fillRect(560 - ww - 4, base - size * 0.3, ww + 8, Math.max(1.6, size * 0.07)); g.restore();
+}
+
+function draw(card, o) {
+  const { c, layer, pal, st } = card;
+  const dpr = devicePixelRatio || 1;
+  const cw = Math.round(c.clientWidth * dpr), ch = Math.round(c.clientHeight * dpr);
+  if (c.width !== cw || c.height !== ch) { c.width = layer.width = cw; c.height = layer.height = ch; }
+  const s = Math.min(cw / W, ch / H);
+  const tr = TRACKS[ti];
+
+  // state
+  const k = 1 - Math.exp(-o.dt / 0.09);
+  o.bands.forEach((v, i) => { st.b[i] += (v - st.b[i]) * k; });
+  const mean = o.bands.reduce((a, b) => a + b, 0) / 4;
+  st.level += (mean - st.level) * k;
+  st.rms += (mean - st.rms) * (1 - Math.exp(-o.dt / 0.3));
+  st.peak = Math.max(clamp(Math.max(...o.bands) * 1.1), st.peak - o.dt * 0.5);
+  st.t += o.dt;
+  st.spin += o.dt * (0.2 + 2.4 * st.level);
+  st.bal += (0.6 * Math.sin(st.t * 0.5) - st.bal) * k;
+  st.corr += (0.5 + 0.5 * Math.sin(st.t * 0.33) - st.corr) * k;
+
+  const lg = layer.getContext('2d');
+  lg.setTransform(1, 0, 0, 1, 0, 0); lg.clearRect(0, 0, cw, ch);
+  lg.setTransform(s, 0, 0, s, (cw - W * s) / 2, (ch - H * s) / 2);
+  lg.strokeStyle = pal.ink; lg.fillStyle = pal.ink;
+  shapes(lg, st, o, tr);
+
+  const g = c.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1; g.filter = 'none';
+  g.fillStyle = pal.bg; g.fillRect(0, 0, cw, ch);
+  g.globalCompositeOperation = 'lighter';
+  if (o.glow > 0.01) {
+    g.filter = `blur(${16 * s}px)`; g.globalAlpha = 0.75 * o.glow; g.drawImage(layer, 0, 0);
+    g.filter = `blur(${5 * s}px)`; g.globalAlpha = 0.6 * o.glow; g.drawImage(layer, 0, 0);
+    g.filter = 'none';
+  }
+  g.globalAlpha = 1; g.drawImage(layer, 0, 0);
+  g.globalCompositeOperation = 'source-over';
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, layer: document.createElement('canvas'), pal, st: { b: [0, 0, 0, 0], level: 0, rms: 0, peak: 0, t: 0, spin: 0, bal: 0, corr: 0.5 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const bands = fakeBands(clock, $('auto').checked ? 1.15 : +$('lvl').value * 2);
+  const o = { dt, bands, played: (clock % 40) / 40, text: $('text').checked, glow: +$('glow').value };
+  cards.forEach((card) => draw(card, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+requestAnimationFrame(frame);
+</script>
