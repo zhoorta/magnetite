@@ -201,14 +201,36 @@
                                 </button>
                             </x-slot:trigger>
                             <p class="px-3 pb-1 pt-0.5 text-xs text-muted" x-text="'Up to ' + $store.player.maxPanels + ' at once'"></p>
-                            <template x-for="v in $store.player.visualizerList" :key="v.id">
+{{-- The meters in the main list, then the poster meters and the scenes as submenus that open in place (a nested group, so it also works on a phone). --}}
+                            <template x-for="v in $store.player.visualizerList.filter((v) => ! v.group)" :key="v.id">
                                 <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)"
                                         :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
-                                        class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40"
+                                        class="flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40 pl-3"
                                         @click.stop="$store.player.toggleMeter(v.id)">
                                     <span class="w-4 text-accent" x-text="$store.player.hasMeter(v.id) ? '✓' : ''"></span>
                                     <span x-text="v.label"></span>
                                 </button>
+                            </template>
+                            <template x-for="g in $store.player.visualizerGroups" :key="g.name">
+                                <div x-data="{ open: g.name === 'Posters' || g.items.some((v) => $store.player.hasMeter(v.id)) }">
+                                    <button type="button" role="menuitem" tabindex="-1" aria-haspopup="true" :aria-expanded="open" @click.stop="open = ! open"
+                                            class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none">
+                                        <span class="w-4 text-muted" aria-hidden="true" x-text="open ? '▾' : '▸'"></span>
+                                        <span x-text="g.name"></span>
+                                        <span class="ml-auto text-xs text-accent tabular-nums" x-text="g.items.filter((v) => $store.player.hasMeter(v.id)).length || ''"></span>
+                                    </button>
+                                    <div x-show="open" x-cloak role="group" :aria-label="g.name" class="max-h-72 overflow-y-auto">
+                                        <template x-for="v in g.items" :key="v.id">
+                                            <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)"
+                                        :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
+                                        class="flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40 pl-7"
+                                        @click.stop="$store.player.toggleMeter(v.id)">
+                                    <span class="w-4 text-accent" x-text="$store.player.hasMeter(v.id) ? '✓' : ''"></span>
+                                    <span x-text="v.short"></span>
+                                </button>
+                                        </template>
+                                    </div>
+                                </div>
                             </template>
                         </x-menu>
                         <button type="button" class="rounded-theme border border-white/10 p-1.5 hover:text-accent"

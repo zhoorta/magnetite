@@ -1,6 +1,7 @@
 import { Livewire, Alpine } from '../../../vendor/livewire/livewire/dist/livewire.esm';
 import { AudioEngine, SILENCE } from './engine';
-import { visualizers } from './visualizers';
+import { visualizers, meterList } from './visualizers';
+import { meterGroups } from './visualizers/menu';
 import { layout, MAX_PANELS } from './layout';
 import builtinThemes from './themes.json';
 import { validateTheme } from './themes';
@@ -671,7 +672,12 @@ Alpine.store('player', {
     },
 
     visualizerObj: (id) => visualizers[id],
-    visualizerList: Object.values(visualizers).map(({ id, label }) => ({ id, label })),
+    visualizerList: meterList(),
+
+    /** The poster meters and the scenes, as groups for submenus in the meter menu. */
+    get visualizerGroups() {
+        return meterGroups(this.visualizerList);
+    },
 });
 
 // wire:navigate swaps the document's <html> attributes, which wipes the inline CSS variables and

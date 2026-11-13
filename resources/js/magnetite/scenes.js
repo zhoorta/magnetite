@@ -1,5 +1,5 @@
 import { send } from './http';
-import { visualizers } from './visualizers';
+import { visualizers, meterList } from './visualizers';
 import { createScene } from './visualizers/scene';
 
 const idOf = (scene) => `scene-${scene.id}`;
@@ -25,7 +25,7 @@ export function scenesStore(initial, player) {
 
     const sync = () => {
         const p = player();
-        if (p) p.visualizerList = Object.values(visualizers).map(({ id, label }) => ({ id, label }));
+        if (p) p.visualizerList = meterList();
     };
 
     return {
