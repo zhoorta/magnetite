@@ -34,6 +34,7 @@ Stay standalone with a thin library of our own (scanner, covers, ALAC conversion
 - [ ] Backups with restic, targets managed in an admin page (design only)
 - [ ] Name: trademark search (EUIPO, INPI) and a domain
 - [x] Free music on the start page (2026-11-13): six CC0 excerpts, credits in `CREDITS.md` and `resources/demo/tracks.json`, audio not in git (`bin/prepare-demo.sh`, copied by hand, see `docs/bare-metal.md`)
+- [x] Guide for users (2026-11-13): ten pages in `docs/guide`, shown at `/docs` (`App\Support\Guide`), linked from the top bar and an install section on the start page; no screenshots yet; the clone address is a placeholder until the repository is public
 - [x] Demo library for visitors (2026-11-13): `/library` without an account shows the demo tracks in the library page, read only, with their measurements (`docs/dense-library.md`, "Demo library"); the top bar has Sign in
 - [ ] Fullscreen polish, add to queue / play next, Media Session, demo GIF
 - [ ] Parked ideas: theme gallery with import by URL, cloud use as self-hosted with bring-your-own storage, Flux UI

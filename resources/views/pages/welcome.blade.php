@@ -12,6 +12,7 @@
             <div class="mt-8 flex flex-wrap gap-3 text-sm">
                 <a href="{{ route('library') }}" class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Open the library</a>
                 <a href="#themes" class="rounded-theme border border-white/10 px-5 py-2 hover:text-accent">Try a theme</a>
+                <a href="{{ route('guide') }}" wire:navigate class="rounded-theme border border-white/10 px-5 py-2 hover:text-accent">Documentation</a>
             </div>
         </div>
         <img src="/logo.svg" alt="Magnetite: two wide stereo meters above the name" width="512" height="512"
@@ -232,5 +233,18 @@
                 <p class="mt-2 break-all font-mono text-xs text-muted">SHA-256 {{ Cache::rememberForever('apk.sha256.'.filemtime($apk), fn () => hash_file('sha256', $apk)) }}</p>
             </div>
         @endif
+    </section>
+    <section id="install" class="scroll-mt-8 border-t border-white/10 py-10">
+        <h2 class="text-2xl font-semibold">Install and documentation</h2>
+        <p class="mt-2 max-w-prose text-muted">
+            Magnetite runs in one Docker container, or directly with PHP 8.3 and Node. With Docker, from a copy of the source:
+        </p>
+        <pre class="mt-4 overflow-x-auto rounded-theme border border-white/10 bg-surface p-4 text-xs leading-relaxed text-muted"><code>MAGNETITE_USER=yourname docker compose up -d --build
+docker compose logs app | grep Password</code></pre>
+        <p class="mt-4 max-w-prose text-sm text-muted">
+            The second line prints the password of the first user. Then open http://localhost:8080.
+            The <a href="{{ route('guide', 'install') }}" wire:navigate class="text-accent underline">install page</a> has the details,
+            and the <a href="{{ route('guide') }}" wire:navigate class="text-accent underline">documentation</a> covers the library, the meters, the file analysis, themes, sharing and the clients.
+        </p>
     </section>
 </x-layouts.app>

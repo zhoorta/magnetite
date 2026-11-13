@@ -27,6 +27,7 @@
                     <a href="{{ route('upload') }}" wire:navigate class="{{ $link('upload') }}">Upload</a>
                 @endauth
                 <a href="{{ route('themes') }}" wire:navigate class="{{ $link('themes') }}">Themes</a>
+                <a href="{{ route('guide') }}" wire:navigate class="{{ $link('guide') }}">Docs</a>
                 @auth
                 @endauth
                 @auth

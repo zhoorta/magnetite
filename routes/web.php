@@ -27,10 +27,18 @@ use App\Http\Controllers\StreamController;
 use App\Http\Controllers\UiSettingController;
 use App\Http\Controllers\UploadController;
 use App\Support\DemoTracks;
+use App\Support\Guide;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => view('pages.welcome', ['demo' => array_values(DemoTracks::available()), 'demoAlbums' => auth()->check() ? [] : DemoTracks::albumIds()]))->name('welcome');
 Route::get('/themes', fn () => view('pages.themes'))->name('themes');
+
+// The guide (docs/guide): only the pages listed in Guide::PAGES, never a path from the request.
+Route::get('/docs/{page?}', function (?string $page = null) {
+    $html = Guide::html($page) ?? abort(404);
+
+    return view('pages.guide', ['page' => $page, 'html' => $html, 'pages' => Guide::PAGES, 'neighbours' => Guide::neighbours($page)]);
+})->where('page', '[a-z-]+')->name('guide');
 Route::get('/demo/{id}', DemoController::class)->where('id', '[a-z0-9-]+')->middleware('throttle:120,1')->name('demo');
 
 Route::middleware('guest')->group(function () {
