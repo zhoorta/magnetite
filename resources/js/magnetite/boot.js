@@ -740,8 +740,8 @@ Alpine.store('player', {
         for (const { id, group } of this.visualizerList) {
             if (this.thumbsKey !== key) return; // the theme changed meanwhile: a newer run has taken over
             try {
-                // Posters are portrait pictures in a grid; the other meters are small landscape ones in front of their row (drawn at twice the size they show).
-                const picture = group === 'Posters' ? renderThumb(visualizers[id], this.colors, {}) : renderThumb(visualizers[id], this.colors, {}, 112, 64);
+                // Posters are portrait pictures in a grid; the other meters are landscape ones, two across (drawn at twice the size they show).
+                const picture = group === 'Posters' ? renderThumb(visualizers[id], this.colors, {}) : renderThumb(visualizers[id], this.colors, {}, 224, 128);
                 this.thumbs = { ...this.thumbs, [id]: picture };
             } catch {
                 // a meter that cannot draw on the demo signal just has no picture

@@ -205,20 +205,31 @@
                             <div class="max-h-[min(32rem,70vh)] overflow-y-auto">
                             <p class="px-3 pb-1 pt-0.5 text-xs text-muted" x-text="'Up to ' + $store.player.maxPanels + ' at once'"></p>
 {{-- The meters in the main list, then the poster meters as a submenu that opens in place (a nested group, so it also works on a phone). --}}
-                            <template x-for="v in $store.player.visualizerList.filter((v) => ! v.group)" :key="v.id">
-                                <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)"
-                                        :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
-                                        class="flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40 pl-3"
-                                        @click.stop="$store.player.toggleMeter(v.id)">
-                                    <span class="w-4 text-accent" x-text="$store.player.hasMeter(v.id) ? '✓' : ''"></span>
-                                    <span class="flex h-8 w-14 shrink-0 items-center justify-center overflow-hidden rounded-theme border bg-white/5" :class="$store.player.hasMeter(v.id) ? 'border-accent' : 'border-white/10'" aria-hidden="true">
-                                        <img :src="$store.player.thumbOf(v.id) || 'data:,'" alt="" class="h-full w-full object-cover" x-show="$store.player.thumbOf(v.id)">
-                                    </span>
-                                    <span x-text="v.label"></span>
+                            {{-- The meters and the posters are each a group that folds; both start open. Meters: two columns of landscape pictures (they are wide); posters: portrait, three across. --}}
+                            <div x-data="{ open: true }">
+                                <button type="button" role="menuitem" tabindex="-1" aria-haspopup="true" :aria-expanded="open" @click.stop="open = ! open"
+                                        class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none">
+                                    <span class="w-4 text-muted" aria-hidden="true" x-text="open ? '▾' : '▸'"></span>
+                                    <span>Meters</span>
+                                    <span class="ml-auto text-xs text-accent tabular-nums" x-text="$store.player.visualizerList.filter((v) => ! v.group && $store.player.hasMeter(v.id)).length || ''"></span>
                                 </button>
-                            </template>
+                                <div x-show="open" x-cloak class="grid grid-cols-2 gap-1.5 px-2 pb-2 pt-1" role="group" aria-label="Meters">
+                                    <template x-for="v in $store.player.visualizerList.filter((v) => ! v.group)" :key="v.id">
+                                        <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)" :title="v.label"
+                                                :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
+                                                class="flex min-w-0 flex-col gap-1 rounded-theme p-1 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40"
+                                                @click.stop="$store.player.toggleMeter(v.id)">
+                                            <span class="relative block aspect-[7/4] overflow-hidden rounded-theme border bg-white/5" :class="$store.player.hasMeter(v.id) ? 'border-accent' : 'border-white/10'">
+                                                <img :src="$store.player.thumbOf(v.id) || 'data:,'" alt="" class="h-full w-full object-cover" x-show="$store.player.thumbOf(v.id)">
+                                                <span x-show="$store.player.hasMeter(v.id)" class="absolute right-0.5 top-0.5 rounded-full bg-accent px-1 text-[10px] leading-4 text-black" aria-hidden="true">✓</span>
+                                            </span>
+                                            <span class="truncate text-xs" :class="$store.player.hasMeter(v.id) && 'text-accent'" x-text="v.label"></span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
                             <template x-for="g in $store.player.visualizerGroups" :key="g.name">
-                                <div x-data="{ open: g.name === 'Posters' || g.items.some((v) => $store.player.hasMeter(v.id)) }">
+                                <div x-data="{ open: true }">
                                     <button type="button" role="menuitem" tabindex="-1" aria-haspopup="true" :aria-expanded="open" @click.stop="open = ! open"
                                             class="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none">
                                         <span class="w-4 text-muted" aria-hidden="true" x-text="open ? '▾' : '▸'"></span>
