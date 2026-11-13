@@ -211,6 +211,9 @@
                                         class="flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40 pl-3"
                                         @click.stop="$store.player.toggleMeter(v.id)">
                                     <span class="w-4 text-accent" x-text="$store.player.hasMeter(v.id) ? '✓' : ''"></span>
+                                    <span class="flex h-8 w-14 shrink-0 items-center justify-center overflow-hidden rounded-theme border bg-white/5" :class="$store.player.hasMeter(v.id) ? 'border-accent' : 'border-white/10'" aria-hidden="true">
+                                        <img :src="$store.player.thumbOf(v.id) || 'data:,'" alt="" class="h-full w-full object-cover" x-show="$store.player.thumbOf(v.id)">
+                                    </span>
                                     <span x-text="v.label"></span>
                                 </button>
                             </template>

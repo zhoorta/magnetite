@@ -727,7 +727,7 @@ Alpine.store('player', {
     visualizerObj: (id) => visualizers[id],
     visualizerList: meterList(),
 
-    /** Pictures of the poster meters for the meter menu, drawn with the current theme's colours: id -> data URL (filled in one by one). */
+    /** Pictures of the meters for the meter menu, drawn with the current theme's colours: id -> data URL (filled in one by one). */
     thumbs: {},
     thumbsKey: '',
 
@@ -738,14 +738,19 @@ Alpine.store('player', {
         this.thumbsKey = key;
         this.thumbs = {};
         for (const { id, group } of this.visualizerList) {
-            if (group !== 'Posters') continue;
             if (this.thumbsKey !== key) return; // the theme changed meanwhile: a newer run has taken over
-            this.thumbs = { ...this.thumbs, [id]: renderThumb(visualizers[id], this.colors, {}) };
+            try {
+                // Posters are portrait pictures in a grid; the other meters are small landscape ones in front of their row (drawn at twice the size they show).
+                const picture = group === 'Posters' ? renderThumb(visualizers[id], this.colors, {}) : renderThumb(visualizers[id], this.colors, {}, 112, 64);
+                this.thumbs = { ...this.thumbs, [id]: picture };
+            } catch {
+                // a meter that cannot draw on the demo signal just has no picture
+            }
             await new Promise((done) => setTimeout(done)); // one a turn, so the menu does not wait for all of them
         }
     },
 
-    /** The picture for a meter in the menu: a poster's drawn thumbnail; none for the others. */
+    /** The picture for a meter in the menu: the drawn thumbnail; none if it could not be drawn. */
     thumbOf(id) {
         return this.thumbs[id] ?? '';
     },

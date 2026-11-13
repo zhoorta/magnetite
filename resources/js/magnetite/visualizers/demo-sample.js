@@ -27,5 +27,17 @@ export function stepDemo(sample, t) {
     sample.levels.r.peak = sample.levels.r.rms * 3;
     sample.stereo.corr = 0.3 + 0.5 * Math.sin(t * 0.6);
 
+    // The raw spectrum (dB per bin, a falling slope with a few moving peaks) and a two-tone wave, for the spectrogram and the scope.
+    for (let i = 0; i < sample.spec.length; i++) {
+        const x = i / sample.spec.length;
+        const peaks = 14 * Math.max(0, Math.sin(t * 1.4 + x * 38)) * (1 - x);
+        sample.spec[i] = -28 - 62 * Math.sqrt(x) + peaks + 5 * Math.sin(t * 3 + i * 0.7);
+    }
+    for (let i = 0; i < sample.freq.length; i++) sample.freq[i] = Math.max(0, Math.min(255, 255 * (1 - i / sample.freq.length) ** 1.5 * (0.6 + 0.3 * Math.sin(t * 2 + i * 0.2))));
+    for (let i = 0; i < sample.wave.length; i++) {
+        const k = i / sample.wave.length;
+        sample.wave[i] = 128 + 70 * Math.sin(2 * Math.PI * (3 * k + t * 2)) + 30 * Math.sin(2 * Math.PI * (7 * k + t * 3));
+    }
+
     return sample;
 }

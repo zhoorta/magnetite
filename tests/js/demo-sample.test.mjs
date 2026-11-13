@@ -13,3 +13,14 @@ test('the demo sample has the engine\'s shape and moves with time', () => {
     assert.ok(s.bands[0] > s.bands[30] - 20, 'the low end is not far below the top');
     assert.ok(s.stereo.corr >= -1 && s.stereo.corr <= 1);
 });
+
+test('the spectrum and the wave move too, inside their ranges', () => {
+    const s = demoSample();
+    stepDemo(s, 0);
+    const spec = Array.from(s.spec);
+    stepDemo(s, 2.3);
+    assert.notDeepEqual(Array.from(s.spec), spec);
+    assert.ok(s.spec.every((db) => db > -120 && db < 0));
+    assert.ok(s.wave.some((v) => v > 160) && s.wave.some((v) => v < 96), 'the wave swings');
+    assert.ok(s.wave.every((v) => v >= 0 && v <= 255));
+});

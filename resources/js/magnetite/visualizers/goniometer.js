@@ -1,7 +1,9 @@
 // Stereo vectorscope (mid up, side across) with a phase-correlation strip. The trace keeps a short
 // phosphor-like afterglow on a canvas of its own, because the player canvas is cleared every frame.
 
-const state = { c: null, g: null, size: 0 };
+import { stateOf } from './poster.js';
+
+const makeState = () => ({ c: null, g: null, size: 0 }); // per canvas, see spectrogram.js
 const CORR_TICKS = [-1, 0, 1];
 
 export default {
@@ -14,6 +16,7 @@ export default {
     },
 
     draw(g, { stereo }, { w, h, colors, params, dt }) {
+        const state = stateOf(g, makeState);
         const p = { ...this.params, ...params };
         const margin = Math.min(w, h) * 0.06;
         const font = Math.max(10, Math.min(h * 0.045, w * 0.03));

@@ -2,7 +2,10 @@
 // 20 Hz up, level is colour. The picture lives on a canvas of its own and is shifted left each frame, so
 // only the new columns are computed. It only scrolls while the audio is playing.
 
-const state = { c: null, g: null, pw: 0, ph: 0, acc: 0, lut: null, lutKey: '' };
+import { stateOf } from './poster.js';
+
+// One picture per canvas: the menu thumbnails draw this meter on a canvas of their own and must not touch the live one.
+const makeState = () => ({ c: null, g: null, pw: 0, ph: 0, acc: 0, lut: null, lutKey: '' });
 const TICKS = [[100, '100'], [1000, '1k'], [10000, '10k']];
 const FMIN = 20;
 const FMAX = 20000;
@@ -20,7 +23,7 @@ function rgb(color) {
 }
 
 /** 256 colours from the theme: background, then accent, accent 2 and text for the loudest. */
-function palette(colors) {
+function palette(colors, state) {
     const key = [colors.bg, colors.accent, colors.accent2, colors.text].join('|');
     if (state.lutKey === key) return state.lut;
 
@@ -55,6 +58,7 @@ export default {
     },
 
     draw(g, { spec, playing, sampleRate }, { w, h, colors, params, dt }) {
+        const state = stateOf(g, makeState);
         const p = { ...this.params, ...params };
         const font = Math.max(9, Math.min(h * 0.04, w * 0.016));
         const left = Math.round(font * 3);
@@ -62,7 +66,7 @@ export default {
         const ph = h;
         if (pw < 20 || ph < 20) return;
 
-        const lut = palette(colors);
+        const lut = palette(colors, state);
         // A fresh picture when there is none (first draw, new theme colours) or the cell was resized.
         if (!state.c || state.pw !== pw || state.ph !== ph) {
             state.c = document.createElement('canvas');

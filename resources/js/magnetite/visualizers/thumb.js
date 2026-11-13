@@ -13,10 +13,12 @@ export function renderThumb(visualizer, colors, params = {}, width = 96, height 
     canvas.height = height;
     const g = canvas.getContext('2d');
     const sample = demoSample();
+    // A meter that scrolls over `span` seconds (the spectrogram) gets frames long enough to fill its picture.
+    const dt = Math.max(1 / FPS, ((visualizer.params?.span ?? 0) * 1.05) / FRAMES);
     for (let f = 0; f < FRAMES; f++) {
         stepDemo(sample, f / FPS);
         g.clearRect(0, 0, width, height);
-        visualizer.draw(g, sample, { w: width, h: height, colors, params: { ...params, text: 0 }, dt: 1 / FPS, track: null });
+        visualizer.draw(g, sample, { w: width, h: height, colors, params: { ...params, text: 0 }, dt, track: null });
     }
 
     return canvas.toDataURL('image/png');
