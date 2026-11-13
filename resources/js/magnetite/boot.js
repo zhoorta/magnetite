@@ -2,6 +2,7 @@ import { Livewire, Alpine } from '../../../vendor/livewire/livewire/dist/livewir
 import { AudioEngine, SILENCE } from './engine';
 import { visualizers, meterList } from './visualizers';
 import { meterGroups } from './visualizers/menu';
+import { renderThumb } from './visualizers/thumb';
 import { layout, MAX_PANELS } from './layout';
 import builtinThemes from './themes.json';
 import { validateTheme } from './themes';
@@ -673,6 +674,30 @@ Alpine.store('player', {
 
     visualizerObj: (id) => visualizers[id],
     visualizerList: meterList(),
+
+    /** Pictures of the poster meters for the meter menu, drawn with the current theme's colours: id -> data URL (filled in one by one). */
+    thumbs: {},
+    thumbsKey: '',
+
+    async loadThumbs() {
+        const key = this.themeId + JSON.stringify(this.colors);
+        if (this.thumbsKey === key) return;
+
+        this.thumbsKey = key;
+        this.thumbs = {};
+        const styles = this.styles(themes.find((t) => t.id === this.themeId));
+        for (const { id, group } of this.visualizerList) {
+            if (group !== 'Posters') continue;
+            if (this.thumbsKey !== key) return; // the theme changed meanwhile: a newer run has taken over
+            this.thumbs = { ...this.thumbs, [id]: renderThumb(visualizers[id], this.colors, styles.find((v) => v.id === id)?.params ?? {}) };
+            await new Promise((done) => setTimeout(done)); // one a turn, so the menu does not wait for all of them
+        }
+    },
+
+    /** The picture for a meter in the menu: a poster's drawn thumbnail, or a scene's own picture; none for the others. */
+    thumbOf(id) {
+        return this.thumbs[id] ?? Alpine.store('scenes').list.find((s) => `scene-${s.id}` === id)?.url ?? '';
+    },
 
     /** The poster meters and the scenes, as groups for submenus in the meter menu. */
     get visualizerGroups() {

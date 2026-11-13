@@ -188,9 +188,9 @@
                     </div>
                     {{-- The meters and full screen are always in the dock (on the library page too, and on phones). The shortcuts open with the ? key. --}}
                     <div class="ml-auto flex shrink-0 items-center gap-2">
-                        <x-menu up label="Meters" width="w-56">
+                        <x-menu up label="Meters" width="w-64">
                             <x-slot:trigger>
-                                <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu"
+                                <button type="button" x-ref="trigger" @click="toggle(); $store.player.loadThumbs()" :aria-expanded="open" aria-haspopup="menu"
                                         title="Choose the meters (m changes the active one, + and - add and remove)" aria-label="Meters"
                                         class="flex items-center gap-1.5 rounded-theme border border-white/10 px-2 py-1 text-xs hover:text-accent"
                                         :class="$store.player.panels.length && 'text-accent'">
@@ -221,15 +221,19 @@
                                         <span x-text="g.name"></span>
                                         <span class="ml-auto text-xs text-accent tabular-nums" x-text="g.items.filter((v) => $store.player.hasMeter(v.id)).length || ''"></span>
                                     </button>
-                                    <div x-show="open" x-cloak role="group" :aria-label="g.name">
+                                    {{-- A grid of pictures with the name under each: the posters' are drawn on a demo signal in the theme's colours, a scene's is its own picture. --}}
+                                    <div x-show="open" x-cloak role="group" :aria-label="g.name" class="grid grid-cols-3 gap-1.5 px-2 pb-2 pt-1">
                                         <template x-for="v in g.items" :key="v.id">
-                                            <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)"
-                                        :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
-                                        class="flex w-full items-center gap-2 py-1.5 pr-3 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40 pl-7"
-                                        @click.stop="$store.player.toggleMeter(v.id)">
-                                    <span class="w-4 text-accent" x-text="$store.player.hasMeter(v.id) ? '✓' : ''"></span>
-                                    <span x-text="v.short"></span>
-                                </button>
+                                            <button type="button" role="menuitemcheckbox" tabindex="-1" :aria-checked="$store.player.hasMeter(v.id)" :title="v.short"
+                                                    :disabled="! $store.player.hasMeter(v.id) && $store.player.meterLimitReached"
+                                                    class="flex min-w-0 flex-col gap-1 rounded-theme p-1 text-left hover:bg-white/5 focus-visible:bg-white/5 focus-visible:outline-none disabled:opacity-40"
+                                                    @click.stop="$store.player.toggleMeter(v.id)">
+                                                <span class="relative block aspect-[3/4] overflow-hidden rounded-theme border bg-white/5" :class="$store.player.hasMeter(v.id) ? 'border-accent' : 'border-white/10'">
+                                                    <img :src="$store.player.thumbOf(v.id) || 'data:,'" alt="" class="h-full w-full object-cover" x-show="$store.player.thumbOf(v.id)">
+                                                    <span x-show="$store.player.hasMeter(v.id)" class="absolute right-0.5 top-0.5 rounded-full bg-accent px-1 text-[10px] leading-4 text-black" aria-hidden="true">✓</span>
+                                                </span>
+                                                <span class="truncate text-xs" :class="$store.player.hasMeter(v.id) && 'text-accent'" x-text="v.short"></span>
+                                            </button>
                                         </template>
                                     </div>
                                 </div>
