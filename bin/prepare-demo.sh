@@ -17,7 +17,7 @@ jq -c '.tracks[]' "$manifest" | while read -r t; do
     src="$work/$id.${url##*.}"
     echo "== $id"
     curl -fsSL --retry 3 -A "Mozilla/5.0" -o "$src" "$url"
-    ffmpeg -loglevel error -y -ss "$start" -t "$length" -i "$src" \
+    ffmpeg -nostdin -loglevel error -y -ss "$start" -t "$length" -i "$src" \
         -af "afade=t=in:d=0.5,afade=t=out:st=$(echo "$length - 2" | bc):d=2" \
         -map_metadata -1 -sample_fmt s16 -c:a flac -compression_level 8 "$out/$file"
     rm -f "$src"
