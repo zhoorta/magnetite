@@ -6,8 +6,8 @@ import { COLOR_KEYS, FONTS, FONT_GROUPS, RADII, exportTheme, parseTheme, slug, v
 /**
  * The themes page: a click on a theme applies it to the whole page; "Edit a copy" (a built-in is copied first) opens the editor with
  * a preview of the draft; download or copy a theme's JSON, delete one of yours, or import one. Custom themes live in this browser
- * (`magnetite.themes`); nothing goes to the server. The preview paints with inline colours, so the draft never touches the app's
- * own theme until it is saved.
+ * (`magnetite.themes`); nothing goes to the server. While a copy is edited the whole page shows the draft (`previewTheme`, nothing saved); Cancel, Esc or leaving the page
+ * puts the theme in use back, and Save keeps the draft.
  */
 /** The meter the preview draws: the wide one, the default of every account. */
 const METER = 'vu-wide';
@@ -40,9 +40,18 @@ export default () => ({
             }
         };
         this.raf = requestAnimationFrame(frame);
+        // The whole page follows the draft while it is edited (the values pass validateTheme first: they end up in CSS variables).
+        this.$watch('draft', (d) => d && this.applyDraft(d));
+    },
+
+    /** Put the draft on the page; a half-typed value that does not validate is skipped until it does. */
+    applyDraft(d) {
+        const { theme } = validateTheme({ ...d, id: d.id, name: d.name || 'Preview' }, []);
+        if (theme) this.player.previewTheme(theme);
     },
 
     destroy() {
+        if (this.draft) this.player.setTheme(this.player.themeId); // leaving with an unsaved draft: back to the theme in use
         cancelAnimationFrame(this.raf);
     },
 
@@ -98,6 +107,7 @@ export default () => ({
 
     cancelEdit() {
         this.draft = null;
+        this.player.setTheme(this.player.themeId);
     },
 
     /** The hex text field of a colour: only a complete colour changes it. */

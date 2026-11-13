@@ -1,5 +1,5 @@
 <x-layouts.app title="Themes · Magnetite">
-    <div x-data="themeStudio" class="space-y-5">
+    <div x-data="themeStudio" class="space-y-5" @keydown.escape.window="draft && cancelEdit()">
         <header>
             <h1 class="mb-1 text-2xl font-semibold">Themes</h1>
             <p class="max-w-3xl text-sm text-muted">
@@ -52,7 +52,7 @@
                 </div>
         </div>
 
-        {{-- Editing a copy: the preview of the draft on the left (the page itself keeps the theme in use), the settings on the right. --}}
+        {{-- Editing a copy: the preview of the draft on the left (the page itself follows the draft too; Cancel or Esc puts the theme in use back), the settings on the right. --}}
         <div x-show="draft" x-cloak class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
             <section aria-label="Preview" class="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
                     <div class="overflow-hidden border p-4" :style="{ background: shown.colors.bg, color: shown.colors.text, fontFamily: shown.font, borderRadius: shown.radius, borderColor: shown.colors.muted + '55' }" aria-label="Preview of the theme">

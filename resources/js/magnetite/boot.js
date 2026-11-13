@@ -255,6 +255,15 @@ Alpine.store('player', {
         });
     },
 
+    /**
+     * Show a theme on the whole page without choosing it: the theme studio does this while a copy is being edited. Nothing is
+     * saved, so a reload (or Cancel, which calls setTheme) brings back the theme in use. The theme must have passed validateTheme.
+     */
+    previewTheme(theme) {
+        applyTheme(theme);
+        this.colors = readColors();
+    },
+
     /** Add a checked theme of this browser (see themes.js), and keep it. */
     addTheme(theme) {
         this.themes.push({ ...theme, custom: true });
