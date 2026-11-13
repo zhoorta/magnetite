@@ -117,7 +117,7 @@
                             'Shift + Z' => 'Shuffle: off, tracks, albums (the albums at random, each in its own order)',
                             'Shift + R' => 'Repeat: off, all (the album or playlist you started), one',
                             ', .' => 'Back or forward 10 s',
-                            'Shift + I' => 'How much the lists and the player say about the files: all, DR only, nothing',
+                            'Shift + I' => 'Detail shown about files in the lists and the player: all, DR only, none',
                             'm / M' => 'Next / previous meter on the active panel (none shown: bring one back)',
                             '+ / -' => 'Add / remove a meter panel (0 to 4)',
                             '[ / ]' => 'Choose the panel m changes (Tab in full screen)',
@@ -164,8 +164,8 @@
                 </div>
             </div>
 
-            {{-- Full screen: the names row, the seek bar and the buttons form the mini player over the bottom of the picture; the names row stays, the seek bar and buttons fade when idle. --}}
-            <div :class="$store.player.expanded ? 'absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-bg/90 via-bg/70 to-transparent pt-8' : 'contents'">
+            {{-- Full screen: the names row, the seek bar and the buttons are one mini player over the bottom of the picture, and all of it fades when idle. --}}
+            <div :class="$store.player.expanded ? 'absolute inset-x-0 bottom-0 z-10 bg-linear-to-t from-bg/90 via-bg/70 to-transparent pt-8 transition-opacity duration-300 ' + ($store.player.chromeHidden ? 'pointer-events-none opacity-0' : '') : 'contents'">
             <div data-chrome :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pb-1 pt-3 ' : 'order-1 py-3 ' + ($store.player.panels.length ? 'md:col-start-1 md:row-start-1' : 'md:col-span-2 md:row-start-1')"
                  class="flex flex-col gap-2">
                 <div class="flex min-h-10 items-center justify-between text-sm">
@@ -276,7 +276,7 @@
 
             </div>
 
-            <div data-chrome :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pb-3 transition-opacity duration-300 ' + ($store.player.chromeHidden ? 'pointer-events-none opacity-0' : '') : 'order-3 pb-3 md:col-span-2 md:row-start-2'" class="flex flex-col gap-3">
+            <div data-chrome :class="$store.player.expanded ? 'mx-auto w-full max-w-3xl px-4 pb-3' : 'order-3 pb-3 md:col-span-2 md:row-start-2'" class="flex flex-col gap-3">
                 <div class="flex items-center gap-3 text-xs text-muted">
                     <span x-text="$store.player.fmt($store.player.time)" class="w-10 text-right tabular-nums"></span>
                     <input type="range" min="0" max="1000" class="seek flex-1" aria-label="Position in the track"
