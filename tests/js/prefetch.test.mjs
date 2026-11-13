@@ -38,3 +38,7 @@ test('derives the prefetch address from the stream address', () => {
     assert.equal(prefetchUrl({ url: 'http://x.test/stream/42' }), 'http://x.test/prefetch/42');
     assert.equal(prefetchUrl({ url: '/stream/7' }), '/prefetch/7');
 });
+
+test('does not prefetch a track that is not in the library (the demo tracks)', () => {
+    assert.equal(shouldPrefetch({ ...base, next: { id: 'achilles' }, time: 290 }), false);
+});

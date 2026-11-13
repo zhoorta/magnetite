@@ -7,6 +7,7 @@ use App\Http\Controllers\AnalysisController;
 use App\Http\Controllers\CopyController;
 use App\Http\Controllers\CoverController;
 use App\Http\Controllers\CoverSearchController;
+use App\Http\Controllers\DemoController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\IdentifyController;
@@ -26,10 +27,12 @@ use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StreamController;
 use App\Http\Controllers\UiSettingController;
 use App\Http\Controllers\UploadController;
+use App\Support\DemoTracks;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn () => view('pages.welcome'))->name('welcome');
+Route::get('/', fn () => view('pages.welcome', ['demo' => array_values(DemoTracks::available())]))->name('welcome');
 Route::get('/themes', fn () => view('pages.themes'))->name('themes');
+Route::get('/demo/{id}', DemoController::class)->where('id', '[a-z0-9-]+')->middleware('throttle:120,1')->name('demo');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');

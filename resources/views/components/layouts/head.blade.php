@@ -1,8 +1,20 @@
-@props(['title' => 'Magnetite'])
+@props(['title' => 'Magnetite', 'description' => null, 'image' => null])
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{{ $title }}</title>
+@if ($description)
+    <meta name="description" content="{{ $description }}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Magnetite">
+    <meta property="og:title" content="{{ $title }}">
+    <meta property="og:description" content="{{ $description }}">
+    <meta property="og:url" content="{{ url()->current() }}">
+    @if ($image)
+        <meta property="og:image" content="{{ url($image) }}">
+        <meta name="twitter:card" content="summary_large_image">
+    @endif
+@endif
 {{-- Apply the saved theme before first paint so a full reload does not flash the default colours.
      boot.js saves the resolved theme (colours, radius, font) under this key when it is chosen. --}}
 <script>
@@ -13,6 +25,7 @@
             for (const [k, c] of Object.entries(v.colors)) root.style.setProperty('--c-' + k, c);
             root.style.setProperty('--radius', v.radius);
             root.style.setProperty('--font-ui', v.font);
+            if (v.meterFont) root.style.setProperty('--font-meter', v.meterFont);
         }
     } catch {}
 </script>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <x-layouts.head :title="$title ?? 'Magnetite'" />
+    <x-layouts.head :title="$title ?? 'Magnetite'" :description="$description ?? null" :image="$image ?? null" />
 </head>
 @php
     // The bar, the pages and the player share one left edge; only the landing page is narrower and centred.
