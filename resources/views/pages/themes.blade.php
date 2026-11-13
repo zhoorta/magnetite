@@ -3,8 +3,8 @@
         <header>
             <h1 class="mb-1 text-2xl font-semibold">Themes</h1>
             <p class="max-w-3xl text-sm text-muted">
-                Pick one and the whole page changes. A theme is one JSON object with the palette, corner radius and font; to change one, make a copy.
-                The meters that show are chosen per account and are not part of a theme. Themes you edit or import are kept in this browser.
+                Click a theme to apply it. A theme is a JSON object with the colours, corner radius and fonts. Editing a built-in theme makes a copy.
+                Which meters show is set per account, not by the theme. Edited and imported themes are stored in this browser only.
             </p>
         </header>
 
@@ -18,7 +18,7 @@
                         <div class="mb-2 flex items-center gap-2 font-semibold">
                             <span class="min-w-0 flex-1 truncate" x-text="t.name"></span>
                             <span x-show="t.id === $store.player.themeId" class="text-xs font-normal" :style="{ color: t.colors.accent }">in use</span>
-                            <span x-show="t.custom" x-cloak class="text-xs font-normal" :style="{ color: t.colors.muted }">yours</span>
+                            <span x-show="t.custom" x-cloak class="text-xs font-normal" :style="{ color: t.colors.muted }">custom</span>
                         </div>
                         <div class="flex gap-1">
                             <template x-for="c in ['bg', 'accent', 'accent2', 'muted']" :key="c">
@@ -82,7 +82,7 @@
                 {{-- The wide meter: the same drawing code as the player, with the draft's colours. --}}
                     <canvas x-ref="meterCanvas" class="h-44 w-full border border-white/10" :style="{ background: shown.colors.bg, borderRadius: shown.radius }" aria-hidden="true"></canvas>
                     <p x-show="previewError" x-cloak class="mt-1 text-xs text-red-500" role="alert" x-text="previewError"></p>
-                <p class="text-xs text-muted">What you change on the right shows here at once. Save keeps it as a theme of this browser.</p>
+                <p class="text-xs text-muted">The preview follows the settings on the right. Save stores the theme in this browser.</p>
             </section>
 
             <section aria-label="Settings" class="min-w-0 space-y-3">
@@ -105,19 +105,19 @@
                     <details name="theme-group" class="rounded-theme border border-white/10 [&[open]>summary]:border-b [&[open]>summary]:border-white/10">
                         <summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold hover:text-accent">Type and shape <span class="ml-1 text-xs font-normal text-muted">corners, fonts</span></summary>
                         <div class="space-y-3 p-3">
-                            <label class="flex items-center gap-2"><span class="w-16 text-muted">Corners</span>
+                            <label class="flex items-center gap-2"><span class="w-20 shrink-0 text-muted">Corners</span>
                                 <select x-model="draft.radius" class="rounded-theme border border-white/15 bg-surface px-2 py-1">
                                     <template x-for="r in radii" :key="r"><option :value="r" x-text="r"></option></template>
                                     <option x-show="! radii.includes(draft.radius)" :value="draft.radius" x-text="draft.radius"></option>
                                 </select></label>
-                            <label class="flex items-center gap-2"><span class="w-16 text-muted">Font</span>
+                            <label class="flex items-center gap-2"><span class="w-20 shrink-0 text-muted">Font</span>
                                 <select x-model="draft.font" class="min-w-0 rounded-theme border border-white/15 bg-surface px-2 py-1">
                                     <template x-for="g in fontGroups" :key="g[0]"><optgroup :label="g[0]"><template x-for="f in g[1]" :key="f[1]"><option :value="f[1]" x-text="f[0]"></option></template></optgroup></template>
                                     <option x-show="! fonts.some((f) => f[1] === draft.font)" :value="draft.font" x-text="draft.font"></option>
                                 </select></label>
-                            <label class="flex items-center gap-2"><span class="w-16 text-muted">Meters</span>
+                            <label class="flex items-center gap-2"><span class="w-20 shrink-0 text-muted">Meter font</span>
                                 <select x-model="draft.meterFont" class="min-w-0 rounded-theme border border-white/15 bg-surface px-2 py-1" aria-label="Font of the text on the meters">
-                                    <option value="">Same as the font</option>
+                                    <option value="">Same as Font</option>
                                     <template x-for="g in fontGroups" :key="g[0]"><optgroup :label="g[0]"><template x-for="f in g[1]" :key="f[1]"><option :value="f[1]" x-text="f[0]"></option></template></optgroup></template>
                                     <option x-show="draft.meterFont && ! fonts.some((f) => f[1] === draft.meterFont)" :value="draft.meterFont" x-text="draft.meterFont"></option>
                                 </select></label>

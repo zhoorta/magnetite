@@ -9,11 +9,11 @@
             <h2 class="font-semibold text-text">How zips are read</h2>
             <ul class="list-disc space-y-1.5 pl-5">
                 <li>Only audio and cover images are kept; hidden files are left out.</li>
-                <li>Nothing that is already there is overwritten. A different file with the same name is not added, and it is counted as a conflict.</li>
+                <li>Existing files are never overwritten. A different file with the same name is skipped and counted as a conflict.</li>
                 <li>Keep a folder per album inside the zip. Loose files go into a folder named after the zip.</li>
                 <li>When the files are in, the library is scanned in the background and the new albums appear.</li>
             </ul>
-            <p>You can also drop zips straight onto the library page (<kbd class="text-accent2">U</kbd> opens this panel there). Files you copied into the folder by hand are picked up with "Scan now".</p>
+            <p>Zips can also be dropped on the library page (<kbd class="text-accent2">U</kbd> opens this panel there). "Scan now" picks up files copied into the folder by hand.</p>
         </aside>
     </div>
 </x-layouts.app>

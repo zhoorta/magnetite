@@ -19,7 +19,7 @@ export const COMMANDS = [
     ['share', 'share the selection (S)'],
     ['unshare', 'stop sharing the selection'],
     ['library', 'your own library (w cycles Library, Shared, Playlists)'],
-    ['shared', 'what everybody shares'],
+    ['shared', 'shared by everyone on this server'],
     ['playlists', 'your playlists and the shared ones'],
     ['copy', 'copy the selected shared album, track or playlist to yours (y)'],
     ['sharetracks', 'share the private tracks of the selected playlist'],

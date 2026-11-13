@@ -7,7 +7,7 @@
         <div>
             <h1 class="mb-2 text-2xl font-semibold">Storage</h1>
             <p class="mb-6 max-w-prose text-sm text-muted">
-                Where your music files live. This page only shows the setup; it is changed with
+                Where the music files are stored. This page is read-only; the setup is changed with
                 <code>php artisan magnetite:storage</code>.
             </p>
 
@@ -67,7 +67,7 @@
                     <dt class="text-muted">Token expires</dt>
                     <dd>
                         <span x-text="result?.expires_at ?? 'never'"></span>
-                        <span x-show="result?.expires_soon" class="text-accent2"> — soon: make a new token in Ferrite and run <code>magnetite:storage</code> again</span>
+                        <span x-show="result?.expires_soon" class="text-accent2"> (soon: make a new token in Ferrite and run <code>magnetite:storage</code> again)</span>
                     </dd>
                     <dt class="text-muted">Ferrite space</dt>
                     <dd x-text="result?.quota ? (result.quota.limit ? bytes(result.quota.used) + ' of ' + bytes(result.quota.limit) + ' used' : bytes(result.quota.used) + ' used, no limit') : '?'"></dd>
@@ -83,7 +83,7 @@
                     of {{ $size($cacheMaxBytes) }}.
                 </p>
                 <p class="text-xs text-muted">
-                    Files read while scanning or converting are kept here so they do not have to be fetched again; the oldest go first when it is full.
+                    Files read while scanning or converting are kept here so they do not have to be fetched again; when it is full, the oldest files are deleted first.
                     The cache is shared by everyone on this server.
                 </p>
                 <button type="button" class="rounded-theme border border-white/10 px-3 py-1 text-xs hover:text-accent" :disabled="busy || ! cache.files" @click="clear()">

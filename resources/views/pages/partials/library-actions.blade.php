@@ -11,7 +11,7 @@
         <x-menu.item x-show="ctx === 'sh-mine'" @click="shareInSource(); focusRoot()">Stop sharing <span class="ml-auto text-xs opacity-60">S</span></x-menu.item>
         <x-menu.item x-show="ctx === 'pl-other'" @click="copyToLibrary(); focusRoot()">Copy to my playlists <span class="ml-auto text-xs opacity-60">y</span></x-menu.item>
         <x-menu.item x-show="ctx === 'pl-mine'" @click="renamePlaylist(); focusRoot()">Rename playlist <span class="ml-auto text-xs opacity-60">r</span></x-menu.item>
-        <x-menu.item x-show="ctx === 'pl-mine'" @click="shareInSource(); focusRoot()"><span x-text="shown?.shared ? 'Stop sharing' : 'Share with everybody'"></span> <span class="ml-auto text-xs opacity-60">S</span></x-menu.item>
+        <x-menu.item x-show="ctx === 'pl-mine'" @click="shareInSource(); focusRoot()"><span x-text="shown?.shared ? 'Stop sharing' : 'Share with everyone on this server'"></span> <span class="ml-auto text-xs opacity-60">S</span></x-menu.item>
         <x-menu.item x-show="ctx === 'pl-track'" @click="moveTrack(-1); focusRoot()">Move up <span class="ml-auto text-xs opacity-60">K</span></x-menu.item>
         <x-menu.item x-show="ctx === 'pl-track'" @click="moveTrack(1); focusRoot()">Move down <span class="ml-auto text-xs opacity-60">J</span></x-menu.item>
         <x-menu.item x-show="source === 'playlists'" @click="newPlaylist()">New playlist <span class="ml-auto text-xs opacity-60">N</span></x-menu.item>

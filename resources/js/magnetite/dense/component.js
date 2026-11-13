@@ -968,7 +968,7 @@ export default function dense(data) {
         },
 
         async remove(kind, id, title, count) {
-            const what = kind === 'albums' ? `“${title}” and its ${count} file(s)` : `“${title}”`;
+            const what = kind === 'albums' ? `“${title}” and its ${count} ${count === 1 ? 'file' : 'files'}` : `“${title}”`;
             const sure = await this.$store.dialog.confirm({
                 title: kind === 'albums' ? 'Delete this album?' : 'Delete this track?',
                 message: this.trashOnly
@@ -1576,7 +1576,7 @@ export default function dense(data) {
             if (!into || !others.length) return this.say('Mark the albums to join (x), then select the one they join and merge');
             const sure = await this.$store.dialog.confirm({
                 title: 'Merge albums?',
-                message: `Join ${others.length} ${others.length === 1 ? 'album' : 'albums'} into “${into.title}”. Their tracks move into it and the emptied albums go away. Your files are not touched.`,
+                message: `Join ${others.length} ${others.length === 1 ? 'album' : 'albums'} into “${into.title}”. Their tracks move into it and the emptied albums go away. Changes the library only, not the files or their tags.`,
                 confirmLabel: 'Merge',
             });
             if (!sure) return;

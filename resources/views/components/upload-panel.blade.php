@@ -41,7 +41,7 @@
 
     {{-- What each zip gave: added, already there, a different file with that name (not added), left out (not audio or cover). --}}
     <table x-show="$store.uploads.result" x-cloak class="mt-4 w-full text-xs">
-        <thead class="text-muted"><tr class="text-right"><th class="w-2/5 py-1 text-left font-normal">Zip</th><th class="font-normal">added</th><th class="font-normal">there</th><th class="font-normal" title="A different file has that name: not added">conflicts</th><th class="font-normal" title="Not audio or a cover image">left out</th><th class="font-normal">size</th></tr></thead>
+        <thead class="text-muted"><tr class="text-right"><th class="w-2/5 py-1 text-left font-normal">Zip</th><th class="font-normal">added</th><th class="font-normal">existing</th><th class="font-normal" title="A different file has that name: not added">conflicts</th><th class="font-normal" title="Not audio or a cover image">left out</th><th class="font-normal">size</th></tr></thead>
         <tbody>
             <template x-for="a in $store.uploads.result?.archives ?? []" :key="a.name">
                 <tr class="text-right tabular-nums">
@@ -59,7 +59,7 @@
 
     {{-- The scan that follows an upload (or "Scan now" for files copied in by hand). --}}
     <div class="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-white/10 pt-3 text-xs text-muted" aria-live="polite">
-        <span x-show="$store.uploads.scan?.state === 'queued'">Scan queued.<span x-show="$store.uploads.waited >= 16"> Nothing has picked it up yet: a queue worker has to be running (<code>php artisan queue:work</code>).</span></span>
+        <span x-show="$store.uploads.scan?.state === 'queued'">Scan queued.<span x-show="$store.uploads.waited >= 16"> Still waiting: is a queue worker running? (<code>php artisan queue:work</code>).</span></span>
         <span x-show="$store.uploads.scan?.state === 'running'" x-text="'Scanning the library… ' + $store.uploads.scan?.processed + ' files read'"></span>
         <span x-show="$store.uploads.scan?.state === 'done'">
             Scanned: <span x-text="$store.uploads.scan?.counts?.added"></span> new, <span x-text="$store.uploads.scan?.counts?.updated"></span> updated, <span x-text="$store.uploads.scan?.counts?.removed"></span> removed<span x-show="$store.uploads.scan?.counts?.failed">, <span x-text="$store.uploads.scan?.counts?.failed"></span> could not be read</span>.

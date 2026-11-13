@@ -178,14 +178,14 @@ export const sourceMethods = {
             album.shared = r.data.shared;
             this.shares.albums = album.shared ? [...this.shares.albums, album.id] : this.shares.albums.filter((id) => id !== album.id);
 
-            return this.say(album.shared ? 'Playlist shared with everybody' : 'Playlist is private again');
+            return this.say(album.shared ? 'Playlist shared with everyone on this server' : 'Playlist is private again');
         }
         if (on === true) return this.say('This is already shared');
         let kind = null;
         let id = null;
         if (this.row?.kind === 'album' && this.row.album.mine) [kind, id] = ['albums', this.row.id];
         else if (this.row?.kind === 'loose' && this.pane === 'tracks' && this.tracks[this.tsel]?.mine) [kind, id] = ['tracks', this.tracks[this.tsel].id];
-        if (!kind) return this.say('You can only stop sharing what is yours');
+        if (!kind) return this.say('Only the owner can stop sharing');
         const r = await send('DELETE', `/share/${kind}/${id}`);
         if (!r.ok) return this.say('Could not stop sharing');
         this.libraryStale = true;

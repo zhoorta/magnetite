@@ -17,7 +17,7 @@
             <div x-show="mode === 'tree'" class="flex shrink-0 rounded-theme border border-white/15 p-px" role="group" aria-label="Source">
                 <template x-for="name in ['library', 'shared', 'playlists']" :key="name">
                     <button type="button" class="inline-flex items-center rounded-theme px-2 py-1 text-sm pointer-coarse:min-h-11 pointer-coarse:px-3" :class="source === name ? 'bg-accent text-bg' : 'text-muted hover:text-accent'" :aria-pressed="source === name"
-                            :aria-label="sourceLabels[name]" :title="sourceLabels[name] + (name === 'library' ? ' (your own music)' : name === 'shared' ? ' (what everybody shares)' : ' (yours and the shared ones)') + ' (w cycles)'" @click="setSource(name)">
+                            :aria-label="sourceLabels[name]" :title="sourceLabels[name] + (name === 'library' ? ' (your own music)' : name === 'shared' ? ' (shared by everyone on this server)' : ' (yours and the shared ones)') + ' (w cycles)'" @click="setSource(name)">
                         <span x-show="name === 'library'"><x-icon name="library" /></span>
                         <span x-show="name === 'shared'" x-cloak><x-icon name="people" /></span>
                         <span x-show="name === 'playlists'" x-cloak><x-icon name="playlist" /></span>
@@ -72,7 +72,7 @@
             </div>
         </div>
 
-        <p x-show="! hasAnything" x-cloak class="text-muted">Nothing here yet. <a href="{{ route('upload') }}" wire:navigate class="text-accent" @click.prevent="openUpload()">Upload a zip</a> of your music, or ask the person who runs this server to put it in your folder and scan it.</p>
+        <p x-show="! hasAnything" x-cloak class="text-muted">The library is empty. <a href="{{ route('upload') }}" wire:navigate class="text-accent" @click.prevent="openUpload()">Upload a zip</a>, or ask the server's admin to copy the files into the library folder and run a scan.</p>
 
         <div x-show="hasAnything" class="panes grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
             {{-- Folders and albums --}}
@@ -109,7 +109,7 @@
 
                 {{-- The truth view: every file, worst first. s changes the order, o keeps the ones with findings, Enter plays from here. --}}
                 <ul x-show="mode === 'truth'" x-cloak data-list="truth" aria-label="Every file" class="h-[34dvh] min-h-48 overflow-y-auto pb-1 md:h-[calc(100dvh_-_var(--panes-top,10rem)_-_var(--dock-h,13rem)_-_var(--status-h,2rem)_-_1.25rem)] md:min-h-56">
-                    <li x-show="! truth.length" class="px-2 py-1 text-muted">Nothing to show. Analyse the library (A) to measure the files.</li>
+                    <li x-show="! truth.length" class="px-2 py-1 text-muted">No files measured yet. A analyses the library.</li>
                     <template x-for="(r, i) in truthShown" :key="r.track.id">
                         <li :data-selected="i === tcur" class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                             :class="i === tcur ? 'bg-accent text-bg' : 'hover:bg-white/5'" @click="tcur = i; focusRoot(); isTouch($event) && playTruth(i)" @dblclick="playTruth(i)">
@@ -146,7 +146,7 @@
                                     <x-icon name="play" x-show="$store.player.playing" class="size-3" />
                                     <x-icon name="pause" x-show="! $store.player.playing" x-cloak class="size-3" />
                                 </span>
-                                <span x-show="r.kind === 'album' && isShared('albums', r.id)" x-cloak class="ml-1 inline-flex align-middle opacity-70" title="Shared with everyone who has an account"><x-icon name="people" class="size-3" role="img" aria-label="Shared" /></span>
+                                <span x-show="r.kind === 'album' && isShared('albums', r.id)" x-cloak class="ml-1 inline-flex align-middle opacity-70" title="Shared with everyone on this server"><x-icon name="people" class="size-3" role="img" aria-label="Shared" /></span>
                                 <span x-show="r.kind === 'album' && analysisNote(r.id)" x-cloak class="ml-1 text-xs opacity-70" x-text="analysisNote(r.id)"></span>
                             </span>
                             <span class="hidden min-w-0 max-w-[32%] shrink truncate text-right text-xs opacity-70 sm:inline" x-show="r.kind === 'album'" x-text="r.album?.artist"></span>
@@ -155,7 +155,7 @@
                             <span class="block text-right text-xs font-medium tabular-nums" 
                                   :class="[i === cur && pane === 'tree' ? '' : (r.kind === 'album' ? drClass(r.album?.dr_class) : 'opacity-70'), ! ((r.kind === 'album' && r.album.dr !== null) || (r.kind === 'folder' && r.dr !== null)) && 'invisible']" x-text="'DR' + (r.kind === 'album' ? r.album?.dr : r.dr)"></span>
                                 <span class="absolute right-full top-0 pr-1 text-xs font-bold text-amber-500" :class="i === cur && pane === 'tree' && '!text-bg'" x-show="$store.ui.info >= 2 && r.kind === 'album' && problemCount(r.album) > 0" x-cloak
-                                      :title="problemCount(r.album) + ' track(s) with findings'">!</span>
+                                      :title="problemCount(r.album) + (problemCount(r.album) === 1 ? ' track' : ' tracks') + ' with findings'">!</span>
                             </span>
                         </li>
                     </template>
@@ -176,12 +176,12 @@
 
                     {{-- Playlists: who it is from, what is private, and what you cannot play. --}}
                     <div x-show="shown?.playlist" x-cloak class="space-y-1 px-2 pb-1 text-xs">
-                        <p x-show="! shown?.mine" class="text-muted" x-text="'A playlist shared by ' + shown?.artist + '. It changes when they change it. y copies it to your playlists (only the tracks you can play).'"></p>
+                        <p x-show="! shown?.mine" class="text-muted" x-text="'Shared by ' + shown?.artist + '; it follows their edits. y makes a copy with the tracks that are shared.'"></p>
                         <p x-show="shown?.mine && shown?.shared && shown?.unshared > 0" class="flex flex-wrap items-center gap-2 rounded-theme border border-white/10 bg-surface px-2 py-1">
                             <span class="text-muted" x-text="shown?.unshared + (shown?.unshared === 1 ? ' track is' : ' tracks are') + ' not shared, so others see them greyed out and cannot play them.'"></span>
                             <button type="button" class="rounded-theme border border-white/10 px-2 py-0.5 hover:text-accent" @click="shareTracksToo(); focusRoot()">Share those tracks too</button>
                         </p>
-                        <p x-show="shown?.mine && shown?.hidden > 0" class="text-muted" x-text="shown?.hidden + (shown?.hidden === 1 ? ' track' : ' tracks') + ' in this playlist can no longer be played by you, because they are not shared any more. They come back if shared again.'"></p>
+                        <p x-show="shown?.mine && shown?.hidden > 0" class="text-muted" x-text="shown?.hidden + (shown?.hidden === 1 ? ' track' : ' tracks') + (shown?.hidden === 1 ? ' is' : ' are') + ' hidden because the owner stopped sharing them. They return if shared again.'"></p>
                     </div>
 
                     {{-- Tracks without an album tag: what the folder and file names and MusicBrainz suggest. Nothing changes until "Use this". --}}
@@ -193,7 +193,7 @@
                         </div>
                         <template x-for="sug in suggestions" :key="sug.id">
                             <div class="mb-2 rounded-theme border border-white/15 p-2">
-                                <div class="mb-1 flex items-center gap-2"><span class="min-w-0 flex-1 truncate text-muted" :title="sug.folder" x-text="'Folder ' + sug.folder.split('/').pop() + ' · ' + sug.candidates[0].tracks.length + ' track(s)'"></span>
+                                <div class="mb-1 flex items-center gap-2"><span class="min-w-0 flex-1 truncate text-muted" :title="sug.folder" x-text="'Folder ' + sug.folder.split('/').pop() + ' · ' + sug.candidates[0].tracks.length + (sug.candidates[0].tracks.length === 1 ? ' track' : ' tracks')"></span>
                                     <button type="button" class="shrink-0 rounded-theme border border-white/15 px-2 hover:text-accent" @click="answerSuggestion(sug.id, false)">Dismiss</button></div>
                                 <template x-for="(c, ci) in sug.candidates" :key="ci">
                                     <details class="mb-1 rounded-theme border border-white/10 px-2 py-1">
@@ -235,7 +235,7 @@
                                     <p class="truncate text-xs text-muted" x-text="t.kind === 'up' ? t.folder.name : t.kind === 'folder' ? t.count + (t.count === 1 ? ' album' : ' albums') : [t.album.artist, t.album.year].filter(Boolean).join(' · ')"></p>
                                     <p x-show="t.kind === 'album' && $store.ui.info > 0 && (t.album?.dr != null || problemCount(t.album) > 0)" x-cloak class="flex gap-2 text-xs">
                                         <span x-show="t.album?.dr != null" :class="drClass(t.album?.dr_class)" x-text="'DR' + t.album?.dr"></span>
-                                        <span x-show="$store.ui.info >= 2 && problemCount(t.album) > 0" class="font-bold text-amber-500" :title="problemCount(t.album) + ' track(s) with findings'">!</span>
+                                        <span x-show="$store.ui.info >= 2 && problemCount(t.album) > 0" class="font-bold text-amber-500" :title="problemCount(t.album) + (problemCount(t.album) === 1 ? ' track' : ' tracks') + ' with findings'">!</span>
                                     </p>
                                 </div>
                             </template>
@@ -302,7 +302,7 @@
                                         <line x-show="detailTrack.truth.cutoff_hz" :x1="cutX(detailTrack)" :x2="cutX(detailTrack)" y1="0" y2="60" stroke="#ef4444" stroke-dasharray="3 3" stroke-width="1" vector-effect="non-scaling-stroke"/>
                                     </svg>
                                     <p class="-mt-1 flex justify-between text-[10px] text-muted"><span>0</span><span>average spectrum</span><span x-text="khz(detailTrack.truth.spectrum_points * detailTrack.truth.step_hz)"></span></p>
-                                    <p x-show="detailTrack.truth.flags.length === 0" class="text-muted">Nothing suspicious found.</p>
+                                    <p x-show="detailTrack.truth.flags.length === 0" class="text-muted">No findings.</p>
                                     <ul class="space-y-1">
                                         <template x-for="f in detailTrack.truth.flags" :key="f.code">
                                             <li><span class="mr-1 font-bold" :class="levelClass(f.level)" x-text="f.label"></span><span class="text-muted" x-text="f.detail"></span></li>
@@ -452,7 +452,7 @@
              role="dialog" aria-modal="true" aria-label="Album details found online">
             <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-theme border border-white/15 bg-surface p-5 text-sm shadow-xl">
                 <h2 class="mb-1 font-semibold">Details for “<span x-text="titles?.title"></span>”</h2>
-                <p class="mb-3 text-xs text-muted">Looked up on MusicBrainz by album title and artist, and checked against the number and length of your files. Tick what to use. Your files are not touched.</p>
+                <p class="mb-3 text-xs text-muted">Looked up on MusicBrainz by album title and artist, and compared with the number and length of the tracks. Tick what to apply. Changes the library only, not the files or their tags.</p>
                 <p x-show="titles?.loading" class="py-6 text-center text-muted">Searching…</p>
                 <p x-show="titles && ! titles.loading && ! titles.error && titles.candidates.length === 0" class="py-4 text-muted">No release on MusicBrainz fits this album (title, artist, number of tracks and their lengths). Check the title and artist with Edit, then try again.</p>
                 <template x-if="titles && titles.candidates.length">
@@ -462,7 +462,7 @@
                                 <button type="button" class="rounded-theme border px-2 py-0.5 text-xs" :class="titles.pick === i ? 'border-accent text-accent' : 'border-white/15 text-muted hover:text-accent'" @click="pickRelease(i)" x-text="c.title + (c.date ? ' (' + c.date + ')' : '') + ' · ' + c.matched + '/' + c.release_tracks"></button>
                             </template>
                         </div>
-                        <p class="text-xs text-muted" x-text="titles.candidates[titles.pick].artist + ' · ' + titles.candidates[titles.pick].matched + ' of ' + titles.candidates[titles.pick].release_tracks + ' track(s) fit'"></p>
+                        <p class="text-xs text-muted" x-text="titles.candidates[titles.pick].artist + ' · ' + titles.candidates[titles.pick].matched + ' of ' + titles.candidates[titles.pick].release_tracks + (titles.candidates[titles.pick].release_tracks === 1 ? ' track fits' : ' tracks fit')"></p>
                         <div class="space-y-1.5 rounded-theme border border-white/15 p-2 text-xs">
                             <label class="flex cursor-pointer items-center gap-2" :class="! titles.candidates[titles.pick].date && 'opacity-50'"><input type="checkbox" x-model="titles.parts.date" :disabled="! titles.candidates[titles.pick].date" class="accent-[var(--c-accent)]"><span class="w-24 shrink-0 text-muted">Release date</span><span class="min-w-0 truncate"><span class="text-muted" x-text="titles.album.release_date || '–'"></span> → <span x-text="titles.candidates[titles.pick].date || 'not on this release'"></span></span></label>
                             <label class="flex cursor-pointer items-center gap-2" :class="! titles.candidates[titles.pick].label && 'opacity-50'"><input type="checkbox" x-model="titles.parts.label" :disabled="! titles.candidates[titles.pick].label" class="accent-[var(--c-accent)]"><span class="w-24 shrink-0 text-muted">Record label</span><span class="min-w-0 truncate"><span class="text-muted" x-text="titles.album.label || '–'"></span> → <span x-text="titles.candidates[titles.pick].label || 'not on this release'"></span></span></label>
@@ -487,7 +487,7 @@
         <div x-show="gd" x-cloak x-transition.opacity @keydown.escape.window="gd && ! $store.dialog.open && (gd = null, focusRoot())" class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="gd = null; focusRoot()" role="dialog" aria-modal="true" aria-label="Name an album">
             <form class="w-full max-w-sm rounded-theme border border-white/15 bg-surface p-5 text-sm shadow-xl" @submit.prevent="saveGroup()">
                 <h2 class="mb-1 font-semibold">Name an album</h2>
-                <p class="mb-4 text-xs text-muted" x-text="(gd?.ids.length ?? 0) + ' track(s) without an album get this one. Only the library changes; the files and tags do not.'"></p>
+                <p class="mb-4 text-xs text-muted" x-text="'Puts ' + (gd?.ids.length ?? 0) + ((gd?.ids.length ?? 0) === 1 ? ' track' : ' tracks') + ' into a new album. Changes the library only, not the files or their tags.'"></p>
                 <template x-if="gd">
                     <div class="space-y-3">
                         <label class="block"><span class="mb-1 block text-xs text-muted">Album title</span><input type="text" x-ref="groupTitle" x-model="gd.title" required maxlength="255" class="w-full rounded-theme border border-white/15 bg-bg px-2 py-1.5"></label>
@@ -508,7 +508,7 @@
              class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="edit = null; focusRoot()" role="dialog" aria-modal="true" aria-label="Edit track">
             <form class="w-full max-w-sm rounded-theme border border-white/10 bg-surface p-5 text-sm shadow-xl" @submit.prevent="saveEdit()">
                 <h2 class="mb-1 font-semibold">Edit track</h2>
-                <p class="mb-4 text-xs text-muted">Only what this library shows changes. Your files and their tags are not touched, and a rescan keeps these edits.</p>
+                <p class="mb-4 text-xs text-muted">Changes the library only, not the files or their tags. A rescan keeps these edits.</p>
                 <template x-if="edit">
                     <div class="space-y-3">
                         <label class="block"><span class="mb-1 block text-xs text-muted">Track title</span><input type="text" x-ref="editFirst" x-model="edit.fields.title" required maxlength="255" class="w-full rounded-theme border border-white/10 bg-bg px-2 py-1.5"></label>
