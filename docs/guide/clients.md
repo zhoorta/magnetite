@@ -1,6 +1,6 @@
 # Clients
 
-Besides the web app there are three clients. They talk to the same server, show the same library, shared music and playlists, and use the list of meters saved in the account. They have the nine plain meters; the posters are in the web app only.
+Besides the web app there are three clients. They talk to the same server, show the same library, shared music and playlists, and use the list of meters saved in the account. They have the nine plain meters; the posters are in the web app, and the terminal client draws all but Circuit and Terrain.
 
 All of them need the address of the server. Over the internet the server must use https.
 
@@ -33,6 +33,6 @@ A client written in Rust that decodes the audio itself, so its meters are comput
 
 The first command shows a code; approve it at `/device` on the server, signed in to the web app. The second starts the player. The sign-in token is kept in `~/.config/magnetite/tui.json`.
 
-It has the library, search with the same filters as the web app, the file-truth table, the meters, loudness matching and A/B compare. `?` lists the keys of the current view, and most are the same as in the web library (`j` `k`, `Enter`, `Space`, `n` `p`, `m` `M`, `+` `-`, `f`).
+It has the library, search with the same filters as the web app, the file-truth table, the meters, loudness matching and A/B compare. `?` lists the keys of the current view, and most are the same as in the web library (`j` `k`, `Enter`, `Space`, `n` `p`, `m` `M`, `w` `W` for the posters in the terminal client, `+` `-`, `f`).
 
 Next: [Configuration](configuration.md).
