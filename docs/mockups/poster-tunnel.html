@@ -1,0 +1,189 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Tunnel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Tunnel poster meter: one colour of outline on a flat ground, a grid of ruled boxes across the top,
+   seven nested circles that share a top edge below them. The gap between neighbouring circles is a frequency range
+   (more energy, wider gap), so the tunnel breathes. A box holds a small spectrum, one a turning globe (speed follows level),
+   one the time played. Fake signal, no audio. Shapes are drawn here, nothing is copied from the reference poster. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Tunnel</h1>
+  <p>Line only, one colour. Ruled boxes across the top hold the track (artist, title, album, format, year), a small live spectrum, a turning globe and the time played. Below, seven circles hang from one shared top edge; each gap is a frequency range and widens with its energy, so the tunnel breathes in and out.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const FONT = '"Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif';
+const PALS = [
+  ['Red on black', { bg:'#0f0d0d', ink:'#ff4a35' }],
+  ['Cream on blue-black', { bg:'#0b0f16', ink:'#efe3c4' }],
+  ['Black on paper', { bg:'#e9e2cf', ink:'#14120f' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 31, RINGS = 7;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.6);
+    const v = 0.5 + 0.28 * Math.sin(t * (0.9 + i * 0.13) + i) + 0.22 * Math.pow(Math.max(0, Math.sin(t * 3.1 + i * 0.4)), 3);
+    return Math.max(0, Math.min(1, v * tilt * base));
+  });
+}
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function draw(c, pal, st, t, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+
+  const tr = TRACKS[ti];
+  const k = 1 - Math.exp(-o.dt / 0.15);
+  o.bands.forEach((v, i) => { st.b[i] += (v - st.b[i]) * k; });
+  const level = o.bands.reduce((a, b) => a + b, 0) / NB;
+  st.level += (level - st.level) * k;
+  st.spin += o.dt * (0.25 + 2.2 * st.level);
+
+  g.fillStyle = pal.bg;
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = pal.ink; g.fillStyle = pal.ink;
+  g.lineJoin = 'round'; g.lineCap = 'round';
+
+  // ---- the tunnel: seven circles hanging from one top edge, gaps follow the energy of seven band groups
+  const top = 236, maxD = 566, cx = W / 2;
+  const groups = Array.from({ length: RINGS }, (_, j) => {
+    const lo = Math.floor((j / RINGS) * NB), hi = Math.floor(((j + 1) / RINGS) * NB);
+    let sum = 0; for (let i = lo; i < hi; i++) sum += st.b[i];
+    return sum / (hi - lo);
+  });
+  const weight = groups.map((e, j) => (0.55 + 1.1 * Math.min(1, e * 1.5)) * (1 + j * 0.28));   // outer gaps are naturally wider
+  const total = weight.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  const first = 0.2;                                                   // innermost circle never closes
+  for (let j = 0; j < RINGS; j++) {
+    acc += weight[j];
+    const d = maxD * (first + (1 - first) * (acc / total));
+    g.lineWidth = 2 + 2.4 * Math.min(1, groups[j] * 1.4);
+    g.beginPath(); g.arc(cx, top + d / 2, d / 2, 0, TAU); g.stroke();
+  }
+
+  if (!o.text) { frameBoxes(g, pal, st, o, tr, false); return; }
+  frameBoxes(g, pal, st, o, tr, true);
+}
+
+function box(g, x, y, w, h) { g.lineWidth = 2; g.strokeRect(x, y, w, h); }
+function outline(g, txt, x, y, size, maxW) {
+  g.font = `900 ${size}px ${FONT}`;
+  while (g.measureText(txt).width > maxW && size > 9) { size -= 1; g.font = `900 ${size}px ${FONT}`; }
+  g.lineWidth = Math.max(1.4, size / 13);
+  g.save(); g.fillStyle = 'transparent'; g.strokeText(txt, x, y); g.restore();
+}
+function plain(g, txt, x, y, size, maxW, weight = 700) {
+  g.font = `${weight} ${size}px ${FONT}`;
+  while (g.measureText(txt).width > maxW && size > 8) { size -= 1; g.font = `${weight} ${size}px ${FONT}`; }
+  g.fillText(txt, x, y);
+}
+
+function frameBoxes(g, pal, st, o, tr, text) {
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  const M = 10;
+  // box grid across the top
+  box(g, M, M, 288, 78);              // artist
+  box(g, 298, M, 146, 78);            // format
+  box(g, 454, M, 136, 146);           // spectrum
+  box(g, M, 98, 434, 34);             // title
+  box(g, M, 140, 434, 26);            // lines
+  box(g, 298, 140, 146, 26);          // dr
+  box(g, 454, 166, 136, 70);          // globe
+  box(g, 454, 244, 136, 30);          // time played
+  box(g, 508, 756, 82, 34);           // small corner box
+
+  // little spectrum: bars standing on the middle line, a taper like the sample
+  const bx = 466, bw = 112, by = 10 + 73, n = 22;
+  for (let i = 0; i < n; i++) {
+    const e = Math.min(1, st.b[Math.round((i / (n - 1)) * (NB - 1))] * 1.4);
+    const h = 6 + e * 120 * (0.35 + 0.65 * (i / n));
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(bx + (i / (n - 1)) * bw, by - h / 2); g.lineTo(bx + (i / (n - 1)) * bw, by + h / 2); g.stroke();
+  }
+
+  // globe: rim, equator and two latitudes, meridians that turn
+  const gx = 454 + 36, gy = 166 + 35, gr = 24;
+  g.lineWidth = 1.6;
+  g.beginPath(); g.arc(gx, gy, gr, 0, TAU); g.stroke();
+  for (let i = 0; i < 4; i++) {
+    const rx = Math.abs(Math.cos(st.spin + (i * Math.PI) / 4)) * gr;
+    g.beginPath(); g.ellipse(gx, gy, Math.max(0.5, rx), gr, 0, 0, TAU); g.stroke();
+  }
+  [-0.5, 0, 0.5].forEach((f) => { const w = Math.sqrt(1 - f * f) * gr; g.beginPath(); g.moveTo(gx - w, gy + f * gr); g.lineTo(gx + w, gy + f * gr); g.stroke(); });
+
+  if (!text) return;
+  // artist, the biggest outline lettering
+  g.strokeStyle = pal.ink;
+  const nm = tr.name.toUpperCase().split(' ');
+  if (nm.length > 1) { outline(g, nm[0], 20, 44, 30, 266); outline(g, nm.slice(1).join(' '), 20, 78, 30, 266); }
+  else outline(g, nm[0], 20, 60, 40, 266);
+  // format box: codec, bit depth
+  outline(g, tr.codec, 308, 44, 28, 126); outline(g, tr.bits, 308, 76, 28, 126);
+  // title and album
+  outline(g, tr.title.toUpperCase(), 20, 123, 24, 414);
+  plain(g, tr.album ? tr.album.toUpperCase() : '', 20, 158, 15, 270, 800);   // sits in the ruled lines box
+  plain(g, tr.dr || tr.year, 308, 159, 16, 126, 800);
+  // time played, and the year in the small corner box
+  plain(g, `${mmss(o.played * tr.dur)} / ${mmss(tr.dur)}`, 464, 264, 15, 118, 800);
+  plain(g, tr.year, 520, 779, 16, 60, 800);
+  plain(g, 'TUNNEL', 466, 154, 9, 112, 700);
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0), level: 0, spin: 0 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.1 : +$('lvl').value * 2);
+  const o = { dt, bands, played: (clock % 40) / 40, text: $('text').checked };
+  cards.forEach((k) => draw(k.c, k.pal, k.st, clock, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+requestAnimationFrame(frame);
+</script>

@@ -1,0 +1,188 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Reel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of the Reel poster meter: a dark text panel and a colour panel with a big cropped tape reel.
+   Rotation follows the level, the three windows swell with L, R and the mean, the tape ring follows track progress.
+   Fake signal, no audio. Shapes are drawn here, nothing is copied from the reference box. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Reel</h1>
+  <p>A colour strip down the left, black beside it, and the cream tape reel across both (laid out like a second tape-box poster: four windows, no spoke). The reel is cropped by the bottom right corner; the track's lettering sits top right on the black. It turns with the level, its windows swell with left, right and the mean, and a ring of tape on the hub grows and shrinks with how far into the track you are.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="tape" type="checkbox" checked> tape ring</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const PALS = [
+  ['Own colours', { dark:'#14161a', panel:'#e8412a', paper:'#efe6d0', ink:'#14161a', tape:'#6b3a22' }],
+  ['Teal and brown', { dark:'#2a1d16', panel:'#1f7a78', paper:'#f0e4c8', ink:'#2a1d16', tape:'#c46a2c' }],
+  ['Night', { dark:'#0a0b0e', panel:'#2a2d35', paper:'#9aa3b5', ink:'#0a0b0e', tape:'#4ab3c4' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', fmt:'FLAC 24/96', dur:'4:12' },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', fmt:'ALAC 16/44.1', dur:'7:48' },
+  { name:'Mono', title:'Tape 3', album:'', fmt:'MP3 320', dur:'2:05' },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+
+function fakeSignal(t, base) {
+  const beat = Math.pow(Math.max(0, Math.sin(t * 3.1)), 4);
+  const l = base * (0.45 + 0.4 * Math.sin(t * 0.7) + 0.35 * beat);
+  const r = base * (0.5 + 0.35 * Math.sin(t * 0.9 + 1.3) + 0.3 * Math.pow(Math.max(0, Math.sin(t * 2.3 + 0.8)), 4));
+  return [Math.min(1, Math.max(0, l)), Math.min(1, Math.max(0, r))];
+}
+
+function arcText(g, text, cx, cy, r, from, dir, size, color, font) {
+  // Letters placed one by one along a circle, reading anticlockwise round the left edge: from is the start angle.
+  g.save();
+  g.fillStyle = color;
+  g.font = `500 ${size}px ${font}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  let a = from;
+  for (const ch of text) {
+    const wch = g.measureText(ch).width + size * 0.28;
+    const step = (wch / r) * dir;
+    a += step / 2;
+    g.save();
+    g.translate(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    g.rotate(a + (dir > 0 ? Math.PI / 2 : -Math.PI / 2));
+    g.fillText(ch, 0, 0);
+    g.restore();
+    a += step / 2;
+  }
+  g.restore();
+}
+
+function sector(g, cx, cy, r1, r2, a0, a1, round) {
+  // Rounded annular sector: a filled path plus a round-joined stroke of the same colour.
+  g.beginPath();
+  g.arc(cx, cy, r2, a0, a1);
+  g.arc(cx, cy, r1, a1, a0, true);
+  g.closePath();
+  g.lineJoin = 'round';
+  g.lineWidth = round * 2;
+  g.fill();
+  g.stroke();
+}
+
+function draw(c, pal, st, t, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+
+  const tr = TRACKS[ti];
+  const [l, r] = o.levels;
+  const mean = (l + r) / 2;
+  st.l += (l - st.l) * 0.2; st.r += (r - st.r) * 0.2; st.m += (mean - st.m) * 0.2;
+  st.angle += o.dt * (0.35 + 2.4 * st.m);
+
+  // black field, a colour panel down the left; the reel sits over both, where it was
+  const px = 236;
+  g.fillStyle = pal.dark;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = pal.panel;
+  g.fillRect(0, 0, px, H);
+
+  const cx = 600, cy = 800, R = 400;
+  g.fillStyle = pal.paper;
+  g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.fill();
+
+  g.save();
+  g.translate(cx, cy);
+  g.rotate(st.angle);
+  g.fillStyle = pal.dark; g.strokeStyle = pal.dark;
+  // four windows: left, right, and the mean twice; no spoke
+  [st.l, st.r, st.m, st.m].forEach((lv, i) => {
+    const mid = i * (TAU / 4) + TAU / 8;
+    const half = 0.3 + 0.16 * lv;
+    sector(g, 0, 0, 120, R * 0.74, mid - half, mid + half, 10);
+  });
+  if (o.tape) {                      // tape wound on the hub, grows with progress
+    g.fillStyle = pal.panel;
+    g.beginPath(); g.arc(0, 0, 50 + 40 * o.progress, 0, TAU); g.fill();
+  }
+  g.fillStyle = pal.dark;
+  g.beginPath(); g.arc(0, 0, 36, 0, TAU); g.fill();
+  g.restore();
+
+  if (!o.text) return;
+  const font = HELV;
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  const fit = (txt, weight, size, maxW) => { g.font = `${weight} ${size}px ${font}`; while (g.measureText(txt).width > maxW && size > 12) { size -= 2; g.font = `${weight} ${size}px ${font}`; } return size; };
+
+  // top right on the black, like the lettering on a tape box: name, format, album, then the title big
+  const X = 262, MW = W - X - 28;
+  const name = tr.name.toUpperCase();
+  fit(name, 800, 60, MW); g.fillStyle = pal.paper; g.fillText(name, X, 76);
+  g.font = `500 30px ${font}`; g.fillStyle = pal.panel; g.fillText(tr.fmt, X, 128);
+  g.font = `700 17px ${font}`; g.fillStyle = pal.paper;
+  if (tr.album) g.fillText(tr.album.toUpperCase().slice(0, 28), X, 168);
+  g.fillText(tr.dur, X, 192);
+  const words = tr.title.toUpperCase().split(' ');
+  const lines = []; let cur = '';
+  g.font = `800 64px ${font}`;
+  words.forEach((w) => { const n = cur ? cur + ' ' + w : w; if (g.measureText(n).width > MW && cur) { lines.push(cur); cur = w; } else cur = n; });
+  lines.push(cur);
+  let y = 270;
+  g.fillStyle = pal.paper;
+  lines.slice(0, 3).forEach((ln) => { fit(ln, 800, 64, MW); g.fillText(ln, X, y); y += 68; });
+
+  // small line up the right edge on the black
+  g.save();
+  g.translate(W - 14, 450); g.rotate(-Math.PI / 2);
+  g.fillStyle = pal.paper; g.font = `500 13px ${font}`;
+  g.fillText(`${tr.fmt}  ·  ${tr.dur}`.toUpperCase(), 0, 0);
+  g.restore();
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { l: 0, r: 0, m: 0, angle: 0 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const base = $('auto').checked ? 1 : +$('lvl').value * 2;
+  const levels = fakeSignal(clock, $('auto').checked ? 0.9 : base);
+  const progress = (clock % 40) / 40;
+  const o = { dt, levels, progress, text: $('text').checked, tape: $('tape').checked };
+  cards.forEach((k) => draw(k.c, k.pal, k.st, clock, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+requestAnimationFrame(frame);
+</script>

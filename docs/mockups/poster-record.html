@@ -1,0 +1,151 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Record</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Record poster meter: a vinyl record centred on the bottom-left corner, drawn as grooves.
+   Each groove ring is a frequency band (low near the label, high at the rim); its pink thickness is the band's energy.
+   A cream fan of light, like the sheen on a record, sweeps with the stereo balance and opens with the level.
+   Fake signal, no audio. Shapes are drawn here, nothing is copied from the reference sleeve. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Record</h1>
+  <p>A record seen from its corner: grooves round the bottom-left, black between them, a cream band across the top with the track's name. Each groove is one frequency band, low next to the label and high at the rim, and gets thicker with its energy. The cream fan is the sheen on the vinyl: it swings with the stereo balance and widens with the level.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+    <label>balance <input id="bal" type="range" min="-1" max="1" step="0.01" value="0"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const HELV = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const PALS = [
+  ['Pink, cream, black', { dark:'#16120f', a:'#e8457f', paper:'#f0e6c8', ink:'#16120f' }],
+  ['Red and cream', { dark:'#1a1410', a:'#d9381e', paper:'#efe3c4', ink:'#1a1410' }],
+  ['Night', { dark:'#0a0b0e', a:'#4ab3c4', paper:'#aab3c5', ink:'#0a0b0e' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', fmt:'24/96', dur:'4:12', codec:'FLAC' },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', fmt:'16/44', dur:'7:48', codec:'ALAC' },
+  { name:'Mono', title:'Tape 3', album:'', fmt:'320', dur:'2:05', codec:'MP3' },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 31;
+
+function fakeBands(t, base) {
+  // 31 band levels 0..1, stronger in the lows, moving at different speeds
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.5);
+    const v = 0.5 + 0.28 * Math.sin(t * (0.9 + i * 0.13) + i) + 0.22 * Math.pow(Math.max(0, Math.sin(t * 3.1 + i * 0.4)), 3);
+    return Math.max(0, Math.min(1, v * tilt * base));
+  });
+}
+
+function draw(c, pal, st, t, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+
+  const tr = TRACKS[ti];
+  const k = 1 - Math.exp(-o.dt / 0.12);
+  o.bands.forEach((v, i) => { st.b[i] += (v - st.b[i]) * k; });
+  const level = o.bands.reduce((a, b) => a + b, 0) / NB;
+  st.level += (level - st.level) * k;
+  st.bal += (o.balance - st.bal) * k;
+
+  g.fillStyle = pal.dark;
+  g.fillRect(0, 0, W, H);
+
+  // record: centre at the bottom-left corner
+  const cx = 0, cy = H, R = 790, r0 = 118;
+  const N = 46, step = (R - r0) / N;
+  const mid = -Math.PI / 4 + st.bal * 0.45;                  // fan direction follows the balance
+  const half = 0.16 + 0.34 * Math.min(1, st.level * 1.6);    // fan opens with the level
+  const a0 = mid - half, a1 = mid + half;
+  g.lineCap = 'butt';
+  for (let i = 0; i < N; i++) {
+    const r = r0 + step * (i + 0.5);
+    const bi = (i / N) * (NB - 1), lo = Math.floor(bi), hi = Math.min(NB - 1, lo + 1);
+    const e = st.b[lo] + (st.b[hi] - st.b[lo]) * (bi - lo);
+    const w = step * (0.3 + 0.62 * Math.min(1, e * 1.4));
+    g.lineWidth = w;
+    g.strokeStyle = pal.a;
+    g.beginPath(); g.arc(cx, cy, r, -Math.PI / 2 - 0.05, a0); g.stroke();
+    g.beginPath(); g.arc(cx, cy, r, a1, 0.05); g.stroke();
+    g.strokeStyle = pal.paper;                                // inside the fan: cream grooves, thinner pink between
+    g.beginPath(); g.arc(cx, cy, r, a0, a1); g.stroke();
+    if (i % 2) {
+      g.lineWidth = w * 0.35; g.strokeStyle = pal.a;
+      g.beginPath(); g.arc(cx, cy, r, a0 + (a1 - a0) * 0.25, a1 - (a1 - a0) * 0.25); g.stroke();
+    }
+  }
+
+  // label with the badge
+  g.fillStyle = pal.dark;
+  g.beginPath(); g.arc(cx, cy, r0 - 6, 0, TAU); g.fill();
+  g.strokeStyle = pal.a; g.lineWidth = 3;
+  g.beginPath(); g.arc(cx, cy, r0 - 16, -Math.PI / 2, 0); g.stroke();
+  g.fillStyle = pal.a;
+  g.beginPath(); g.arc(46, H - 54, 30, 0, TAU); g.fill();
+  g.fillStyle = pal.ink; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `800 ${tr.fmt.length > 4 ? 17 : 21}px ${HELV}`;
+  g.fillText(tr.fmt, 46, H - 54);
+
+  if (!o.text) return;
+  // cream band across the top with the name, title and album
+  g.fillStyle = pal.paper;
+  g.fillRect(0, 56, W, 150);
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = pal.ink;
+  const fit = (txt, weight, size, maxW) => { g.font = `${weight} ${size}px ${HELV}`; while (g.measureText(txt).width > maxW && size > 12) { size -= 2; g.font = `${weight} ${size}px ${HELV}`; } };
+  g.font = `500 22px ${HELV}`; g.fillText(tr.codec, 40, 92);
+  const name = tr.name.toUpperCase();
+  fit(name, 800, 58, W - 80); g.fillText(name, 40, 152);
+  g.font = `500 22px ${HELV}`; g.fillText(`${tr.title}${tr.album ? ' · ' + tr.album : ''}`.slice(0, 44), 40, 188);
+  g.textAlign = 'right'; g.fillText(tr.dur, W - 40, 92);
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0), level: 0, bal: 0 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.1 : +$('lvl').value * 2);
+  const balance = auto ? Math.sin(clock * 0.35) : +$('bal').value;
+  const o = { dt, bands, balance, text: $('text').checked };
+  cards.forEach((k) => draw(k.c, k.pal, k.st, clock, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+requestAnimationFrame(frame);
+</script>
