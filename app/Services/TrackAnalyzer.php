@@ -54,14 +54,9 @@ class TrackAnalyzer
         ]));
     }
 
-    /** Measure and save. Throws when the file cannot be decoded. */
-    public function analyze(Track $track): Track
+    /** The measurements of one file, as bin/measure.mjs prints them. `$path` must be a file the caller has already checked. */
+    public function measure(string $path): array
     {
-        $path = $track->user->store()->fetch($track->path);
-        if ($path === null) {
-            throw new RuntimeException('File not found in the library');
-        }
-
         $process = new Process([
             $this->node(), base_path('bin/measure.mjs'),
             '--ffmpeg', $this->ffmpeg(),
@@ -75,6 +70,19 @@ class TrackAnalyzer
         if (! $process->isSuccessful() || ! is_array($result)) {
             throw new RuntimeException(trim($process->getErrorOutput()) ?: 'Analysis failed');
         }
+
+        return $result;
+    }
+
+    /** Measure and save. Throws when the file cannot be decoded. */
+    public function analyze(Track $track): Track
+    {
+        $path = $track->user->store()->fetch($track->path);
+        if ($path === null) {
+            throw new RuntimeException('File not found in the library');
+        }
+
+        $result = $this->measure($path);
 
         $track->forceFill([
             'analysis' => $result,

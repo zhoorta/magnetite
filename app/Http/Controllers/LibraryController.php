@@ -10,19 +10,31 @@ use App\Models\Track;
 use App\Services\AlbumIdentifier;
 use App\Services\FerriteStore;
 use App\Services\TrackAnalyzer;
+use App\Support\DemoTracks;
 use App\Support\FileTruth;
 use App\Support\FolderTree;
 use App\Support\Sources;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class LibraryController extends Controller
 {
-    /** The signed-in user's own albums and tracks, and nobody else's; shared music from others is on /shared. */
-    public function library(Request $request, AlbumIdentifier $identifier): View|JsonResponse
+    /**
+     * The signed-in user's own albums and tracks, and nobody else's; shared music from others is on /shared.
+     * A visitor who is not signed in gets the demo tracks in the same page, read only; without demo files, the sign-in page.
+     */
+    public function library(Request $request, AlbumIdentifier $identifier): View|JsonResponse|RedirectResponse
     {
-        $data = $this->pageData($request, $identifier);
+        if (! $request->user()) {
+            $data = DemoTracks::library();
+            if ($data['albums'] === [] && $data['loose'] === []) {
+                return redirect()->guest(route('login'));
+            }
+        } else {
+            $data = $this->pageData($request, $identifier);
+        }
 
         return $request->wantsJson() ? response()->json($data) : view('pages.library', ['data' => $data]);
     }

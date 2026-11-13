@@ -3,6 +3,7 @@ import { Livewire } from '../../../../vendor/livewire/livewire/dist/livewire.esm
 import { send } from '../http';
 import { actionFor, isTextTarget } from './keymap';
 import { complete, parse, pick } from './commands';
+import { DEMO_NOTE, demoAllows, demoAllowsCommand, demoHints } from './demo';
 import { SHUFFLES, REPEATS } from '../order';
 import { folderStats, folderTiles, summaryLine } from './folder';
 import { findings, hasProblem } from './info';
@@ -46,6 +47,7 @@ export default function dense(data) {
         fileDrag: false, // files are being dragged over the page
         libraryStale: false, // something changed the library from another source (a copy): reload it when it is shown again
         trashOnly: data.trash_only,
+        demo: !!data.demo, // the demo library of a visitor who is not signed in: read only (demo.js)
 
         rows: [],
         openIds: [], // ids of the open folders
@@ -134,6 +136,8 @@ export default function dense(data) {
             this.layoutObserver.observe(this.libraryRoot);
             window.addEventListener('resize', this.measure);
             this.afterUpdate(() => this.measure(), 100);
+
+            if (this.demo) return; // nothing of a visitor's is being analysed or scanned
 
             // An analysis or a scan started before this page loaded carries on showing its progress.
             fetch('/analysis', { headers: { Accept: 'application/json' } }).then((r) => (r.ok ? r.json() : null)).then((a) => {
@@ -275,6 +279,7 @@ export default function dense(data) {
         /** The key hints for what has the cursor: the keys that do something here, not all of them (`?` lists everything). */
         get hintList() {
             if (!this.$store.ui.hints) return [['?', 'keys']];
+            if (this.demo) return demoHints(this.pane, [[':', 'command'], ['?', 'keys']]);
             const common = [['w', 'source'], ['z', this.flat ? 'folders' : 'flat'], ['/', 'search'], [':', 'command'], ['?', 'keys']];
             if (this.source !== 'library' && this.pane === 'grid') return [['h j k l', 'move'], ['Enter', 'open'], ['⌫', 'up'], ['Tab', 'tree'], ...common];
             if (this.source === 'shared') return this.pane === 'tracks'
@@ -353,6 +358,7 @@ export default function dense(data) {
         /** What the selection is, for the actions menu: 'folder', 'album', 'loose' (tracks without an album), 'track' (in the tracks pane), or null. */
         get ctx() {
             if (this.mode !== 'tree') return null;
+            if (this.demo) return this.pane === 'tracks' && this.tracks[this.tsel] ? 'ro-track' : this.row ? 'ro-' + this.row.kind : null; // only Play is offered
             if (this.source !== 'library') {
                 // the other sources have their own entries in the menu (library-actions.blade.php)
                 const pl = this.source === 'playlists';
@@ -544,6 +550,7 @@ export default function dense(data) {
         },
 
         run(action) {
+            if (this.demo && !demoAllows(action)) return this.say(DEMO_NOTE);
             if (action === 'upload') return this.openUpload();
             if (action === 'source') return this.cycleSource(1);
             if (action === 'source-back') return this.cycleSource(-1);
@@ -704,6 +711,7 @@ export default function dense(data) {
         },
 
         toggleSelectMode() {
+            if (this.demo) return this.say(DEMO_NOTE);
             this.selectMode = !this.selectMode;
             this.say(this.selectMode ? 'Select mode: tap albums to mark them' : 'Select mode off');
             this.focusRoot();
@@ -721,7 +729,7 @@ export default function dense(data) {
             this.gridLimit = 60;
             const r = this.rows[i];
             if (r.kind === 'folder') this.setOpen(r.id, !this.openIds.includes(r.id));
-            else if (r.kind === 'album' && (this.selectMode || ev.ctrlKey || ev.metaKey)) {
+            else if (r.kind === 'album' && !this.demo && (this.selectMode || ev.ctrlKey || ev.metaKey)) {
                 this.marks = this.isMarked(r.id) ? this.marks.filter((id) => id !== r.id) : [...this.marks, r.id];
             }
         },
@@ -734,7 +742,7 @@ export default function dense(data) {
         },
 
         holdStart(ev, i) {
-            if (ev.pointerType === 'mouse' || this.rows[i].kind !== 'album') return;
+            if (this.demo || ev.pointerType === 'mouse' || this.rows[i].kind !== 'album') return;
             clearTimeout(this.holdTimer);
             this.holdTimer = setTimeout(() => {
                 this.selectMode = true;
@@ -797,6 +805,7 @@ export default function dense(data) {
         /** The albums to move (marked, else the selected one) or the selected folder. */
         /** U / :upload: the upload panel as a dialog (the page /upload is the same panel). */
         openUpload() {
+            if (this.demo) return this.say(DEMO_NOTE);
             this.uploadOpen = true;
             this.$store.uploads.watch();
             this.$nextTick(() => this.libraryRoot.querySelector('[data-upload-panel]')?.focus());
@@ -809,7 +818,7 @@ export default function dense(data) {
 
         /** Zips dropped anywhere on the page start uploading at once (a drag of an album inside the library has no files in it). */
         isFileDrag(e) {
-            return [...(e.dataTransfer?.types ?? [])].includes('Files');
+            return !this.demo && [...(e.dataTransfer?.types ?? [])].includes('Files');
         },
 
         dropFiles(e) {
@@ -1190,6 +1199,7 @@ export default function dense(data) {
             const { name, arg, typed, ambiguous } = parse(line);
             if (!typed) return;
             if (!name) return this.say(ambiguous.length ? `which one: ${ambiguous.join(', ')}?` : `no such command: ${typed}`);
+            if (this.demo && !demoAllowsCommand(name)) return this.say(DEMO_NOTE);
             const player = this.$store.player;
             const ui = this.$store.ui;
             if (this.source !== 'library' && this.runSourceCommand(name, arg)) return;
@@ -1817,6 +1827,7 @@ export default function dense(data) {
         /** The long spectrum curve is not in the page data: fetch it once, when a track's measurements are opened. */
         async ensureSpectrum(t) {
             if (this.spectra[t.id]) return;
+            if (t.truth.spectrum) return (this.spectra = { ...this.spectra, [t.id]: { spectrum: t.truth.spectrum, step_hz: t.truth.step_hz } }); // the demo tracks carry it
             this.spectra = { ...this.spectra, [t.id]: { spectrum: [], step_hz: t.truth.step_hz } }; // asked once
             const r = await fetch(`/library/tracks/${t.id}/spectrum`, { headers: { Accept: 'application/json' } }).catch(() => null);
             if (r && r.ok) this.spectra = { ...this.spectra, [t.id]: await r.json() };

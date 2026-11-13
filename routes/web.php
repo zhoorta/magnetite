@@ -29,7 +29,7 @@ use App\Http\Controllers\UploadController;
 use App\Support\DemoTracks;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn () => view('pages.welcome', ['demo' => array_values(DemoTracks::available())]))->name('welcome');
+Route::get('/', fn () => view('pages.welcome', ['demo' => array_values(DemoTracks::available()), 'demoAlbums' => auth()->check() ? [] : DemoTracks::albumIds()]))->name('welcome');
 Route::get('/themes', fn () => view('pages.themes'))->name('themes');
 Route::get('/demo/{id}', DemoController::class)->where('id', '[a-z0-9-]+')->middleware('throttle:120,1')->name('demo');
 
@@ -46,9 +46,11 @@ Route::middleware('auth:web,sanctum')->group(function () {
     Route::get('/cover/{album}', CoverController::class)->whereNumber('album')->name('cover');
 });
 
-// The library, the files and the upload are only for signed-in users.
+// A visitor who is not signed in sees the demo tracks here, read only (or the sign-in page when there are none).
+Route::get('/library', [LibraryController::class, 'library'])->name('library');
+
+// The library's data, the files and the upload are only for signed-in users.
 Route::middleware('auth')->group(function () {
-    Route::get('/library', [LibraryController::class, 'library'])->name('library');
     Route::get('/shared', [LibraryController::class, 'shared'])->name('shared');
     Route::get('/sources/{name}', [LibraryController::class, 'source'])->whereIn('name', ['shared', 'playlists'])->name('sources');
     Route::get('/library/tracks/{track}/spectrum', [LibraryController::class, 'spectrum'])->whereNumber('track')->name('library.tracks.spectrum');

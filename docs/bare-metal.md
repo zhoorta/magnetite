@@ -211,7 +211,7 @@ As `magnetite`:
 
 The Android APK is not in git (`/public/downloads/*.apk` is ignored). After a release copy it by hand: `scp public/downloads/magnetite-X.Y.Z.apk server:/var/www/magnetite/app/public/downloads/`, and set `MAGNETITE_APK_VERSION=X.Y.Z` in `.env` (default in `config/magnetite.php`), then `php artisan optimize`. The start page looks for the file by that name and shows its size and SHA-256; without the file the download is hidden.
 
-The start page's demo music is not in git either (6 FLAC excerpts, about 41 MB, credits in `CREDITS.md`). Make it with `bin/prepare-demo.sh` (needs curl, ffmpeg, jq; it downloads the CC0 originals) and copy `storage/app/demo/` to the same place on the server, or set `MAGNETITE_DEMO_PATH`. Without the files the panel is hidden; `/demo/{id}` streams only the ids in `resources/demo/tracks.json`.
+The start page's demo music is not in git either (6 FLAC excerpts, about 41 MB, credits in `CREDITS.md`). Make it with `bin/prepare-demo.sh` (needs curl, ffmpeg, jq; it downloads the CC0 originals) and copy `storage/app/demo/` to the same place on the server, or set `MAGNETITE_DEMO_PATH`. Without the files the panel is hidden and `/library` asks a visitor to sign in; with them a visitor gets the demo library (read only). The measurements it shows are in git (`resources/demo/analysis.json`, rewritten by `php artisan magnetite:demo-analyze` when the excerpts change); `/demo/{id}` streams only the ids in `resources/demo/tracks.json`.
 
 Then as a sudoer: `sudo systemctl reload php8.5-fpm`. (`/etc/sudoers.d/magnetite` can allow just `magnetite ALL=(root) NOPASSWD: /bin/systemctl reload php8.5-fpm`.)
 

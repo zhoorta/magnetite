@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use App\Support\DemoTracks;
 
 beforeEach(function () {
@@ -68,4 +69,57 @@ it('keeps every track of the list credited and licensed', function () {
             ->and($t['file'])->toBe($t['id'].'.flac')
             ->and(file_get_contents(base_path('CREDITS.md')))->toContain($t['source_url']);
     }
+});
+
+it('sends a visitor to the sign-in page when there is no demo music', function () {
+    $this->get(route('library'))->assertRedirect(route('login'));
+});
+
+it('shows a visitor the demo tracks in the library page, read only', function () {
+    file_put_contents($this->dir.'/goldberg-aria.flac', 'fLaC');
+    file_put_contents($this->dir.'/goldberg-variatio-16.flac', 'fLaC');
+    file_put_contents($this->dir.'/achilles.flac', 'fLaC');
+
+    $this->get(route('library'))->assertOk()->assertSee('Demo library')->assertSee('Sign in');
+
+    $data = $this->getJson(route('library'))->assertOk()->json();
+
+    expect($data['demo'])->toBeTrue()
+        ->and($data['folders'])->toBe([])
+        ->and($data['albums'])->toHaveCount(1)
+        ->and($data['albums'][0]['id'])->toBe(-1)
+        ->and($data['albums'][0]['title'])->toBe('The Open Goldberg Variations')
+        ->and($data['albums'][0]['tracks'])->toHaveCount(2)
+        ->and($data['loose'])->toHaveCount(1); // Achilles has no album
+
+    $track = $data['albums'][0]['tracks'][0];
+    expect($track['id'])->toBe('goldberg-aria')
+        ->and($track['album_id'])->toBe(-1)
+        ->and($track['demo'])->toBeTrue()
+        ->and($track['url'])->toBe(route('demo', 'goldberg-aria'))
+        ->and($track['truth']['analyzed'])->toBeTrue()
+        ->and($track['truth']['dr'])->toBe(12)
+        ->and($track['truth']['spectrum'])->not->toBeEmpty()
+        ->and($track['truth']['spectrum_points'])->toBe(count($track['truth']['spectrum']));
+});
+
+it('keeps everything else of the library for signed-in people', function () {
+    file_put_contents($this->dir.'/achilles.flac', 'fLaC');
+
+    $this->get(route('shared'))->assertRedirect(route('login'));
+    $this->get(route('sources', 'playlists'))->assertRedirect(route('login'));
+    $this->get(route('search', ['q' => 'achilles']))->assertRedirect(route('login'));
+    $this->get(route('upload'))->assertRedirect(route('login'));
+    $this->post(route('library.folders.store'), ['name' => 'Jazz'])->assertRedirect(route('login'));
+    $this->put(route('settings.ui'), ['info' => 1])->assertRedirect(route('login'));
+});
+
+it('shows a signed-in person their own library, not the demo', function () {
+    file_put_contents($this->dir.'/achilles.flac', 'fLaC');
+
+    $data = $this->actingAs(User::factory()->create())->getJson(route('library'))->assertOk()->json();
+
+    expect($data)->not->toHaveKey('demo')
+        ->and($data['albums'])->toBe([])
+        ->and($data['loose'])->toBe([]);
 });

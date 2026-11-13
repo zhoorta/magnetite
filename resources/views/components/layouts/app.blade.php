@@ -39,6 +39,9 @@
                         <button type="submit" class="text-muted hover:text-accent">Sign out</button>
                     </form>
                 @endauth
+                @guest
+                    <a href="{{ route('login') }}" class="text-muted hover:text-accent">Sign in</a>
+                @endguest
             </div>
         </nav>
     </header>

@@ -18,6 +18,6 @@
         <x-menu.item danger x-show="ctx === 'pl-mine'" @click="deletePlaylist()">Delete playlist <span class="ml-auto text-xs opacity-60">d</span></x-menu.item>
         <x-menu.item danger x-show="ctx === 'pl-track'" @click="removeFromPlaylist(); focusRoot()">Remove from playlist <span class="ml-auto text-xs opacity-60">d</span></x-menu.item>
         <hr class="my-1 border-white/10" x-show="ctx !== null">
-        <x-menu.item x-show="source === 'library' && ctx !== 'track'" @click="newFolder()">New folder <span class="ml-auto text-xs opacity-60">N</span></x-menu.item>
+        <x-menu.item x-show="source === 'library' && ! demo && ctx !== 'track'" @click="newFolder()">New folder <span class="ml-auto text-xs opacity-60">N</span></x-menu.item>
         <x-menu.item x-show="ctx === 'folder'" @click="renameFolder()">Rename folder <span class="ml-auto text-xs opacity-60">r</span></x-menu.item>
         <x-menu.item danger x-show="ctx === 'album' || ctx === 'folder' || ctx === 'track'" @click="deleteSelected()">Delete <span class="ml-auto text-xs opacity-60">d</span></x-menu.item>

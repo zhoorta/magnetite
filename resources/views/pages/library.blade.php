@@ -2,7 +2,7 @@
 @php
     $btn = 'shrink-0 rounded-theme border border-white/15 px-2.5 py-0.5 text-sm hover:border-accent hover:text-accent disabled:opacity-40 disabled:hover:border-white/15 disabled:hover:text-text pointer-coarse:min-h-11 pointer-coarse:px-3.5';
 @endphp
-<x-layouts.app :title="($data['source'] ?? 'library') === 'shared' ? 'Shared · Magnetite' : (($data['source'] ?? 'library') === 'playlists' ? 'Playlists · Magnetite' : 'Library · Magnetite')" wide="full">
+<x-layouts.app :title="($data['demo'] ?? false) ? 'Demo library · Magnetite' : (($data['source'] ?? 'library') === 'shared' ? 'Shared · Magnetite' : (($data['source'] ?? 'library') === 'playlists' ? 'Playlists · Magnetite' : 'Library · Magnetite'))" wide="full">
     {{-- The page data as JSON in a script block: in an attribute every quote would be escaped and the page twice as big. --}}
     <script type="application/json" id="library-data">{!! json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) !!}</script>
     <div x-data="dense(JSON.parse(document.getElementById('library-data').textContent))" tabindex="0" @keydown="onKey($event)" role="application" aria-label="Library"
@@ -14,7 +14,7 @@
         {{-- The toolbar: what applies to the selection on the left (the rest is in the ⋯ menu, which also opens on a right-click), the views on the right as small icons. --}}
         <div class="mb-3 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Actions on the selection">
             {{-- The sources: your library, what everybody shares, playlists (w cycles them). --}}
-            <div x-show="mode === 'tree'" class="flex shrink-0 rounded-theme border border-white/15 p-px" role="group" aria-label="Source">
+            <div x-show="mode === 'tree' && ! demo" class="flex shrink-0 rounded-theme border border-white/15 p-px" role="group" aria-label="Source">
                 <template x-for="name in ['library', 'shared', 'playlists']" :key="name">
                     <button type="button" class="inline-flex items-center rounded-theme px-2 py-1 text-sm pointer-coarse:min-h-11 pointer-coarse:px-3" :class="source === name ? 'bg-accent text-bg' : 'text-muted hover:text-accent'" :aria-pressed="source === name"
                             :aria-label="sourceLabels[name]" :title="sourceLabels[name] + (name === 'library' ? ' (your own music)' : name === 'shared' ? ' (shared by everyone on this server)' : ' (yours and the shared ones)') + ' (w cycles)'" @click="setSource(name)">
@@ -32,24 +32,26 @@
                     @click="$store.player.playing || playHere ? $store.player.toggle() : (pane === 'tracks' ? playTrack(tsel) : playTrack(0, false)); focusRoot()">
                 <x-icon name="play" x-show="! $store.player.playing" /><x-icon name="pause" x-show="$store.player.playing" x-cloak />
             </button>
-            <button type="button" x-show="mode === 'tree' && source === 'library'" class="{{ $btn }} inline-flex items-center gap-1.5 max-md:hidden" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x), again to finish" aria-label="Select" @click="toggleSelectMode()">
+            <button type="button" x-show="mode === 'tree' && source === 'library' && ! demo" class=""{{ $btn }} inline-flex items-center gap-1.5 max-md:hidden" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x), again to finish" aria-label="Select" @click="toggleSelectMode()">
                 <x-icon name="select" /><span x-show="marks.length" x-cloak x-text="marks.length"></span>
             </button>
             <button type="button" x-show="mode === 'tree' && (ctx === 'album' || ctx === 'folder')" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Move to a folder (v)" aria-label="Move" @click="openMover()"><x-icon name="move" /></button>
+            @auth
             <div x-show="mode === 'tree' && playlistItem" x-cloak class="flex items-center rounded-theme border border-white/15 px-1 pointer-coarse:min-h-11"><x-playlist-menu item="playlistItem" label="Add to a playlist" /></div>
+            @endauth
 
             {{-- Everything else, for what is selected: the key is shown beside each. Right-click a row opens it too. --}}
             <x-menu label="Actions" width="w-60">
                 <x-slot:trigger>
-                    <button type="button" x-show="mode === 'tree'" data-actions x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" class="{{ $btn }} inline-flex items-center gap-1.5" title="More actions for the selection"><x-icon name="dots" /><span class="sr-only">Actions</span></button>
+                    <button type="button" x-show="mode === 'tree' && ! demo" data-actions x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" class="{{ $btn }} inline-flex items-center gap-1.5" title="More actions for the selection"><x-icon name="dots" /><span class="sr-only">Actions</span></button>
                 </x-slot:trigger>
                 @include('pages.partials.library-actions')
             </x-menu>
 
             {{-- The views and filters, as icons (the name and the key are in the tooltip). --}}
             <div class="ml-auto flex flex-wrap items-center gap-1.5">
-                <button type="button" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="($store.uploads.active || uploadOpen) && '!border-accent !text-accent'" title="Upload zips (U), or drop them on this page" aria-label="Upload" @click="uploadOpen ? closeUpload() : openUpload()"><x-icon name="upload" /></button>
-                <button type="button" class="{{ $btn }} inline-flex items-center" :class="mode === 'search' && '!border-accent !text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" aria-label="Search" @click="mode === 'search' ? closeView() : openSearch()"><x-icon name="search" /></button>
+                <button type="button" x-show="! demo" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="($store.uploads.active || uploadOpen) && '!border-accent !text-accent'" title="Upload zips (U), or drop them on this page" aria-label="Upload" @click="uploadOpen ? closeUpload() : openUpload()"><x-icon name="upload" /></button>
+                <button type="button" x-show="! demo" class="{{ $btn }} inline-flex items-center" :class="mode === 'search' && '!border-accent !text-accent'" title="Search your music and what is shared: words, year:1983 dr:<8 codec:flac artist: album: (/)" aria-label="Search" @click="mode === 'search' ? closeView() : openSearch()"><x-icon name="search" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="mode === 'truth' && ! onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && ! onlyProblems" title="Truth view: every file, the worst first (:truth)" aria-label="Truth view" @click="mode === 'truth' && ! onlyProblems ? closeView() : openTruth(false); focusRoot()"><x-icon name="truth" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center max-md:hidden" :class="mode === 'truth' && onlyProblems && '!border-accent !text-accent'" :aria-pressed="mode === 'truth' && onlyProblems" title="Findings view: only the files with a finding (o)" aria-label="Findings view" @click="mode === 'truth' && onlyProblems ? closeView() : openTruth(true); focusRoot()"><x-icon name="warn" /></button>
                 <button type="button" class="{{ $btn }} inline-flex items-center gap-1.5 max-md:hidden" :class="$store.ui.info > 0 && 'text-accent'" title="How much to show about the files: all, DR only, nothing (I)" :aria-label="$store.ui.label()" @click="$store.ui.cycleInfo(); focusRoot()"><x-icon name="info" /><span class="hidden text-xs sm:inline" x-text="['off', 'DR', 'all'][$store.ui.info]"></span></button>
@@ -61,11 +63,11 @@
                             <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" class="{{ $btn }} inline-flex items-center" title="Views and tools" aria-label="Views and tools"><x-icon name="menu" /></button>
                         </x-slot:trigger>
                         <x-menu.item x-show="mode === 'tree' && source !== 'playlists'" @click="toggleFlat(); focusRoot()"><span x-text="flat ? 'Folders' : 'Flat list (no folders)'"></span> <span class="ml-auto text-xs opacity-60">z</span></x-menu.item>
-                        <x-menu.item x-show="mode === 'tree' && source === 'library'" @click="toggleSelectMode()"><span x-text="selectMode ? 'Finish selecting' : 'Select albums'"></span><span x-show="marks.length" x-cloak x-text="'(' + marks.length + ')'"></span> <span class="ml-auto text-xs opacity-60">x</span></x-menu.item>
+                        <x-menu.item x-show="mode === 'tree' && source === 'library' && ! demo" @click="toggleSelectMode()"><span x-text="selectMode ? 'Finish selecting' : 'Select albums'"></span><span x-show="marks.length" x-cloak x-text="'(' + marks.length + ')'"></span> <span class="ml-auto text-xs opacity-60">x</span></x-menu.item>
                         <x-menu.item @click="mode === 'truth' && ! onlyProblems ? closeView() : openTruth(false); focusRoot()">Truth view <span class="ml-auto text-xs opacity-60">:truth</span></x-menu.item>
                         <x-menu.item @click="mode === 'truth' && onlyProblems ? closeView() : openTruth(true); focusRoot()">Findings view <span class="ml-auto text-xs opacity-60">o</span></x-menu.item>
                         <x-menu.item @click="$store.ui.cycleInfo(); focusRoot()">Info: <span x-text="['off', 'DR only', 'all'][$store.ui.info]"></span> <span class="ml-auto text-xs opacity-60">I</span></x-menu.item>
-                        <x-menu.item @click="uploadOpen ? closeUpload() : openUpload()">Upload <span class="ml-auto text-xs opacity-60">U</span></x-menu.item>
+                        <x-menu.item x-show="! demo" @click="uploadOpen ? closeUpload() : openUpload()">Upload <span class="ml-auto text-xs opacity-60">U</span></x-menu.item>
                         <x-menu.item @click="cmd ? closeCmd() : openCmd()">Command line <span class="ml-auto text-xs opacity-60">:</span></x-menu.item>
                     </x-menu>
                 </div>
@@ -78,7 +80,7 @@
             {{-- Folders and albums --}}
             <div class="relative rounded-theme border pt-3" :class="mode !== 'tree' || pane === 'tree' ? 'border-accent' : 'border-white/15'">
                 <span class="absolute -top-2.5 left-3 max-w-[90%] truncate bg-bg px-1.5" :class="mode !== 'tree' || pane === 'tree' ? 'text-accent' : 'text-muted'"
-                      x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? (onlyProblems ? 'Findings · ' : 'Truth · ') + truth.length + ' files · ' + truthSort : sourceLabels[source] + ' · ' + albums.length + (source === 'playlists' ? (albums.length === 1 ? ' playlist' : ' playlists') : albums.length === 1 ? ' album' : ' albums')"></span>
+                      x-text="mode === 'search' ? 'Search' + (search.q.trim() ? ' · ' + searchList.length + (search.more.albums || search.more.tracks ? '+' : '') + ' found' : '') : mode === 'truth' ? (onlyProblems ? 'Findings · ' : 'Truth · ') + truth.length + ' files · ' + truthSort : (demo ? 'Demo' : sourceLabels[source]) + ' · ' + albums.length + (source === 'playlists' ? (albums.length === 1 ? ' playlist' : ' playlists') : albums.length === 1 ? ' album' : ' albums')"></span>
 
                 {{-- The search box is here, at the top of the results, on every screen size (easier to see than a bar at the bottom, and on a phone the keyboard would cover the list). It is always in the page (hidden from sight while closed) so a tap on the search button can focus it at once, which is what makes Safari open the keyboard. --}}
                 <div :class="mode === 'search' ? 'mx-2 mb-1 mt-1 flex items-center gap-2 border-b border-accent2 pb-1.5 text-sm' : 'sr-only'">
@@ -131,7 +133,7 @@
                         <li role="treeitem" :id="'row-' + r.key" :aria-selected="i === cur" :aria-level="r.depth + 1" :aria-expanded="r.kind === 'folder' ? openIds.includes(r.id) : null" :data-selected="i === cur"
                             class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                             :class="[i === cur ? (pane === 'tree' ? 'bg-accent text-bg' : 'bg-white/15') : 'hover:bg-white/5', dropOn === i && 'outline-dashed outline-1 -outline-offset-1 outline-accent2']"
-                            :draggable="r.kind === 'album'"
+                            :draggable="r.kind === 'album' && ! demo"
                             @click="rowClick($event, i)" @dblclick="rowDblClick(i)" @contextmenu.prevent="openContext($event, 'row', i)"
                             @pointerdown="holdStart($event, i)" @pointerup="holdEnd()" @pointercancel="holdEnd()" @pointerleave="holdEnd()"
                             @dragstart="dragStart($event, i)" @dragover="dragOver($event, i)" @dragleave="dropOn = null" @drop="drop($event, i)">
@@ -185,7 +187,7 @@
                     </div>
 
                     {{-- Tracks without an album tag: what the folder and file names and MusicBrainz suggest. Nothing changes until "Use this". --}}
-                    <div x-show="shown?.loose && source === 'library'" x-cloak class="max-h-56 shrink-0 overflow-y-auto px-2 pb-2 text-xs">
+                    <div x-show="shown?.loose && source === 'library' && ! demo" x-cloak class="max-h-56 shrink-0 overflow-y-auto px-2 pb-2 text-xs">
                         <div class="mb-1 flex items-center gap-2">
                             <button type="button" x-show="toIdentify > 0" class="rounded-theme border border-white/15 px-2 py-0.5 hover:border-accent hover:text-accent" :disabled="['queued', 'running'].includes(identify.state)" @click="findAlbums()" title="Look at the folders of untagged tracks: only guessed names are sent to MusicBrainz">Suggest albums (i)</button>
                             <span class="text-muted" x-text="identifyNote"></span>
@@ -249,7 +251,7 @@
                                 class="flex cursor-pointer touch-manipulation select-none items-baseline gap-2 px-2 pointer-coarse:min-h-11 pointer-coarse:items-center"
                                 :class="[pane === 'tracks' && i === tsel ? 'bg-accent text-bg' : 'hover:bg-white/5', t.open === false && 'opacity-40']"
                                 @click="trackClick(i, $event)" @dblclick="playTrack(i)" @contextmenu.prevent="openContext($event, 'track', i)">
-                                <span x-show="shown?.loose && source === 'library'" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
+                                <span x-show="shown?.loose && source === 'library' && ! demo" x-cloak class="w-3 shrink-0 text-center" :class="pane === 'tracks' && i === tsel ? '' : 'text-accent2'" x-text="trackMarks.includes(t.id) ? '●' : ''"></span>
                                 <span x-show="canReorder" x-cloak data-handle class="w-3 shrink-0 cursor-grab touch-none select-none text-center opacity-60" title="Drag to reorder (Shift+J, Shift+K)" aria-hidden="true">⠿</span>
                                 {{-- the number, or on the loaded track the play (playing) or pause (paused) icon, both amber: one column, flush left --}}
                                 <span class="inline-flex w-5 shrink-0 items-center text-xs tabular-nums" :class="$store.player.current?.id === t.id ? (pane === 'tracks' && i === tsel ? '' : 'text-amber-500') : 'opacity-70'"
@@ -334,8 +336,8 @@
             <span class="max-md:hidden"><kbd class="text-accent2">Enter</kbd> play from here</span>
             <span class="max-md:hidden"><kbd class="text-accent2">s</kbd> order</span>
             <span class="max-md:hidden"><kbd class="text-accent2">o</kbd> <span x-text="onlyProblems ? 'every file' : 'only findings'"></span></span>
-            <span class="max-md:hidden"><kbd class="text-accent2">A</kbd> analyse</span>
-            <span class="max-md:hidden"><kbd class="text-accent2">/</kbd> search</span>
+            <span x-show="! demo" class="max-md:hidden"><kbd class="text-accent2">A</kbd> analyse</span>
+            <span x-show="! demo" class="max-md:hidden"><kbd class="text-accent2">/</kbd> search</span>
             <span class="max-md:hidden"><kbd class="text-accent2">Esc</kbd> back</span>
 <button type="button" x-show="$store.uploads.note" x-cloak class="shrink-0 text-accent hover:underline" title="Upload (U)" @click="openUpload()" x-text="$store.uploads.note"></button>
                         <span class="ml-auto min-w-0 truncate text-accent2" aria-live="polite" x-text="progress || msg"></span>
@@ -348,6 +350,7 @@
         </div>
         </div>
 
+        @auth
         {{-- Upload: the same panel as the page /upload. Esc closes it; an upload goes on in the background and shows in the status line. --}}
         <div x-show="uploadOpen" x-cloak x-transition.opacity @keydown.escape.window="uploadOpen && ! $store.dialog.open && closeUpload()"
              class="fixed inset-0 z-30 flex items-start justify-center bg-black/60 p-4 pt-24" @click.self="closeUpload()" role="dialog" aria-modal="true" aria-label="Upload">
@@ -355,6 +358,7 @@
                 <button type="button" class="text-accent underline" @click="closeUpload()">Close</button>
             </x-upload-panel>
         </div>
+        @endauth
         <div x-show="fileDrag" x-cloak class="pointer-events-none fixed inset-3 z-40 flex items-center justify-center rounded-theme border-2 border-dashed border-accent bg-bg/80 text-lg text-accent">Drop zips to upload them</div>
 
         {{-- The right-click menu: the same actions as the ⋯ button, at the pointer. Esc, a click elsewhere or a choice closes it. --}}
@@ -525,5 +529,7 @@
         </div>
     </div>
 
-    @include('pages.partials.playlist-picker')
+    @auth
+        @include('pages.partials.playlist-picker')
+    @endauth
 </x-layouts.app>

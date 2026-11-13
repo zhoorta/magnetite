@@ -147,3 +147,12 @@ No feature flag and no second layout: the dense view is built straight into `/li
 ## Upload
 
 `U` (also `:upload`, the upload icon in the toolbar, and the "Upload a zip" link of an empty library) opens the upload panel as a dialog; the page `/upload` shows the same panel (`components/upload-panel.blade.php`). Drop zips anywhere on the library and they start at once. The upload and the scan that follows live in the `uploads` store (`uploads.js`), so they go on while you browse; the status line at the bottom shows them (`Uploading 45%`, `Scanning… 120 files`, `Library updated: 7 new`), and when the scan finishes the library reloads in place. In the panel: `c` choose, `Enter` upload, `x` clear, `Esc` close.
+
+## Demo library
+
+A visitor who is not signed in gets the same page on the demo tracks (`DemoTracks::library()`), when their files are on the server; without them `/library` goes to the sign-in page. It is read only:
+
+- The data has `demo: true`, no folders, the albums of `resources/demo/tracks.json` with negative ids, and the tracks without an album as loose tracks. Each track carries its measurements and its spectrum (`resources/demo/analysis.json`, written by `php artisan magnetite:demo-analyze`), so the measurements pane, the Truth view and the Findings view work without a request.
+- Moving, playing, order, flat list, the views, the info level and the command line's view and player commands work. Everything else answers "Demo library: sign in to do that": the allow lists are in `dense/demo.js`, checked in `run()` and `runCmd()`.
+- The view hides the source switch, Select, Actions, Upload, Search and the playlist menu; the right-click menu only offers Play. The upload dialog and the playlist picker are not in the page.
+- Nothing is saved: demo tracks are never kept in the saved queue, and the settings requests are only sent for a signed-in person.
