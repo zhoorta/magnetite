@@ -137,5 +137,169 @@
                 "params": {}
             }
         ]
+    },
+    {
+        "id": "night",
+        "name": "Night",
+        "colors": {
+            "bg": "#16181d",
+            "surface": "#1f2229",
+            "text": "#d8d8d8",
+            "muted": "#8a8f98",
+            "accent": "#4ab3c4",
+            "accent2": "#8a7bea"
+        },
+        "radius": "0.5rem",
+        "font": "'Inter', ui-sans-serif, system-ui, sans-serif",
+        "visualizers": [
+            {
+                "id": "poster-lens",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-warp",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-lenses",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-facets",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-arches",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-fan",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-overcome",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-pillars",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-dials",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-columns",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-slides",
+                "params": {
+                    "theme": 2
+                }
+            }
+        ]
+    },
+    {
+        "id": "cream-orange",
+        "name": "Cream & orange",
+        "colors": {
+            "bg": "#f6efdc",
+            "surface": "#ece3cb",
+            "text": "#1a1a1a",
+            "muted": "#6b6454",
+            "accent": "#e8581f",
+            "accent2": "#b5321a"
+        },
+        "radius": "0.5rem",
+        "font": "'Inter', ui-sans-serif, system-ui, sans-serif",
+        "visualizers": [
+            {
+                "id": "poster-lens",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-warp",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-lenses",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-facets",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-arches",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-fan",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-overcome",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-pillars",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-dials",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-columns",
+                "params": {
+                    "theme": 2
+                }
+            },
+            {
+                "id": "poster-slides",
+                "params": {
+                    "theme": 2
+                }
+            }
+        ]
     }
 ]
