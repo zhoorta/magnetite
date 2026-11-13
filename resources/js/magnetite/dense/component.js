@@ -173,7 +173,7 @@ export default function dense(data) {
         },
 
         toggleFlat() {
-            if (this.source === 'playlists') return this.say('Playlists are lists already');
+            if (this.source === 'playlists') return this.say('Playlists have no folders');
             const id = this.row?.kind === 'album' ? this.row.id : null;
             this.$store.ui.toggleFlat();
             this.rebuild();

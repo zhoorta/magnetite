@@ -4,8 +4,8 @@
         <section aria-label="Themes">
             <h1 class="mb-1 text-2xl font-semibold">Themes</h1>
             <p class="mb-4 max-w-3xl text-sm text-muted">
-                A theme is one JSON object: palette, radius, font and optionally a look for some of the meters. Which meters show is your own choice, saved with your account.
-                Themes you edit or import are kept in this browser.
+                A theme is one JSON object with the palette, corner radius, font and, optionally, settings for some of the meters.
+                The meters that show are chosen per account and are not part of a theme. Themes you edit or import are kept in this browser.
             </p>
             <div class="flex gap-3 overflow-x-auto pb-2" role="list">
                 <template x-for="t in $store.player.themes" :key="t.id">

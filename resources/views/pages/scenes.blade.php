@@ -3,7 +3,7 @@
         <section aria-label="Your scenes">
             <h1 class="mb-1 text-2xl font-semibold">Scenes</h1>
             <p class="mb-4 max-w-3xl text-sm text-muted">
-                Any picture can be a meter. The bright shapes in it light up with the music: the biggest with the kick, the others one band each, bass on the left.
+                A picture can be used as a meter. Its bright shapes light up with the music: the biggest with the kick, the others one band each, bass on the left.
                 Pictures are private to your account and never shared.
             </p>
             <p x-show="store.error" x-cloak class="mb-3 text-sm text-red-400" x-text="store.error" role="alert"></p>

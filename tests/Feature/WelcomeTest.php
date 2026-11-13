@@ -3,8 +3,8 @@
 it('shows the landing page', function () {
     $this->get(route('welcome'))
         ->assertOk()
-        ->assertSee('The look is', false)
-        ->assertSee('A theme is one file');
+        ->assertSee('A music player with', false)
+        ->assertSee('A theme is a JSON file');
 });
 
 it('carries a description and share metadata', function () {

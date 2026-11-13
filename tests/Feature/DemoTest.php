@@ -44,13 +44,13 @@ it('answers 404 for an id that is not in the list, a missing file or a path', fu
 });
 
 it('shows the demo panel with the credits only when there is a file to play', function () {
-    $this->get(route('welcome'))->assertOk()->assertDontSee('Try it with free music');
+    $this->get(route('welcome'))->assertOk()->assertDontSee('Demo tracks');
 
     file_put_contents($this->dir.'/achilles.flac', 'fLaC');
 
     $this->get(route('welcome'))
         ->assertOk()
-        ->assertSee('Try it with free music')
+        ->assertSee('Demo tracks')
         ->assertSee('Achilles')
         ->assertSee('CC0 1.0')
         ->assertSee('https://opengameart.org/content/achilles', false)

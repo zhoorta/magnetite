@@ -1,35 +1,42 @@
 # Magnetite
 
-A music player for your own server where the look is the product: a persistent player, live meters that measure properly, a keyboard-first library, and themes that are one small JSON file. A personal project by the maker of Ferrite.
+Magnetite is a self-hosted music player for the browser. It plays the files stored on the server it is installed on, shows loudness meters, analyses every file, and restyles the whole interface from a small JSON theme. A personal project by the author of Ferrite.
 
 ![The library with the Terminal theme: folders and albums, tracks with their dynamic range, and the player with two meters](public/screenshots/library.png)
 
 ## What it does
 
-- **Never stops playing.** The audio element and the Web Audio graph survive navigation.
-- **Meters that measure.** LUFS (momentary, short-term, integrated), true peak, phase correlation and a goniometer, computed sample by sample in an AudioWorklet; nine meters, up to four at once.
-- **File truth.** `magnetite:analyze` decodes every file and says what it really is: lossy source, upsampled, clipped, very compressed, over 0 dBTP, duplicates; dynamic range per track and album.
-- **A library for the keyboard.** Two panes, a command line, an edit table, search with filters, a truth view. Everything also has a button for touch.
-- **Themes as bundles.** Palette, radius, font and a look for each meter in one JSON file, with 16 bundled open fonts to choose from; a theme studio with a live preview; pictures can drive a meter too (scenes).
-- **Your own libraries.** Each person has their own folder, can share albums, tracks and playlists, and uploads zips of audio and covers. Files can also live in a Ferrite folder.
-- **Four clients on one server:** the web app, a terminal client (`tui/`, Rust), Android phone, tablet and TV (`android/`) and iOS (`ios/`).
+- The player keeps playing across page changes; the audio element and the Web Audio graph are not recreated.
+- Nine meters, up to four at once. LUFS (momentary, short-term, integrated), true peak, phase correlation and a goniometer are computed sample by sample in an AudioWorklet.
+- `magnetite:analyze` decodes every file and reports lossy sources, upsampling, clipping, heavy compression, true peak over 0 dBTP and duplicates, with the dynamic range of each track and album.
+- The library is built for the keyboard: two panes, a command line, an edit table, search with filters and a truth view. Every key also has a button for touch.
+- A theme is one JSON file with the palette, corner radius, font and settings for each meter. The theme studio previews it live and there are 16 bundled open fonts. Pictures can drive a meter too (scenes).
+- Each person has their own library and can share albums, tracks and playlists. Zips of audio and covers can be uploaded. Files can also live in a Ferrite folder.
+- Clients: the web app, a terminal client (`tui/`, Rust), Android for phone, tablet and TV (`android/`) and iOS (`ios/`).
 
 ![The truth view: every file in one list, worst first](public/screenshots/truth.png)
 
 ## Run it
 
-Laravel 13, Livewire 4, Alpine, Tailwind 4, Vite, PHP 8.3 or newer; ffmpeg and Node for ALAC and the analysis.
+Needs PHP 8.3 or newer with Composer, and Node. ffmpeg is needed for ALAC and for the file analysis.
 
-    composer install && npm install && npm run build
-    cp .env.example .env && php artisan key:generate
-    php artisan migrate
-    php artisan magnetite:user yourname          # asks for a password
-    # put music in storage/app/music/users/yourname, or set MAGNETITE_MUSIC_PATH
-    composer dev                                  # server, queue worker and Vite
+    composer setup                                # dependencies, .env, the SQLite file, migrations, assets
+    php artisan magnetite:user yourname           # asks for a password
+    mkdir -p storage/app/music/users/yourname     # put the music here, or set MAGNETITE_MUSIC_PATH in .env
+    php artisan magnetite:scan yourname           # reads the files
+    php artisan magnetite:analyze                 # optional: dynamic range, loudness and findings for every file
+    composer dev                                  # web server, queue worker and Vite
 
-Then sign in at `http://localhost:8000`, run a scan from the library (`magnetite:scan yourname` does it from the command line) and `magnetite:analyze` for the file truth. A queue worker has to be running for scans started from the web.
+Open the address the server prints (`http://127.0.0.1:8000`, or the next free port) and sign in. A queue worker has to be running for scans started from the web; `composer dev` starts one. In a library with no music yet, the Upload page takes zips and has a "Scan now" button for files copied in by hand.
 
-To deploy: `docs/docker.md` (one image, web and worker) or `docs/bare-metal.md` (nginx, PHP-FPM, systemd, as magnetite.stackcare.pt runs).
+With Docker instead (one container, nothing to configure):
+
+    MAGNETITE_USER=yourname docker compose up -d --build
+    docker compose logs app | grep Password       # the first user's password, printed once
+
+Then open `http://localhost:8080`. `docs/docker.md` has the music folder, a chosen password, a reverse proxy and updating.
+
+To deploy: `docs/docker.md` (one image, web server and worker in one container) or `docs/bare-metal.md` (nginx, PHP-FPM, systemd, as magnetite.stackcare.pt runs).
 
 ## Develop
 
@@ -41,4 +48,4 @@ To deploy: `docs/docker.md` (one image, web and worker) or `docs/bare-metal.md` 
 
 ## License
 
-Magnetite is free software, licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (AGPL-3.0-or-later). If you run a modified version as a network service, you must offer its source to the users of that service. The whole repository is under that one licence: the server, the web app, the terminal client (`tui/`), the Android app (`android/`) and the iOS app (`ios/`).
+Magnetite is free software, licensed under the [GNU Affero General Public License v3.0 or later](LICENSE) (AGPL-3.0-or-later). A modified version run as a network service must offer its source to the users of that service. The whole repository is under that one licence: the server, the web app, the terminal client (`tui/`), the Android app (`android/`) and the iOS app (`ios/`).

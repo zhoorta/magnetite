@@ -1,19 +1,20 @@
-<x-layouts.app title="Magnetite · the look is the product" :wide="true"
-    description="A music player for your own server, where the look is the product: themes in one small file, meters that measure properly (LUFS, true peak, correlation), file truth, and a keyboard-first library. Web, terminal, Android and iOS."
+<x-layouts.app title="Magnetite · a self-hosted music player" :wide="true"
+    description="A self-hosted music player for the browser. LUFS and true-peak meters, file analysis that finds clipped and lossy files, themes as small JSON files and a library that works from the keyboard. Clients for the web, the terminal, Android and iOS."
     image="/screenshots/library.png">
     <section class="grid items-center gap-10 py-6 md:grid-cols-2 md:py-12">
         <div>
-            <p class="mb-3 text-xs uppercase tracking-[0.3em] text-muted">Music player for the web</p>
-            <h1 class="text-4xl font-semibold leading-tight md:text-5xl">The look is <span class="text-accent">the product.</span></h1>
+            <p class="mb-3 text-xs uppercase tracking-[0.3em] text-muted">Self-hosted music player</p>
+            <h1 class="text-4xl font-semibold leading-tight md:text-5xl">A music player with <span class="text-accent">proper meters.</span></h1>
             <p class="mt-5 max-w-prose text-lg text-muted">
-                A player for your own music server. It keeps playing while you move around, its meters measure properly,
-                it tells you what your files really are, and a theme is one small file: palette, font, corners and a look for each meter.
+                Magnetite is a self-hosted music player that runs in the browser. Its meters show loudness (LUFS), true peak and phase.
+                It analyses every file and flags the ones that are clipped, upsampled or from a lossy source. A theme is a small
+                JSON file that can be pasted into a chat.
             </p>
             <div class="mt-8 flex flex-wrap gap-3 text-sm">
                 <a href="{{ route('library') }}" class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Open the library</a>
                 <a href="#themes" class="rounded-theme border border-white/10 px-5 py-2 hover:text-accent">Try a theme</a>
             </div>
-            <p class="mt-6 text-xs text-muted">Press play on anything: the meters in the dock below are the real ones.</p>
+            <p class="mt-6 text-xs text-muted">The player at the bottom keeps going when another page is opened. The demo tracks are further down.</p>
         </div>
         <img src="/logo.svg" alt="Magnetite: two wide stereo meters above the name" width="512" height="512"
              class="mx-auto w-full max-w-sm border border-white/10">
@@ -23,19 +24,19 @@
         <figure>
             <img src="/screenshots/library.png" alt="The library: folders and albums on the left, the tracks with their dynamic range on the right, and the player with two meters below" width="1600" height="1000"
                  class="w-full rounded-theme border border-white/10" fetchpriority="high">
-            <figcaption class="mt-2 text-xs text-muted">The library, with the Terminal theme: two panes, a keyboard for everything, the dynamic range of every file, and the player with its meters.</figcaption>
+            <figcaption class="mt-2 text-xs text-muted">The library in the Terminal theme: folders and albums on the left, tracks with their dynamic range on the right, the player with two meters below.</figcaption>
         </figure>
     </section>
 
     <section id="clients" class="scroll-mt-8 border-t border-white/10 py-10">
-        <h2 class="text-2xl font-semibold">One server, four ways to listen</h2>
-        <p class="mt-2 max-w-prose text-muted">Every client signs in to your own Magnetite server, sees the same library and shares the list of meters you chose.</p>
+        <h2 class="text-2xl font-semibold">Clients</h2>
+        <p class="mt-2 max-w-prose text-muted">The web app, a terminal client, an Android app and an iOS app all talk to the same server. They show the same library and the same list of meters.</p>
         <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             @foreach ([
-                ['Web', 'The library, the player and the theme studio in any browser. Keyboard first, with a toolbar and touch for everything else.'],
-                ['Terminal', 'A Rust client with native decoding, all nine meters, the file-truth table, search with filters, loudness matching and A/B compare. Built from the source in tui/.'],
-                ['Android', 'Phone, tablet and TV in one app, with lock-screen controls and a D-pad layout. Download it below.'],
-                ['iOS', 'A SwiftUI app for iPhone and iPad with background playback and all the meters. Built from the source in ios/; no store release yet.'],
+                ['Web', 'The library, the player and the theme studio in a browser. Everything has a key, a toolbar button, or both.'],
+                ['Terminal', 'Written in Rust. It decodes the audio itself, so the meters read the actual samples. It has the same nine meters, the file-truth table, search with filters, loudness matching and A/B compare. Build it from tui/.'],
+                ['Android', 'One app for phones, tablets and Android TV: lock-screen controls on the phone, D-pad navigation on the TV. Download it below.'],
+                ['iOS', 'A SwiftUI app for iPhone and iPad with background playback and the same meters. Build it from ios/; it is not in the App Store.'],
             ] as [$client, $text])
                 <div class="rounded-theme border border-white/10 bg-surface p-5">
                     <h3 class="font-semibold text-accent">{{ $client }}</h3>
@@ -51,15 +52,15 @@
         <section id="android" class="scroll-mt-8 border-t border-white/10 py-10">
             <h2 class="text-2xl font-semibold">Android app <span class="ml-2 text-xs uppercase tracking-widest text-muted">beta</span></h2>
             <p class="mt-2 max-w-prose text-muted">
-                A native app for your own Magnetite server, on phone, tablet and Android TV: library, folders, playlists, search,
-                nine meters and playback with lock-screen controls. Enter your server's address when you sign in.
+                Works on phones, tablets and Android TV: library, folders, playlists, search, nine meters and lock-screen controls.
+                Sign in with the address of the server.
             </p>
             <div class="mt-5 flex flex-wrap items-center gap-4 text-sm">
                 <a href="/downloads/magnetite-{{ $apkVersion }}.apk" download class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Download the APK</a>
                 <span class="text-muted">Version {{ $apkVersion }} · {{ number_format(filesize($apk) / 1048576, 1) }} MB · Android 8 or newer</span>
             </div>
             <p class="mt-4 max-w-prose text-xs text-muted">
-                Not on the Play Store: open the file after downloading and allow installs from your browser when Android asks.
+                Not on the Play Store: open the downloaded file and allow installs from the browser when Android asks.
                 Play Protect may warn about an unknown developer; choose "Install anyway".
             </p>
             <p class="mt-2 break-all font-mono text-xs text-muted">SHA-256 {{ Cache::rememberForever('apk.sha256.'.filemtime($apk), fn () => hash_file('sha256', $apk)) }}</p>
@@ -70,16 +71,16 @@
         <figure>
             <img src="/screenshots/truth.png" alt="The truth view: every file in one list, worst first, with its dynamic range and loudness, and what is wrong with the selected file on the right" width="1600" height="1000"
                  class="w-full rounded-theme border border-white/10" loading="lazy">
-            <figcaption class="mt-2 max-w-prose text-xs text-muted">File truth: every file decoded once, the worst first. Here three files are clipped and flat-topped, which no tag would tell you.</figcaption>
+            <figcaption class="mt-2 max-w-prose text-xs text-muted">The truth view lists every file, worst first. Three of these are clipped, and nothing in their tags says so.</figcaption>
         </figure>
     </section>
 
     @if ($demo)
         <section id="demo" x-data="{ tracks: @js(array_map(fn ($t) => \App\Support\DemoTracks::toPlayer($t), $demo)) }" x-init="$store.player.preload(tracks)" class="scroll-mt-8 border-t border-white/10 py-10">
-            <h2 class="text-2xl font-semibold">Try it with free music</h2>
+            <h2 class="text-2xl font-semibold">Demo tracks</h2>
             <p class="mt-2 max-w-prose text-muted">
-                {{ count($demo) }} short excerpts of music that anyone may use (all CC0), from very quiet piano to a heavily limited master.
-                Press play, then change the theme or the meters and watch the dock: the numbers on the right are what the file truth measured.
+                {{ count($demo) }} excerpts of free music (all CC0), from a quiet piano recording to a heavily limited master.
+                Press play, then change the theme or the meters. The numbers on the right come from the file analysis.
             </p>
             <ol class="mt-6 divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
                 @foreach ($demo as $i => $t)
@@ -106,17 +107,16 @@
                 @endforeach
             </ol>
             <p class="mt-3 max-w-prose text-xs text-muted">
-                Excerpts of {{ count($demo) }} works, cut to about a minute with a short fade. The Goldberg Variations are from the Open Goldberg
-                Variations (Kimiko Ishizaka), the others from OpenGameArt; each is released under CC0, no credit is needed and we credit it anyway.
+                Each excerpt is about a minute long, with a short fade. The two Goldberg tracks are from the Open Goldberg Variations by
+                Kimiko Ishizaka; the others are from OpenGameArt. All are CC0, which needs no credit, but they are credited anyway.
             </p>
         </section>
     @endif
 
     <section id="themes" x-data class="scroll-mt-8 py-10">
-        <h2 class="text-2xl font-semibold">Pick a look, the whole page follows</h2>
+        <h2 class="text-2xl font-semibold">Themes</h2>
         <p class="mt-2 max-w-prose text-muted">
-            <span x-text="$store.player.themes.length"></span> themes ship with it. Click one and the colours, the font, the
-            corners and the meters in the dock change at once. It is remembered on this browser.
+            <span x-text="$store.player.themes.length"></span> themes come with it. Click one to change the colours, font, corners and meters at once. The choice is saved in this browser.
         </p>
         <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <template x-for="t in $store.player.themes" :key="t.id">
@@ -140,11 +140,11 @@
 
     <section class="grid gap-10 py-10 md:grid-cols-2">
         <div>
-            <h2 class="text-2xl font-semibold">A theme is one file</h2>
+            <h2 class="text-2xl font-semibold">A theme is a JSON file</h2>
             <p class="mt-2 max-w-prose text-muted">
-                Colours, radius, font and a look for each meter, down to the colour of a needle or a red zone. Small enough
-                to paste in a chat, so a look can be shared without sharing anything else. The theme studio edits a copy
-                with a live meter preview and exports or imports the JSON.
+                It holds the colours, the corner radius, the font and optional settings for each meter, such as the colour of a needle or
+                where the red zone starts. It is small enough to paste into a chat. The theme studio edits a copy with a live meter
+                preview, and exports or imports the JSON.
             </p>
         </div>
 @verbatim
@@ -170,21 +170,21 @@
     </section>
 
     <section class="py-10">
-        <h2 class="text-2xl font-semibold">What is inside</h2>
+        <h2 class="text-2xl font-semibold">What it does</h2>
         <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             @foreach ([
-                ['A library for the keyboard', 'Two panes, folders and albums on the left and tracks on the right, a command line (press :), an edit table, search with filters and a truth view that lists the worst files first. Every key has a button for touch.'],
-                ['Never stops', 'The player lives in a persistent block. Moving between pages does not recreate the audio element or the audio graph, so the music and the meters carry on.'],
-                ['Meters that measure', 'Momentary, short-term and integrated LUFS, true peak, phase correlation and a goniometer, computed sample by sample in an AudioWorklet and checked against known test tones.'],
-                ['Up to four at once', 'Show a pair of wide VU meters next to a scope, or a third-octave analyser above a spectrogram. Each one draws in its own cell, in the dock or in full screen.'],
-                ['Vintage and instrument', 'Needle dials, LED meters, a magic eye tube, wide cassette-deck meters. Each is a small module that draws on one canvas.'],
-                ['File truth', 'Decodes every file once and says what it really is: likely lossy source, upsampled, clipped, very compressed, over 0 dBTP, duplicates. Dynamic range per track and album.'],
-                ['Your files, your rules', 'Files stream with range support and strict headers, and ALAC is converted to FLAC on first play and cached. Uploads accept only audio and covers, never overwrite anything and refuse unsafe paths.'],
-                ['Your own library', 'Every person signs in to a library of their own. Tidy it with folders, edit titles, artist, year and label, add a missing cover from the web, or delete what you no longer want.'],
-                ['Names for untagged albums', 'Folders without tags get suggestions from the folder and file names, from MusicBrainz and, if you want, from an audio fingerprint. You see the proposal before anything changes.'],
-                ['Playlists and sharing', 'Private playlists with drag-and-drop ordering. Share an album, a track or a playlist with another person: they play what they are allowed to, nothing else.'],
-                ['Picks up where you left off', 'The queue, the track and the position come back after a reload, paused. Space, arrows, number keys, m for meters, f for full screen and t for the theme work from any page.'],
-                ['Pictures as meters', 'Upload a picture and let the music drive it: the kick pulses one layer, the bands move others, with hotspots you place yourself.'],
+                ['Keyboard library', 'Folders and albums on the left, tracks on the right. A command line (press :), a table to edit titles and tags, search with filters, and a truth view that lists the worst files first. Every key also has a button for touch.'],
+                ['Playback across pages', 'The player keeps running across page changes. The audio element and the audio graph are not recreated, so the music and the meters carry on.'],
+                ['Loudness meters', 'Momentary, short-term and integrated LUFS, true peak, phase correlation and a goniometer, computed sample by sample in an AudioWorklet and checked against known test tones.'],
+                ['Up to four meters', 'Put two wide VU meters next to a scope, or a third-octave analyser over a spectrogram. Each one draws in its own cell, in the player or in full screen.'],
+                ['Meter styles', 'Needle dials, LED bars, a magic-eye tube, wide cassette-deck meters and more. Each is a small module that draws on one canvas.'],
+                ['File analysis', 'Decodes every file once and reports what it finds: lossy source, upsampled, clipped, heavily compressed, true peak over 0 dBTP, duplicates. Dynamic range for each track and album.'],
+                ['How files are served', 'Files are served with range support and strict headers, and ALAC is converted to FLAC on first play and cached. Uploads accept only audio and cover images, never overwrite a file and refuse unsafe paths in a zip.'],
+                ['One library per person', 'Each person signs in to their own library. Albums can be sorted into folders, edited (title, artist, year, label), given a missing cover from the web, or deleted.'],
+                ['Untagged albums', 'For folders with no tags it suggests names from the folder and file names, from MusicBrainz and, optionally, from an audio fingerprint. The proposal is shown before anything changes.'],
+                ['Playlists and sharing', 'Playlists are private and can be reordered by dragging. An album, a track or a playlist can be shared with someone else, who can play what was shared and nothing more.'],
+                ['Resume after a reload', 'The queue, the track and the position come back after a reload, paused. Space, the arrow keys, the number keys, m for meters, f for full screen and t for the theme work on any page.'],
+                ['Pictures as meters', 'Upload a picture and the music moves it: the kick pulses one layer, the frequency bands drive others, and the hotspots can be marked by hand.'],
             ] as [$title, $text])
                 <div class="rounded-theme border border-white/10 bg-surface p-5">
                     <h3 class="font-semibold text-accent">{{ $title }}</h3>
@@ -202,11 +202,4 @@
             @endforeach
         </div>
     </section>
-
-    <footer class="mt-8 border-t border-white/10 pt-6 text-xs text-muted">
-        A personal project, made for fun by the maker of Ferrite. Free software under the
-        <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="underline hover:text-accent">GNU AGPL v3 or later</a>: if you run a
-        modified version as a service, you offer its source to the people who use it. Not a hosted service: it plays the files on your own
-        server. The Android app is a beta; there is no public release of the server yet.
-    </footer>
 </x-layouts.app>
