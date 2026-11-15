@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -37,13 +40,51 @@ fun LibraryPanes(
     val folders = remember { androidx.compose.runtime.mutableStateListOf<app.magnetite.data.Folder>() }
     var gridFolder by remember { mutableStateOf<Int?>(null) }
     val rightFocus = remember { FocusRequester() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val flatTv = tv && wide && app.flat
+    var gridActions by remember { mutableStateOf<Target?>(null) }
+
+    /** The flat view has no library screen to load the lists, so this does (and reloads them after an action). The old lists stay until the new ones are in. */
+    suspend fun reloadAll() {
+        try {
+            val f = app.api.folders()
+            val all = mutableListOf<app.magnetite.data.Album>()
+            var page = 0
+            var last = 1
+            while (page < last) {
+                val r = app.api.albums(page + 1)
+                all.addAll(r.data)
+                page = r.meta.currentPage
+                last = r.meta.lastPage
+            }
+            folders.clear(); folders.addAll(f)
+            albums.clear(); albums.addAll(all)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
+    }
+    LaunchedEffect(flatTv) { if (flatTv) reloadAll() }
+    // The flat view opens with the focus on the first cover.
+    LaunchedEffect(flatTv, albums.isNotEmpty()) {
+        if (flatTv && albums.isNotEmpty() && selected == null) { kotlinx.coroutines.delay(150); runCatching { rightFocus.requestFocus() } }
+    }
+    if (tv && wide) ActionHost(gridActions, app.api, app.player, folders.toList(), onClose = { gridActions = null }, onChanged = { scope.launch { reloadAll() } }, onEdit = onEdit)
     // A step made inside the right pane (a cover, Back) takes the focus along; one made in the tree leaves it there.
     var fromRight by remember { mutableStateOf(false) }
+    // The album last opened: the grid scrolls to its cover and focuses it when the album is closed (see FolderGrid.returnTo).
+    var lastAlbum by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(selected) { if (selected != null) lastAlbum = selected }
     LaunchedEffect(selected, gridFolder) {
-        if (tv && fromRight) { fromRight = false; kotlinx.coroutines.delay(150); runCatching { rightFocus.requestFocus() } }
+        if (tv && fromRight) {
+            fromRight = false
+            // back to the grid with the album's cover in it: the grid takes the focus itself, a group focus would land on the first cover
+            val coverShown = selected == null && albums.any { it.id == lastAlbum && (app.flat || it.folderId == gridFolder) }
+            if (!coverShown) { kotlinx.coroutines.delay(150); runCatching { rightFocus.requestFocus() } }
+        }
     }
     // Back: close the open album (to the grid), then go up a folder; at the top level the system decides.
-    BackHandler(enabled = tv && wide && (selected != null || gridFolder != null)) {
+    BackHandler(enabled = tv && wide && (selected != null || (!app.flat && gridFolder != null))) {
         fromRight = true
         if (selected != null) onSelect(null) else gridFolder = folders.firstOrNull { it.id == gridFolder }?.parentId
     }
@@ -64,25 +105,48 @@ fun LibraryPanes(
         library()
         return
     }
-    Row(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f).fillMaxHeight()) { library() }
-        Box(Modifier.weight(1.2f).fillMaxHeight().focusRequester(rightFocus).focusGroup()) {
-            if (selected == null && tv) {
-                FolderGrid(
-                    folders, albums, gridFolder, playingAlbum = app.player.albumId, flat = app.flat,
-                    onFolder = { fromRight = true; gridFolder = it },
-                    onAlbum = { fromRight = true; onSelect(it) },
+    val right: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {
+        if (selected == null && tv) {
+            FolderGrid(
+                folders, albums, gridFolder, playingAlbum = app.player.albumId, flat = app.flat, returnTo = lastAlbum, info = app.info,
+                onFolder = { fromRight = true; gridFolder = it },
+                onAlbum = { fromRight = true; onSelect(it) },
+                onActions = { gridActions = Target.OfAlbum(it) },
+                // The flat view has no tree on the left, so its actions are up here.
+                actions = if (!flatTv) ({}) else ({
+                    var menu by remember { mutableStateOf(false) }
+                    TransportButton(Icon.Search, "Search", onSearch)
+                    TransportButton(Icon.Meters, "Meters", onPickMeters)
+                    Box {
+                        TransportButton(Icon.Menu, "Menu", { menu = true })
+                        DropdownMenu(menu, { menu = false }) {
+                            DropdownMenuItem(text = { Text("View: flat") }, onClick = { menu = false; app.toggleFlat() })
+                            DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
+                            DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[app.info]) }, onClick = { app.cycleInfo() })
+                            DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })
+                            DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
+                        }
+                    }
+                }),
+            )
+        } else if (selected == null) {
+            Text("Pick an album", Modifier.align(Alignment.Center), color = Palette.Muted)
+        } else {
+            key(selected) {
+                AlbumScreen(
+                    app.api, app.player, app.info, selected, onBack = { fromRight = true; onSelect(null) }, onEdit = onEdit, embedded = true,
+                    focus = albumFocus, onSwitchPane = { runCatching { libFocus.requestFocus() } },
                 )
-            } else if (selected == null) {
-                Text("Pick an album", Modifier.align(Alignment.Center), color = Palette.Muted)
-            } else {
-                key(selected) {
-                    AlbumScreen(
-                        app.api, app.player, app.info, selected, onBack = { fromRight = true; onSelect(null) }, onEdit = onEdit, embedded = true,
-                        focus = albumFocus, onSwitchPane = { runCatching { libFocus.requestFocus() } },
-                    )
-                }
             }
         }
+    }
+    // The flat view on a TV: no list on the left, the covers (or the open album) take the whole width.
+    if (flatTv) {
+        Box(Modifier.fillMaxSize().focusRequester(rightFocus).focusGroup(), content = right)
+        return
+    }
+    Row(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxHeight()) { library() }
+        Box(Modifier.weight(1.2f).fillMaxHeight().focusRequester(rightFocus).focusGroup(), content = right)
     }
 }
