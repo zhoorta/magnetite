@@ -78,7 +78,6 @@ fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFol
                     }
                 }
             }
-            Text("${subfolders.size + here.size}", Modifier.padding(horizontal = 8.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall)
             actions()
         }
         if (subfolders.isEmpty() && here.isEmpty()) {
@@ -191,4 +190,27 @@ fun TvFolderDialogs(state: TvFolderDialog?, onState: (TvFolderDialog?) -> Unit, 
         },
         dismissButton = { androidx.compose.material3.TextButton({ onState(null) }) { Text("Cancel") } },
     )
+}
+
+/** The TV library's top bar actions, on the cover grid and on the album page: Search, Meters and the menu. [onNewFolder] only in the folder view. */
+@Composable
+fun androidx.compose.foundation.layout.RowScope.TvHeaderActions(
+    app: app.magnetite.MagnetiteApp, onSearch: () -> Unit, onPickMeters: () -> Unit, onTruth: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit,
+    onNewFolder: (() -> Unit)?, onFullScreen: () -> Unit,
+) {
+    var menu by remember { androidx.compose.runtime.mutableStateOf(false) }
+    TransportButton(Icon.Search, "Search", onSearch)
+    TransportButton(Icon.Meters, "Meters", onPickMeters)
+    TransportButton(Icon.Fullscreen, "Full screen", onFullScreen)
+    Box {
+        TransportButton(Icon.Menu, "Menu", { menu = true })
+        androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+            androidx.compose.material3.DropdownMenuItem(text = { Text("View: " + if (app.flat) "flat" else "folders") }, onClick = { menu = false; app.toggleFlat() })
+            if (onNewFolder != null) androidx.compose.material3.DropdownMenuItem(text = { Text("New folder") }, onClick = { menu = false; onNewFolder() })
+            androidx.compose.material3.DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
+            androidx.compose.material3.DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[app.info]) }, onClick = { app.cycleInfo() })
+            androidx.compose.material3.DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })
+            androidx.compose.material3.DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
+        }
+    }
 }

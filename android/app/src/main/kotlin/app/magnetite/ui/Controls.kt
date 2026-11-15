@@ -19,7 +19,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-enum class Icon { Previous, Next, Play, Pause, NewFolder, Menu, Back, Meters, Search }
+enum class Icon { Previous, Next, Play, Pause, NewFolder, Menu, Back, Meters, Search, Fullscreen }
 
 /** A transport button drawn on a canvas (no icon library needed); [size] is the tap target, the glyph is 40% of it. */
 @Composable
@@ -68,6 +68,19 @@ private fun DrawScope.glyph(icon: Icon, color: Color) {
             val line = h * 0.11f
             drawCircle(color, w * 0.34f, Offset(w * 0.4f, h * 0.4f), style = androidx.compose.ui.graphics.drawscope.Stroke(line))
             drawLine(color, Offset(w * 0.66f, h * 0.66f), Offset(w * 0.95f, h * 0.95f), line, androidx.compose.ui.graphics.StrokeCap.Square)
+        }
+        Icon.Fullscreen -> {
+            // four corner brackets
+            val line = h * 0.11f
+            val arm = w * 0.36f
+            for ((cx, cy) in listOf(0f to 0f, 1f to 0f, 0f to 1f, 1f to 1f)) {
+                val x = w * cx
+                val y = h * cy
+                val dx = if (cx == 0f) arm else -arm
+                val dy = if (cy == 0f) arm else -arm
+                drawLine(color, Offset(x, y), Offset(x + dx, y), line, androidx.compose.ui.graphics.StrokeCap.Square)
+                drawLine(color, Offset(x, y), Offset(x, y + dy), line, androidx.compose.ui.graphics.StrokeCap.Square)
+            }
         }
         Icon.Menu -> for (i in 0..2) drawCircle(color, w * 0.1f, Offset(w / 2, h * (0.15f + 0.35f * i)))
         Icon.Play -> triangle(w * 0.1f, w * 0.85f, true)

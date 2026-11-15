@@ -40,7 +40,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}, embedded: Boolean = false,
-    focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: (() -> Unit)? = null) {
+    focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: (() -> Unit)? = null,
+    tvActions: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null) {
     var album by remember { mutableStateOf<Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -85,10 +86,17 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
         if (a == null) { ScrollingMessage(error ?: "Loading…"); return }
         val firstTrack = remember { androidx.compose.ui.focus.FocusRequester() }
         LaunchedEffect(a.id) { kotlinx.coroutines.delay(200); runCatching { firstTrack.requestFocus() } }
-        androidx.compose.foundation.layout.Row(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp)) {
+        Column(Modifier.fillMaxSize()) {
+        // the library's top bar stays, full width: Back on the left, Search, Meters and the menu on the right
+        androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("← Back", Modifier.tvFocus().clickable(onClick = onBack).padding(horizontal = 10.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
+            Text("Library", Modifier.weight(1f).padding(start = 8.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            tvActions?.invoke(this)
+        }
+        androidx.compose.foundation.layout.Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp)) {
             Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
-                Text("← Back", Modifier.tvFocus().clickable(onClick = onBack).padding(horizontal = 10.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
-                Cover(a.coverUrl, Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
+                // half the width of its column: the text under it then fits above the player strip
+                Cover(a.coverUrl, Modifier.fillMaxWidth(0.5f).padding(bottom = 8.dp))
                 Text(a.title, style = MaterialTheme.typography.titleLarge, maxLines = 3)
                 (a.displayArtist ?: a.artist)?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 2) }
                 val facts = listOfNotNull(a.year?.toString(), "${a.tracks.size} tracks", a.tracks.sumOf { it.duration ?: 0.0 }.takeIf { it > 0 }?.let(::total))
@@ -105,6 +113,7 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
                     )
                 }
             }
+        }
         }
         return
     }

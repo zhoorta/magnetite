@@ -31,6 +31,7 @@ import app.magnetite.MagnetiteApp
 fun LibraryPanes(
     app: MagnetiteApp, wide: Boolean, selected: Int?, onSelect: (Int?) -> Unit, openAlbum: (Int) -> Unit,
     onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit,
+    onFullScreen: () -> Unit = {},
 ) {
     val libFocus = remember { FocusRequester() }
     val albumFocus = remember { FocusRequester() }
@@ -117,22 +118,7 @@ fun LibraryPanes(
                 onActions = { gridActions = Target.OfAlbum(it) },
                 onFolderActions = { folderDialog = TvFolderDialog.Menu(it) },
                 // There is no tree on the left on a TV, so its actions are up here.
-                actions = if (!flatTv) ({}) else ({
-                    var menu by remember { mutableStateOf(false) }
-                    TransportButton(Icon.Search, "Search", onSearch)
-                    TransportButton(Icon.Meters, "Meters", onPickMeters)
-                    Box {
-                        TransportButton(Icon.Menu, "Menu", { menu = true })
-                        DropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem(text = { Text("View: " + if (app.flat) "flat" else "folders") }, onClick = { menu = false; app.toggleFlat() })
-                            if (!app.flat) DropdownMenuItem(text = { Text("New folder") }, onClick = { menu = false; folderDialog = TvFolderDialog.Create(gridFolder) })
-                            DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
-                            DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[app.info]) }, onClick = { app.cycleInfo() })
-                            DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })
-                            DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
-                        }
-                    }
-                }),
+                actions = if (!flatTv) ({}) else ({ TvHeaderActions(app, onSearch, onPickMeters, onTruth, onPickTheme, onSignOut, if (app.flat) null else ({ folderDialog = TvFolderDialog.Create(gridFolder) }), onFullScreen) }),
             )
         } else if (selected == null) {
             Text("Pick an album", Modifier.align(Alignment.Center), color = Palette.Muted)
@@ -141,6 +127,7 @@ fun LibraryPanes(
                 AlbumScreen(
                     app.api, app.player, app.info, selected, onBack = { fromRight = true; onSelect(null) }, onEdit = onEdit, embedded = true,
                     focus = albumFocus, onSwitchPane = { runCatching { libFocus.requestFocus() } },
+                    tvActions = if (flatTv) ({ TvHeaderActions(app, onSearch, onPickMeters, onTruth, onPickTheme, onSignOut, null, onFullScreen) }) else null,
                 )
             }
         }
