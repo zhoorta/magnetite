@@ -31,6 +31,10 @@ import app.magnetite.ui.MeterPicker
 import app.magnetite.ui.ThemePicker
 import app.magnetite.ui.MiniPlayer
 import app.magnetite.player.PlaySource
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.background
+import androidx.compose.ui.input.pointer.pointerInput
+import app.magnetite.ui.NowPlayingLayer
 import app.magnetite.ui.NowPlayingScreen
 import app.magnetite.ui.PlaylistScreen
 import app.magnetite.ui.PlaylistsScreen
@@ -86,22 +90,13 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.runtime.LaunchedEffect(signedIn) { if (signedIn) app.loadMe() }
                 androidx.compose.runtime.LaunchedEffect(app.authVersion) { signedIn = app.session.signedIn; if (!signedIn) { detail = null; showNowPlaying = false } }
 
+                Box(Modifier.fillMaxSize()) {
                 Column(Modifier.fillMaxSize()) {
                     Box(Modifier.weight(1f)) {
                         val d = detail
-                        when {
-                            !signedIn -> LoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
-                            showNowPlaying -> NowPlayingScreen(
-                                app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false }, info = app.info,
-                                onOpenSource = {
-                                    when (val o = app.player.origin()) {
-                                        is PlaySource.Album -> detail = Detail.Album(o.id)
-                                        is PlaySource.Playlist -> detail = Detail.Playlist(o.id)
-                                        null -> return@NowPlayingScreen
-                                    }
-                                    showNowPlaying = false
-                                },
-                            )
+                        if (!signedIn) LoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
+                        // The library and the open page stay composed under Now Playing (their scroll, folders and selection survive it); they only stop taking focus.
+                        else Box(Modifier.fillMaxSize().then(if (showNowPlaying) Modifier.focusProperties { canFocus = false } else Modifier)) { when {
                             d is Detail.Album && !wide -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = Detail.Edit(it) })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null }, info = app.info)
                             d is Detail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = Detail.Album(it) }, onBack = { detail = null })
@@ -127,7 +122,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenPlaylist = { detail = Detail.Playlist(it) },
                             )
                             else -> PlaylistsScreen(app.api) { detail = Detail.Playlist(it) }
-                        }
+                        } }
                     }
                     if (signedIn) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -148,6 +143,19 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+                // Now Playing covers everything, the player bar and tabs included; its own bars hide after a few seconds and come back on a touch.
+                if (signedIn && showNowPlaying) NowPlayingLayer(
+                    app, onPickMeters = { pickMeters = true }, onClose = { showNowPlaying = false },
+                    onOpenSource = {
+                        when (val o = app.player.origin()) {
+                            is PlaySource.Album -> detail = Detail.Album(o.id)
+                            is PlaySource.Playlist -> detail = Detail.Playlist(o.id)
+                            null -> return@NowPlayingLayer
+                        }
+                        showNowPlaying = false
+                    },
+                )
                 }
             }
         }

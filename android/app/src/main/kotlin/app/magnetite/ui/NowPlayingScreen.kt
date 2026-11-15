@@ -54,7 +54,8 @@ fun NowPlayingScreen(
     BackHandler(onBack = onClose)
     // On a TV the page opens with the focus on "Full screen", the one thing to do here with a remote
     val fullFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-    LaunchedEffect(onFullScreen != null) { if (onFullScreen != null) { delay(200); runCatching { fullFocus.requestFocus() } } }
+    val onTv = LocalTv.current
+    LaunchedEffect(onFullScreen != null) { if (onFullScreen != null && onTv) { delay(200); runCatching { fullFocus.requestFocus() } } }
     val scroll = androidx.compose.foundation.rememberScrollState()
 
     // While the finger is on the slider, show its value instead of the playing position.
@@ -102,14 +103,14 @@ fun NowPlayingScreen(
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp, vertical = 8.dp)) {
                 val gap = 8.dp
                 val room = this.maxHeight
-                if (fullScreen || LocalTv.current) {
+                if (LocalTv.current || (fullScreen && maxWidth > maxHeight)) {
                     // On a TV (full screen or not): two meters to a row (four make 2 x 2) instead of one above the other; an odd last one takes the whole row.
                     val rows = meters.chunked(2)
                     val cellH = (room - gap * (rows.size - 1)) / rows.size
                     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(gap)) {
                         rows.forEach { row ->
                             Row(Modifier.fillMaxWidth().height(cellH), horizontalArrangement = Arrangement.spacedBy(gap)) {
-                                row.forEach { id -> MeterPanel(Modifier.weight(1f).fillMaxSize()) { MeterView(id, player.isPlaying, fill = true) } }
+                                row.forEach { id -> MeterPanel(Modifier.weight(1f).fillMaxSize()) { MeterView(id, player.isPlaying, fill = true, track = player.current, position = { player.positionMs }) } }
                             }
                         }
                     }
@@ -119,8 +120,9 @@ fun NowPlayingScreen(
                     meters.forEach { id ->
                         // Fill the room, but not past what the meter can use: a pair of wide meters in a full screen cell would float in empty space.
                         val wanted = (MeterCatalog.firstOrNull { it.id == id }?.heightDp ?: 150) * 2.2f
-                        val h = minOf((room - gap * (meters.size - 1)) / meters.size, wanted.dp)
-                        MeterPanel(Modifier.fillMaxWidth().height(h)) { MeterView(id, player.isPlaying, fill = true) }
+                        // Posters are portrait and use the whole screen; the other meters keep their shape, so they stay at their natural size.
+                        val h = if (fullScreen && id.startsWith("poster-")) (room - gap * (meters.size - 1)) / meters.size else minOf((room - gap * (meters.size - 1)) / meters.size, wanted.dp)
+                        MeterPanel(Modifier.fillMaxWidth().height(h)) { MeterView(id, player.isPlaying, fill = true, track = player.current, position = { player.positionMs }) }
                     }
                 }
             }

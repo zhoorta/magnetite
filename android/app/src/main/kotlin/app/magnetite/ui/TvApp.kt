@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.background
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -62,7 +63,6 @@ fun TvApp(app: MagnetiteApp) {
     var detail by remember { mutableStateOf<TvDetail?>(null) }
     var selected by remember { mutableStateOf<Int?>(null) }
     var showNowPlaying by remember { mutableStateOf(false) }
-    var fullScreen by remember { mutableStateOf(false) }
     val stripFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     var pickMeters by remember { mutableStateOf(false) }
     var pickTheme by remember { mutableStateOf(false) }
@@ -89,8 +89,6 @@ fun TvApp(app: MagnetiteApp) {
     CompositionLocalProvider(LocalDensity provides Density(widthPx / TV_WIDTH_DP, d0.fontScale)) {
         if (pickTheme) ThemePicker({ app.setLook(it) }, { pickTheme = false })
         if (pickMeters) MeterPicker(app.meters.toList(), { app.setMeters(it) }, { pickMeters = false })
-        if (showNowPlaying) BackHandler { showNowPlaying = false; fullScreen = false }
-        if (fullScreen) BackHandler { fullScreen = false }
 
         if (!signedIn) {
             TvLoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
@@ -103,24 +101,12 @@ fun TvApp(app: MagnetiteApp) {
             signedIn = false
         }
 
-        // Full screen: only the meters, nothing else; any key brings the rest back.
-        if (showNowPlaying && fullScreen) {
-            val fsFocus = remember { androidx.compose.ui.focus.FocusRequester() }
-            LaunchedEffect(Unit) { runCatching { fsFocus.requestFocus() } }
-            Box(
-                Modifier.fillMaxSize().padding(24.dp).focusRequester(fsFocus).focusable().onPreviewKeyEvent { e ->
-                    if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown) { fullScreen = false; true } else false
-                },
-            ) {
-                NowPlayingScreen(app.player, app.meters, { pickMeters = true }, onClose = { fullScreen = false }, onOpenSource = {}, fullScreen = true)
-            }
-            return@CompositionLocalProvider
-        }
-
         // Back from a page opened over a tab goes to that tab; from the tab itself, the system leaves the app.
         if (detail != null && !showNowPlaying) BackHandler { detail = null }
 
-        Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 20.dp)) {
+        // Now Playing and full screen are drawn over the library, which stays composed (scroll, folders, selection and focus survive them).
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 20.dp).then(if (showNowPlaying) Modifier.focusProperties { canFocus = false } else Modifier)) {
             Row(Modifier.weight(1f)) {
                 if (!showNowPlaying) {
                     Column(Modifier.fillMaxHeight().width(148.dp).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -154,19 +140,7 @@ fun TvApp(app: MagnetiteApp) {
                     },
                 ) {
                     val d = detail
-                    when {
-                        showNowPlaying -> NowPlayingScreen(
-                            app.player, app.meters, { pickMeters = true }, onClose = { showNowPlaying = false },
-                            fullScreen = false, onFullScreen = { fullScreen = true }, info = app.info,
-                            onOpenSource = {
-                                when (val o = app.player.origin()) {
-                                    is PlaySource.Album -> detail = TvDetail.Album(o.id)
-                                    is PlaySource.Playlist -> detail = TvDetail.Playlist(o.id)
-                                    null -> return@NowPlayingScreen
-                                }
-                                showNowPlaying = false
-                            },
-                        )
+                    Box(Modifier.fillMaxSize().then(if (showNowPlaying) Modifier.focusProperties { canFocus = false } else Modifier)) { when {
                         d is TvDetail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = TvDetail.Edit(it) })
                         d is TvDetail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null }, info = app.info)
                         d is TvDetail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = TvDetail.Album(it) }, onBack = { detail = null })
@@ -183,13 +157,26 @@ fun TvApp(app: MagnetiteApp) {
                             onSearch = { detail = TvDetail.Search }, onTruth = { detail = TvDetail.Truth }, onEdit = { detail = TvDetail.Edit(it) },
                             onPickMeters = { pickMeters = true }, onPickTheme = { pickTheme = true }, onSignOut = ::signOut,
                         )
-                    }
+                    } }
                 }
             }
             run {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 TvPlayerStrip(app.player, app.info, app.meters, { showNowPlaying = true }, compact = showNowPlaying && app.meters.isNotEmpty(), titleFocus = stripFocus)
             }
+        }
+        // Now Playing covers everything; its top bar and the player strip hide after a few seconds and come back on a key (see TvNowPlayingLayer).
+        if (showNowPlaying) TvNowPlayingLayer(
+            app, onPickMeters = { pickMeters = true }, onClose = { showNowPlaying = false },
+            onOpenSource = {
+                when (val o = app.player.origin()) {
+                    is PlaySource.Album -> detail = TvDetail.Album(o.id)
+                    is PlaySource.Playlist -> detail = TvDetail.Playlist(o.id)
+                    null -> return@TvNowPlayingLayer
+                }
+                showNowPlaying = false
+            },
+        )
         }
     }
 }

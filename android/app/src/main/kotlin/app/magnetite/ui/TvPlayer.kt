@@ -97,7 +97,7 @@ fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onO
                 }
             }
             if (!compact && meters.isNotEmpty()) {
-                MeterPanel(Modifier.width(440.dp).fillMaxHeight()) { MeterView(meters.first(), player.isPlaying, fill = true) }
+                MeterPanel(Modifier.width(440.dp).fillMaxHeight().clickable(onClick = onOpen)) { MeterView(meters.first(), player.isPlaying, fill = true, track = player.current, position = { player.positionMs }) }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TransportButton(Icon.Previous, "Previous", { player.previous() }, size = 52.dp)

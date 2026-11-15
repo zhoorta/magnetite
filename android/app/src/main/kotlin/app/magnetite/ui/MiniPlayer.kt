@@ -51,10 +51,10 @@ fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMe
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant) {
         Column {
             if (showMeters && meters.isNotEmpty()) {
-                // All chosen meters stack here; a tap chooses meters (the screen stays), a swipe up opens Now Playing.
+                // All chosen meters stack here; a tap or a swipe up opens Now Playing (the meters are chosen there or in the library menu).
                 var swiped by remember { mutableStateOf(0f) }
                 MeterPanel(
-                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onPickMeters).pointerInput(Unit) {
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onOpen).pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragStart = { swiped = 0f },
                             onVerticalDrag = { change, dy -> change.consume(); swiped += dy },
@@ -63,7 +63,7 @@ fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMe
                     },
                 ) {
                     Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
-                        meters.forEach { MeterView(it, player.isPlaying, compact = true) }
+                        meters.forEach { MeterView(it, player.isPlaying, compact = true, track = player.current, position = { player.positionMs }) }
                     }
                 }
             }
