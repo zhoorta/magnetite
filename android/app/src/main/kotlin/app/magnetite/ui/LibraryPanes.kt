@@ -38,10 +38,12 @@ fun LibraryPanes(
     // On a TV the right pane shows the contents of a folder with the covers when no album is open; the lists are the library screen's own.
     val albums = remember { androidx.compose.runtime.mutableStateListOf<app.magnetite.data.Album>() }
     val folders = remember { androidx.compose.runtime.mutableStateListOf<app.magnetite.data.Folder>() }
-    var gridFolder by remember { mutableStateOf<Int?>(null) }
+    var gridFolder by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     val rightFocus = remember { FocusRequester() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val flatTv = tv && wide && app.flat
+    // On a TV the library is the cover grid only (no tree): folders as tiles, a path on top, or every album in the flat view.
+    val flatTv = tv && wide
+    var folderDialog by remember { mutableStateOf<TvFolderDialog?>(null) }
     var gridActions by remember { mutableStateOf<Target?>(null) }
 
     /** The flat view has no library screen to load the lists, so this does (and reloads them after an action). The old lists stay until the new ones are in. */
@@ -69,11 +71,12 @@ fun LibraryPanes(
     LaunchedEffect(flatTv, albums.isNotEmpty()) {
         if (flatTv && albums.isNotEmpty() && selected == null) { kotlinx.coroutines.delay(150); runCatching { rightFocus.requestFocus() } }
     }
+    if (tv && wide) TvFolderDialogs(folderDialog, { folderDialog = it }, app.api, onChanged = { scope.launch { reloadAll() } })
     if (tv && wide) ActionHost(gridActions, app.api, app.player, folders.toList(), onClose = { gridActions = null }, onChanged = { scope.launch { reloadAll() } }, onEdit = onEdit)
     // A step made inside the right pane (a cover, Back) takes the focus along; one made in the tree leaves it there.
     var fromRight by remember { mutableStateOf(false) }
     // The album last opened: the grid scrolls to its cover and focuses it when the album is closed (see FolderGrid.returnTo).
-    var lastAlbum by remember { mutableStateOf<Int?>(null) }
+    var lastAlbum by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     LaunchedEffect(selected) { if (selected != null) lastAlbum = selected }
     LaunchedEffect(selected, gridFolder) {
         if (tv && fromRight) {
@@ -112,7 +115,8 @@ fun LibraryPanes(
                 onFolder = { fromRight = true; gridFolder = it },
                 onAlbum = { fromRight = true; onSelect(it) },
                 onActions = { gridActions = Target.OfAlbum(it) },
-                // The flat view has no tree on the left, so its actions are up here.
+                onFolderActions = { folderDialog = TvFolderDialog.Menu(it) },
+                // There is no tree on the left on a TV, so its actions are up here.
                 actions = if (!flatTv) ({}) else ({
                     var menu by remember { mutableStateOf(false) }
                     TransportButton(Icon.Search, "Search", onSearch)
@@ -120,7 +124,8 @@ fun LibraryPanes(
                     Box {
                         TransportButton(Icon.Menu, "Menu", { menu = true })
                         DropdownMenu(menu, { menu = false }) {
-                            DropdownMenuItem(text = { Text("View: flat") }, onClick = { menu = false; app.toggleFlat() })
+                            DropdownMenuItem(text = { Text("View: " + if (app.flat) "flat" else "folders") }, onClick = { menu = false; app.toggleFlat() })
+                            if (!app.flat) DropdownMenuItem(text = { Text("New folder") }, onClick = { menu = false; folderDialog = TvFolderDialog.Create(gridFolder) })
                             DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
                             DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[app.info]) }, onClick = { app.cycleInfo() })
                             DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })
@@ -140,7 +145,7 @@ fun LibraryPanes(
             }
         }
     }
-    // The flat view on a TV: no list on the left, the covers (or the open album) take the whole width.
+    // On a TV: no list on the left, the covers (or the open album) take the whole width.
     if (flatTv) {
         Box(Modifier.fillMaxSize().focusRequester(rightFocus).focusGroup(), content = right)
         return

@@ -19,7 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,7 +38,7 @@ import app.magnetite.data.Folder
  */
 @Composable
 fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFolder: (Int?) -> Unit, onAlbum: (Int) -> Unit, playingAlbum: Int? = null, flat: Boolean = false, returnTo: Int? = null,
-    info: Int = 0, onActions: ((Album) -> Unit)? = null, actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}) {
+    info: Int = 0, onActions: ((Album) -> Unit)? = null, onFolderActions: ((Folder) -> Unit)? = null, actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}) {
     val path = generateSequence(folders.firstOrNull { it.id == folderId }) { f -> folders.firstOrNull { it.id == f.parentId } }.toList().reversed()
     // The flat view has no folders: every album, in the library's own order.
     val subfolders = if (flat) emptyList() else folders.filter { it.parentId == folderId }
@@ -59,10 +62,22 @@ fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFol
                     color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium,
                 )
             }
-            Text(
-                (if (flat) listOf("Library", "all albums") else listOf("Library") + path.map { it.name }).joinToString(" / "), Modifier.weight(1f).padding(start = 8.dp),
-                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            if (flat) {
+                Text("Library / all albums", Modifier.weight(1f).padding(start = 8.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            } else {
+                // every part of the path but the last is a stop, so a deep folder is one press from the top
+                Row(Modifier.weight(1f).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val crumbs = listOf<Pair<String, Int?>>("Library" to null) + path.map { it.name to it.id }
+                    crumbs.forEachIndexed { i, (name, id) ->
+                        if (i > 0) Text(" / ", color = Palette.Muted, style = MaterialTheme.typography.titleMedium)
+                        val last = i == crumbs.lastIndex
+                        Text(
+                            name, if (last) Modifier else Modifier.tvFocus().clickable { onFolder(id) }.padding(horizontal = 4.dp, vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
             Text("${subfolders.size + here.size}", Modifier.padding(horizontal = 8.dp), color = Palette.Muted, style = MaterialTheme.typography.bodySmall)
             actions()
         }
@@ -76,12 +91,19 @@ fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFol
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(subfolders, key = { "f${it.id}" }) { f ->
-                Column(Modifier.tvFocus().clickable { onFolder(f.id) }.padding(4.dp)) {
+                val holdsPlaying = playingAlbum?.let { p ->
+                    var at = albums.firstOrNull { it.id == p }?.folderId
+                    var steps = 0
+                    var found = false
+                    while (at != null && steps++ < 50 && !found) { if (at == f.id) found = true else at = folders.firstOrNull { it.id == at }?.parentId }
+                    found
+                } == true
+                Column(Modifier.tvFocus().combinedClickable(onClick = { onFolder(f.id) }, onLongClick = onFolderActions?.let { fa -> { fa(f) } }).padding(4.dp)) {
                     Box(
                         Modifier.fillMaxWidth().aspectRatio(1f).border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small),
                         contentAlignment = Alignment.Center,
                     ) { Text("▸ ${f.albumCount}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.headlineSmall) }
-                    Text(f.name, Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
+                    Text((if (holdsPlaying) "♪ " else "") + f.name, Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
                     Text(if (f.albumCount == 1) "1 album" else "${f.albumCount} albums", color = Palette.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                 }
             }
@@ -103,4 +125,70 @@ fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFol
             }
         }
     }
+}
+
+/** What the TV's folder dialogs are doing: the menu a long press on a folder opens, and the name or confirm steps after it. */
+sealed interface TvFolderDialog {
+    data class Menu(val folder: Folder) : TvFolderDialog
+    data class Create(val parent: Int?) : TvFolderDialog
+    data class Rename(val id: Int, val name: String) : TvFolderDialog
+    data class Delete(val id: Int, val name: String) : TvFolderDialog
+}
+
+@Composable
+fun TvFolderDialogs(state: TvFolderDialog?, onState: (TvFolderDialog?) -> Unit, api: app.magnetite.data.Api, onChanged: () -> Unit) {
+    val d = state ?: return
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var name by remember(d) { androidx.compose.runtime.mutableStateOf((d as? TvFolderDialog.Rename)?.name ?: "") }
+    var problem by remember(d) { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    fun run(block: suspend () -> Unit) = scope.launch {
+        try { block(); onState(null); onChanged() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { problem = e.message }
+    }
+    if (d is TvFolderDialog.Menu) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { onState(null) },
+            title = { Text(d.folder.name) },
+            text = {
+                Column {
+                    listOf<Pair<String, () -> Unit>>(
+                        "New subfolder" to { onState(TvFolderDialog.Create(d.folder.id)) },
+                        "Rename" to { onState(TvFolderDialog.Rename(d.folder.id, d.folder.name)) },
+                        "Delete" to { onState(TvFolderDialog.Delete(d.folder.id, d.folder.name)) },
+                    ).forEach { (label, go) -> Text(label, Modifier.fillMaxWidth().tvFocus().clickable(onClick = go).padding(horizontal = 10.dp, vertical = 10.dp), style = MaterialTheme.typography.titleMedium) }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { androidx.compose.material3.TextButton({ onState(null) }) { Text("Cancel") } },
+        )
+        return
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { onState(null) },
+        title = {
+            Text(when (d) {
+                is TvFolderDialog.Create -> if (d.parent == null) "New folder" else "New subfolder"
+                is TvFolderDialog.Rename -> "Rename folder"
+                is TvFolderDialog.Delete -> "Delete \"${d.name}\"?"
+                is TvFolderDialog.Menu -> ""
+            })
+        },
+        text = {
+            Column {
+                if (d is TvFolderDialog.Delete) Text("Its albums and subfolders move up one level. No music is deleted.")
+                else androidx.compose.material3.OutlinedTextField(name, { name = it }, Modifier.dpadLeavesField(), singleLine = true, label = { Text("Name") })
+                problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(enabled = d is TvFolderDialog.Delete || name.isNotBlank(), onClick = {
+                when (d) {
+                    is TvFolderDialog.Create -> run { api.createFolder(name.trim(), d.parent) }
+                    is TvFolderDialog.Rename -> run { api.renameFolder(d.id, name.trim()) }
+                    is TvFolderDialog.Delete -> run { api.deleteFolder(d.id) }
+                    is TvFolderDialog.Menu -> {}
+                }
+            }) { Text(if (d is TvFolderDialog.Delete) "Delete" else "Save") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton({ onState(null) }) { Text("Cancel") } },
+    )
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,6 +78,36 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
     }
     ActionHost(actions, api, player, emptyList(), onClose = { actions = null }, onChanged = { scope.launch { load() } }, onEdit = onEdit)
     androidx.activity.compose.BackHandler(onBack = onBack)
+
+    // On a TV: no frame and no title bar. The cover big on the left with what is known about the album, the tracks on the right.
+    if (LocalTv.current) {
+        val a = album
+        if (a == null) { ScrollingMessage(error ?: "Loading…"); return }
+        val firstTrack = remember { androidx.compose.ui.focus.FocusRequester() }
+        LaunchedEffect(a.id) { kotlinx.coroutines.delay(200); runCatching { firstTrack.requestFocus() } }
+        androidx.compose.foundation.layout.Row(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp)) {
+            Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                Text("← Back", Modifier.tvFocus().clickable(onClick = onBack).padding(horizontal = 10.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
+                Cover(a.coverUrl, Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp))
+                Text(a.title, style = MaterialTheme.typography.titleLarge, maxLines = 3)
+                (a.displayArtist ?: a.artist)?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 2) }
+                val facts = listOfNotNull(a.year?.toString(), "${a.tracks.size} tracks", a.tracks.sumOf { it.duration ?: 0.0 }.takeIf { it > 0 }?.let(::total))
+                Text(facts.joinToString(" · "), color = Palette.Muted, style = MaterialTheme.typography.bodyMedium)
+                if (info >= 1) Info.albumDr(a)?.let { Text(Info.dr(it)!!, color = Palette.Muted, style = MaterialTheme.typography.bodyMedium) }
+            }
+            LazyColumn(Modifier.weight(0.58f).fillMaxHeight(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
+                itemsIndexed(a.tracks, key = { _, t -> t.id }) { i, track ->
+                    val rest = track.artist?.takeIf { it != (a.displayArtist ?: a.artist) }
+                    TrackRow(
+                        track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}", info = info, rest = rest,
+                        modifier = if (i == 0) Modifier.focusRequester(firstTrack) else Modifier,
+                        onLongClick = if (track.shared != null) ({ actions = Target.OfTrack(track) }) else null,
+                    )
+                }
+            }
+        }
+        return
+    }
 
     Scaffold(modifier = if (LocalTv.current) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = { DenseBar(album?.title ?: "", if (embedded && !LocalTv.current) null else onBack) { if (!embedded && onPickMeters != null) TransportButton(Icon.Meters, "Meters", onPickMeters) } }) { padding ->
         val a = album
