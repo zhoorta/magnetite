@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Banner for the Android TV launcher (16:9, the logo centred on black). -->
+<!-- Banner for the Android TV launcher (16:9): the full logo, the two meters and the name, centred on black. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/launcher_background" />
     <item
-        android:drawable="@drawable/ic_launcher_fg"
+        android:drawable="@drawable/logo_full"
         android:gravity="center"
-        android:width="140dp"
-        android:height="140dp" />
+        android:width="186dp"
+        android:height="168dp" />
 </layer-list>
