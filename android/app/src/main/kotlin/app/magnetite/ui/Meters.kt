@@ -59,13 +59,13 @@ val MeterCatalog = listOf(
     MeterInfo("loudness", "Loudness (LUFS)", 190, 100),
     MeterInfo("third-octave", "Third-octave", 150, 80),
     MeterInfo("spectrogram", "Spectrogram", 150, 80),
-)
+) + Posters.catalog.map { it.first }
 
 const val MAX_METERS = 4
 
 /** One meter by id; ids this version does not know draw nothing (the web ignores unknown ids the same way). */
 @Composable
-fun MeterView(id: String, playing: Boolean, compact: Boolean = false, fill: Boolean = false) {
+fun MeterView(id: String, playing: Boolean, compact: Boolean = false, fill: Boolean = false, track: app.magnetite.data.Track? = null, position: () -> Long = { 0L }) {
     val info = MeterCatalog.firstOrNull { it.id == id } ?: return
     val h = (if (compact) info.compactDp else info.heightDp).dp
     val size = if (fill) Modifier.fillMaxSize() else Modifier.fillMaxWidth().height(h)
@@ -79,6 +79,7 @@ fun MeterView(id: String, playing: Boolean, compact: Boolean = false, fill: Bool
         "loudness" -> MeterCanvas(playing, size) { _, _ -> loudness() }
         "third-octave" -> ThirdOctave(playing, size)
         "spectrogram" -> Spectrogram(playing, size)
+        else -> if (id.startsWith("poster-")) PosterMeter(id, playing, size, track, position)
     }
 }
 
@@ -93,7 +94,7 @@ private fun levels(playing: Boolean): Lv {
 
 /** Redraws every frame while playing and for two seconds after, so needles and bars settle; then stops drawing. */
 @Composable
-private fun MeterCanvas(playing: Boolean, modifier: Modifier, work: ((dt: Float, lv: Lv) -> Unit)? = null, draw: DrawScope.(dt: Float, lv: Lv) -> Unit) {
+internal fun MeterCanvas(playing: Boolean, modifier: Modifier, work: ((dt: Float, lv: Lv) -> Unit)? = null, draw: DrawScope.(dt: Float, lv: Lv) -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     var dt by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(playing) {
