@@ -37,6 +37,7 @@ Stay standalone with a thin library of our own (scanner, covers, ALAC conversion
 - [x] Guide for users (2026-11-13): ten pages in `docs/guide`, shown at `/docs` (`App\Support\Guide`), linked from the top bar and an install section on the start page; no screenshots yet; the clone address is a placeholder until the repository is public
 - [x] Demo library for visitors (2026-11-13): `/library` without an account shows the demo tracks in the library page, read only, with their measurements (`docs/dense-library.md`, "Demo library"); the top bar has Sign in
 - [ ] Fullscreen polish, add to queue / play next, Media Session, demo GIF
+- [ ] Posters for other software (idea, 2026-11-15, brainstorm only, `docs/posters.md`): a standalone JS package of the poster modules, a standalone poster page (OBS browser source, Pi or dashboard), then a demo in a web host (Webamp/Butterchurn or Jellyfin); native ports (foobar2000, Kodi, VLC) only if there is demand
 - [ ] Parked ideas: theme gallery with import by URL, cloud use as self-hosted with bring-your-own storage, Flux UI
 
 ## Known risks

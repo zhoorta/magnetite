@@ -50,4 +50,13 @@ The meter menu shows the posters as a grid of pictures with the name under each.
 - Thumbnails for the other meters (they keep state at module level, so they would need the same per-canvas change).
 - Colour check of the posters' own palettes against the theme's contrast rules.
 
+## Posters for other software (idea, 2026-11-15, nothing built)
+
+Brainstorm on offering the posters outside Magnetite. A poster is a self-contained canvas 2D module that draws in its own 600 x 800 space and needs only the band spectrum, levels, the track's text and the theme's colours, so the web modules are portable.
+
+- **JS package:** the poster modules, `poster.js`, the colour handling and a small engine (analyser to bands and levels) as a standalone library, for any web-based player or Electron app. Roughly `createPoster('terrain', canvas, { colors })` and `poster.draw(sample, track)`.
+- **Standalone poster page:** audio from the browser, a loopback device or a WebSocket feed, shown full screen: an OBS browser source, a Raspberry Pi or a dashboard. MPD, Plex or Spotify give no audio samples, so they would need a small desktop wrapper (Tauri or Electron) that captures the system audio.
+- **Hosts with a plugin community** (from memory, check the current APIs first): Webamp with Butterchurn (JS and WebGL, Milkdrop presets) and Jellyfin (its web client can load custom JS) are the cheapest, since the posters are canvas JS. foobar2000 (components, scripting panels), Kodi (C++ visualization add-ons, large reach), VLC and MusicBee need a native port each; Winamp and projectM are shader based. The Android (Kotlin) and terminal (Rust) clients already show what a port costs: each must be kept in step with the web version (the Android `arc` sweep bug made three posters differ).
+- **To decide first:** a permissive licence (MIT or ISC) for an embeddable package, since the project is AGPL; keep the rule of no copied artwork or brand names; start with a small Webamp or Jellyfin demo to see whether anyone wants them before any native work.
+
 The references were album, book and gig posters seen on the web; the code draws its own shapes, and no artwork, band name or typeface is copied. Keep it that way when adding more (and avoid brand names such as Soundcraft in labels and themes).
