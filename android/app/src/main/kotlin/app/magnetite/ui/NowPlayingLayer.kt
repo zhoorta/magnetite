@@ -5,6 +5,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -49,14 +51,14 @@ private const val IDLE_MS = 3_000L
 fun NowPlayingLayer(app: MagnetiteApp, onPickMeters: () -> Unit, onClose: () -> Unit, onOpenSource: () -> Unit) {
     var chrome by remember { mutableStateOf(true) }
     val lastTouch = remember { longArrayOf(System.nanoTime()) }
-    // Only a poster fills the screen and prints its own text; with other meters, or none, the controls stay and sit under the picture.
+    // A poster fills the screen and the controls lie over it; with other meters, or none, they sit above and below the picture and, when
+    // hidden, the picture takes their room. Either way they hide after three seconds.
     val hasPoster = app.meters.any { it.startsWith("poster-") }
-    LaunchedEffect(hasPoster) { if (!hasPoster) chrome = true }
 
     // Any touch (watched before the meters and the controls see it, never consumed) shows the controls and restarts the countdown.
-    LaunchedEffect(chrome, hasPoster) {
+    LaunchedEffect(chrome) {
         lastTouch[0] = System.nanoTime()
-        while (chrome && hasPoster) {
+        while (chrome) {
             delay(250)
             if (System.nanoTime() - lastTouch[0] > IDLE_MS * 1_000_000L) chrome = false
         }
@@ -102,11 +104,11 @@ fun NowPlayingLayer(app: MagnetiteApp, onPickMeters: () -> Unit, onClose: () -> 
             AnimatedVisibility(chrome, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) { playerBar() }
         } else {
             Column(Modifier.fillMaxSize()) {
-                topBar()
+                AnimatedVisibility(chrome, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) { topBar() }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     NowPlayingScreen(app.player, app.meters, onPickMeters = onPickMeters, onClose = onClose, onOpenSource = onOpenSource, fullScreen = true, info = app.info)
                 }
-                playerBar()
+                AnimatedVisibility(chrome, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) { playerBar() }
             }
         }
     }
@@ -124,14 +126,13 @@ fun TvNowPlayingLayer(app: MagnetiteApp, onPickMeters: () -> Unit, onClose: () -
     val rootFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val stripFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val hasPoster = app.meters.any { it.startsWith("poster-") }
-    LaunchedEffect(hasPoster) { if (!hasPoster) chrome = true }
 
-    LaunchedEffect(chrome, hasPoster) {
+    LaunchedEffect(chrome) {
         lastInput[0] = System.nanoTime()
         if (chrome) {
             delay(150)
             runCatching { stripFocus.requestFocus() }
-            while (chrome && hasPoster) {
+            while (chrome) {
                 delay(250)
                 if (System.nanoTime() - lastInput[0] > IDLE_MS * 1_000_000L) chrome = false
             }
@@ -180,11 +181,11 @@ fun TvNowPlayingLayer(app: MagnetiteApp, onPickMeters: () -> Unit, onClose: () -
             AnimatedVisibility(chrome, Modifier.align(Alignment.BottomCenter), enter = fadeIn(), exit = fadeOut()) { strip() }
         } else {
             Column(Modifier.fillMaxSize()) {
-                topBar()
+                AnimatedVisibility(chrome, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) { topBar() }
                 Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp)) {
                     NowPlayingScreen(app.player, app.meters, onPickMeters = onPickMeters, onClose = onClose, onOpenSource = onOpenSource, fullScreen = true, info = app.info)
                 }
-                strip()
+                AnimatedVisibility(chrome, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) { strip() }
             }
         }
     }
