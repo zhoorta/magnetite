@@ -7,7 +7,7 @@ return [
 
     // Version of the Android app offered on the start page: the file public/downloads/magnetite-{version}.apk
     // (not in git, copied to the server by hand). The page hides the download when the file is missing.
-    'apk_version' => env('MAGNETITE_APK_VERSION', '0.4.9'),
+    'apk_version' => env('MAGNETITE_APK_VERSION', '0.4.10'),
 
     // Folder scanned for audio files (recursively). Magnetite only writes to it when a signed-in user uploads a zip
     // (see `upload` below); existing files are never overwritten or modified.
