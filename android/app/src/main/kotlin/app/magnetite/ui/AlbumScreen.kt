@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -42,8 +44,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}, embedded: Boolean = false,
-    focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: (() -> Unit)? = null,
-    tvActions: (@Composable androidx.compose.foundation.layout.RowScope.() -> Unit)? = null) {
+    focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: (() -> Unit)? = null) {
     var album by remember { mutableStateOf<Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -82,7 +83,9 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
     ActionHost(actions, api, player, emptyList(), onClose = { actions = null }, onChanged = { scope.launch { load() } }, onEdit = onEdit)
     androidx.activity.compose.BackHandler(onBack = onBack)
 
-    // On a TV: no frame and no title bar. The cover big on the left with what is known about the album, the tracks on the right.
+    // On a TV: no frame and no title bar (the shell's top bar has the tabs and actions). A slim Back row, then the cover with what is known about the
+    // album in a column as wide as the cover, a thin line, and the tracks, bigger than on a phone. The pair is centred and no wider than 920 dp, so
+    // on a wide screen the two sides stay close together.
     if (LocalTv.current) {
         val a = album
         if (a == null) { ScrollingMessage(error ?: "Loading…"); return }
@@ -91,37 +94,41 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
         // Without the Scaffold of the other layouts nothing sets the text colour (black by default): the Surface does.
         androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
         Column(Modifier.fillMaxSize()) {
-        // the library's top bar stays, full width: Back on the left, Search, Meters and the menu on the right
-        androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Text("← Back", Modifier.tvFocus().clickable(onClick = onBack).padding(horizontal = 10.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
-            Text("Library", Modifier.weight(1f).padding(start = 8.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-            tvActions?.invoke(this)
-        }
-        androidx.compose.foundation.layout.Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp)) {
-            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(0.42f).fillMaxHeight()) {
-                // The text under the cover needs about 130 dp; the cover takes what is left, and never more than half the column's width.
-                val cover = minOf(maxWidth * 0.5f, (maxHeight - 130.dp).coerceAtLeast(72.dp))
-                Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
-                    Cover(a.coverUrl, Modifier.size(cover))
-                    androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
-                    Text(a.title, color = Palette.Text, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                    (a.displayArtist ?: a.artist)?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge, maxLines = 1) }
-                    val facts = listOfNotNull(a.year?.toString(), "${a.tracks.size} tracks", a.tracks.sumOf { it.duration ?: 0.0 }.takeIf { it > 0 }?.let(::total))
-                    Text(facts.joinToString(" · "), color = Palette.Muted, style = MaterialTheme.typography.bodyMedium)
-                    if (info >= 1) Info.albumDr(a)?.let { Text(Info.dr(it)!!, color = Palette.Muted, style = MaterialTheme.typography.bodyMedium) }
+            androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("← Back", Modifier.tvFocus().clickable(onClick = onBack).padding(horizontal = 10.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
+            }
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.widthIn(max = 920.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 8.dp)) {
+                // The text under the cover needs about 130 dp; the cover takes what is left of the height, at most 240 dp.
+                val cover = minOf(240.dp, (maxHeight - 130.dp).coerceAtLeast(96.dp))
+                androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+                    Column(Modifier.width(maxOf(cover, 200.dp)).fillMaxHeight().verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                        Cover(a.coverUrl, Modifier.size(cover))
+                        androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
+                        Text(a.title, color = Palette.Text, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                        (a.displayArtist ?: a.artist)?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge, maxLines = 1) }
+                        val facts = listOfNotNull(a.year?.toString(), "${a.tracks.size} tracks", a.tracks.sumOf { it.duration ?: 0.0 }.takeIf { it > 0 }?.let(::total))
+                        Text(facts.joinToString(" · "), color = Palette.Muted, style = MaterialTheme.typography.bodyMedium)
+                        if (info >= 1) Info.albumDr(a)?.let { Text(Info.dr(it)!!, color = Palette.Muted, style = MaterialTheme.typography.bodyMedium) }
+                    }
+                    androidx.compose.foundation.layout.Box(Modifier.padding(horizontal = 24.dp).fillMaxHeight().width(1.dp).background(Palette.Muted.copy(alpha = 0.35f)))
+                    // the tracks a little bigger: a TV is read from the sofa
+                    val d0 = androidx.compose.ui.platform.LocalDensity.current
+                    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d0.density * 1.2f, d0.fontScale)) {
+                        LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
+                            itemsIndexed(a.tracks, key = { _, t -> t.id }) { i, track ->
+                                val rest = track.artist?.takeIf { it != (a.displayArtist ?: a.artist) }
+                                TrackRow(
+                                    track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}", info = info, rest = rest,
+                                    modifier = if (i == 0) Modifier.focusRequester(firstTrack) else Modifier,
+                                    onLongClick = if (track.shared != null) ({ actions = Target.OfTrack(track) }) else null,
+                                )
+                            }
+                        }
+                    }
                 }
             }
-            LazyColumn(Modifier.weight(0.58f).fillMaxHeight(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
-                itemsIndexed(a.tracks, key = { _, t -> t.id }) { i, track ->
-                    val rest = track.artist?.takeIf { it != (a.displayArtist ?: a.artist) }
-                    TrackRow(
-                        track, player.currentId == track.id.toString(), { player.play(a.tracks, track, PlaySource.Album(id)) }, leading = "${track.number ?: ""}", info = info, rest = rest,
-                        modifier = if (i == 0) Modifier.focusRequester(firstTrack) else Modifier,
-                        onLongClick = if (track.shared != null) ({ actions = Target.OfTrack(track) }) else null,
-                    )
-                }
             }
-        }
         }
         }
         return
