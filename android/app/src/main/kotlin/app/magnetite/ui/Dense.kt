@@ -63,8 +63,10 @@ fun Track.mark(level: Int): Pair<String, Color>? =
 /** The slim top bar of a screen: the name in the accent colour, the actions at the right. */
 @Composable
 fun DenseBar(title: String, back: (() -> Unit)? = null, actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}) {
+    // On a TV the shell has its own top bar (tabs and actions): a page's title and Back are a slim row under it.
+    val tv = LocalTv.current
     androidx.compose.foundation.layout.Row(
-        Modifier.fillMaxWidth().background(Palette.Surface).statusBarsPadding().height(48.dp).padding(start = if (back == null) 16.dp else 4.dp, end = 4.dp),
+        (if (tv) Modifier.fillMaxWidth().padding(vertical = 2.dp) else Modifier.fillMaxWidth().background(Palette.Surface).statusBarsPadding().height(48.dp)).padding(start = if (back == null) 16.dp else 4.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (back != null) TransportButton(Icon.Back, "Back", back)

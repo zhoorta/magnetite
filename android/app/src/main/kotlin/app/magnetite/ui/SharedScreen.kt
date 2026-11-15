@@ -44,7 +44,7 @@ fun SharedScreen(api: Api, player: PlayerController, onOpenAlbum: (Int) -> Unit,
     }
     LaunchedEffect(Unit) { load() }
 
-    Scaffold(topBar = { DenseBar("Shared") }) { padding ->
+    Scaffold(topBar = { if (!LocalTv.current) DenseBar("Shared") }) { padding ->
         val s = shared
         PullRefresh(padding, ::load) {
         if (s == null) {

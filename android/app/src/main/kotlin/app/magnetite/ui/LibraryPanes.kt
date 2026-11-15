@@ -6,8 +6,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
@@ -118,7 +122,9 @@ fun LibraryPanes(
                 onActions = { gridActions = Target.OfAlbum(it) },
                 onFolderActions = { folderDialog = TvFolderDialog.Menu(it) },
                 // There is no tree on the left on a TV, so its actions are up here.
-                actions = if (!flatTv) ({}) else ({ TvHeaderActions(app, onSearch, onPickMeters, onTruth, onPickTheme, onSignOut, if (app.flat) null else ({ folderDialog = TvFolderDialog.Create(gridFolder) }), onFullScreen) }),
+                actions = if (!flatTv || app.flat) ({}) else ({
+                    Text("+ Folder", Modifier.tvFocus().clickable { folderDialog = TvFolderDialog.Create(gridFolder) }.padding(horizontal = 10.dp, vertical = 6.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
+                }),
             )
         } else if (selected == null) {
             Text("Pick an album", Modifier.align(Alignment.Center), color = Palette.Muted)
@@ -127,7 +133,6 @@ fun LibraryPanes(
                 AlbumScreen(
                     app.api, app.player, app.info, selected, onBack = { fromRight = true; onSelect(null) }, onEdit = onEdit, embedded = true,
                     focus = albumFocus, onSwitchPane = { runCatching { libFocus.requestFocus() } },
-                    tvActions = if (flatTv) ({ TvHeaderActions(app, onSearch, onPickMeters, onTruth, onPickTheme, onSignOut, null, onFullScreen) }) else null,
                 )
             }
         }

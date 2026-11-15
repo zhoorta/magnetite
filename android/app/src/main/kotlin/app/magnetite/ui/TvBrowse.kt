@@ -192,11 +192,11 @@ fun TvFolderDialogs(state: TvFolderDialog?, onState: (TvFolderDialog?) -> Unit, 
     )
 }
 
-/** The TV library's top bar actions, on the cover grid and on the album page: Search, Meters and the menu. [onNewFolder] only in the folder view. */
+/** The TV shell's top bar actions: Search, Meters, Full screen and the menu. [showView] (the flat/folders switch) only on the Library tab. */
 @Composable
 fun androidx.compose.foundation.layout.RowScope.TvHeaderActions(
     app: app.magnetite.MagnetiteApp, onSearch: () -> Unit, onPickMeters: () -> Unit, onTruth: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit,
-    onNewFolder: (() -> Unit)?, onFullScreen: () -> Unit,
+    showView: Boolean, onFullScreen: () -> Unit,
 ) {
     var menu by remember { androidx.compose.runtime.mutableStateOf(false) }
     TransportButton(Icon.Search, "Search", onSearch)
@@ -205,8 +205,7 @@ fun androidx.compose.foundation.layout.RowScope.TvHeaderActions(
     Box {
         TransportButton(Icon.Menu, "Menu", { menu = true })
         androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
-            androidx.compose.material3.DropdownMenuItem(text = { Text("View: " + if (app.flat) "flat" else "folders") }, onClick = { menu = false; app.toggleFlat() })
-            if (onNewFolder != null) androidx.compose.material3.DropdownMenuItem(text = { Text("New folder") }, onClick = { menu = false; onNewFolder() })
+            if (showView) androidx.compose.material3.DropdownMenuItem(text = { Text("View: " + if (app.flat) "flat" else "folders") }, onClick = { menu = false; app.toggleFlat() })
             androidx.compose.material3.DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
             androidx.compose.material3.DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[app.info]) }, onClick = { app.cycleInfo() })
             androidx.compose.material3.DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })

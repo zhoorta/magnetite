@@ -48,7 +48,7 @@ fun PlaylistsScreen(api: Api, onOpen: (Int) -> Unit) {
     }
     LaunchedEffect(Unit) { load() }
 
-    Scaffold(topBar = { DenseBar("Playlists") }) { padding ->
+    Scaffold(topBar = { if (!LocalTv.current) DenseBar("Playlists") }) { padding ->
         val list = playlists
         PullRefresh(padding, ::load) {
             when {

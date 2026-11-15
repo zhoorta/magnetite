@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -40,7 +41,7 @@ import kotlinx.coroutines.launch
 /** The width, in dp, the TV layout is drawn at: about what a 1080p set reports, a little more so that nothing is huge. */
 private const val TV_WIDTH_DP = 1200f
 
-private enum class TvTab(val label: String) { Library("Library"), Shared("Shared"), Playlists("Playlists"), Meters("Meters"), Theme("Theme"), SignOut("Sign out") }
+private enum class TvTab(val label: String) { Library("Library"), Shared("Shared"), Playlists("Playlists") }
 
 private sealed interface TvDetail {
     data class Album(val id: Int) : TvDetail
@@ -51,8 +52,8 @@ private sealed interface TvDetail {
 }
 
 /**
- * The remote-first shell for Android TV: a side rail, the library on the left with the open album beside it (the tablet's two panes, driven
- * by the remote's focus), and the player strip along the bottom (title, seek bar, the first meter, transport). The layout is drawn at a fixed 1200 dp width and the margins keep clear of the screen's edge (overscan).
+ * The remote-first shell for Android TV: a top bar (the tabs on the left, Search, Meters, Full screen and the menu on the right), the page under it
+ * (the library as a grid of covers, or the open album) and the player strip along the bottom (title, seek bar, the first meter, transport). The layout is drawn at a fixed 1200 dp width and the margins keep clear of the screen's edge (overscan).
  * Reuses the phone's screens; `LocalTv` turns their keyboard shortcuts off and their focus marks on.
  */
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
@@ -71,7 +72,7 @@ fun TvApp(app: MagnetiteApp) {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // When a page opens or closes from inside the content, the item that had the focus is gone and the focus falls back to the first one on the
-    // screen (the rail); put it back into the content. A choice made on the rail itself keeps the focus there.
+    // screen (the top bar); put it back into the content. A choice made on the tabs themselves keeps the focus there.
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var fromRail by remember { mutableStateOf(false) }
     var firstRun by remember { mutableStateOf(true) }
@@ -79,7 +80,7 @@ fun TvApp(app: MagnetiteApp) {
         if (firstRun) { firstRun = false; return@LaunchedEffect }
         kotlinx.coroutines.delay(300)
         // the search page puts the focus in its text field itself
-        if (!fromRail && detail !is TvDetail.Search) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Right)
+        if (!fromRail && detail !is TvDetail.Search) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
         fromRail = false
     }
 
@@ -107,31 +108,26 @@ fun TvApp(app: MagnetiteApp) {
         // Now Playing and full screen are drawn over the library, which stays composed (scroll, folders, selection and focus survive them).
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(horizontal = 40.dp, vertical = 20.dp).then(if (showNowPlaying) Modifier.focusProperties { canFocus = false } else Modifier)) {
-            Row(Modifier.weight(1f)) {
-                if (!showNowPlaying) {
-                    Column(Modifier.fillMaxHeight().width(148.dp).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Logo(Modifier.padding(bottom = 16.dp).width(96.dp))
-                        TvTab.entries.forEach { t ->
-                            val on = tab == t && detail == null
-                            Text(
-                                t.label,
-                                Modifier.fillMaxWidth().tvFocus()
-                                    .clickable {
-                                        fromRail = detail != null
-                                        when (t) {
-                                            TvTab.Meters -> pickMeters = true
-                                            TvTab.Theme -> pickTheme = true
-                                            TvTab.SignOut -> signOut()
-                                            else -> { tab = t; detail = null }
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
+            if (!showNowPlaying) {
+                Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TvTab.entries.forEach { t ->
+                        val on = tab == t && detail == null
+                        Text(
+                            t.label,
+                            Modifier.tvFocus().clickable { fromRail = detail != null; tab = t; detail = null }.padding(horizontal = 14.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
+                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                    TvHeaderActions(
+                        app, onSearch = { detail = TvDetail.Search }, onPickMeters = { pickMeters = true }, onTruth = { detail = TvDetail.Truth },
+                        onPickTheme = { pickTheme = true }, onSignOut = ::signOut, showView = tab == TvTab.Library && detail == null, onFullScreen = { showNowPlaying = true },
+                    )
                 }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            Row(Modifier.weight(1f)) {
                 // Down from the last row goes to the player strip. Without this the focus search picks the nearest item below by position, which for a short
                 // list is one of the rail's (they sit beside the rows).
                 Box(
@@ -141,8 +137,7 @@ fun TvApp(app: MagnetiteApp) {
                 ) {
                     val d = detail
                     Box(Modifier.fillMaxSize().then(if (showNowPlaying) Modifier.focusProperties { canFocus = false } else Modifier)) { when {
-                        d is TvDetail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = TvDetail.Edit(it) }, onPickMeters = { pickMeters = true },
-                            tvActions = { TvHeaderActions(app, { detail = TvDetail.Search }, { pickMeters = true }, { detail = TvDetail.Truth }, { pickTheme = true }, ::signOut, null, { showNowPlaying = true }) })
+                        d is TvDetail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = TvDetail.Edit(it) }, onPickMeters = { pickMeters = true })
                         d is TvDetail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null }, info = app.info)
                         d is TvDetail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = TvDetail.Album(it) }, onBack = { detail = null })
                         d is TvDetail.Truth -> TruthScreen(app.api, app.player, onBack = { detail = null })
