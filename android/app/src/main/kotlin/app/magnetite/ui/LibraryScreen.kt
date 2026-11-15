@@ -57,12 +57,13 @@ import kotlinx.coroutines.CancellationException
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit, flat: Boolean = false, onToggleFlat: () -> Unit = {}) {
-    val albums = remember { mutableStateListOf<Album>() }
+fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: () -> Unit, onOpen: (Int) -> Unit, onSearch: () -> Unit, onTruth: () -> Unit, onEdit: (Int) -> Unit, focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: () -> Unit, onPickTheme: () -> Unit, onSignOut: () -> Unit, flat: Boolean = false, onToggleFlat: () -> Unit = {},
+    sharedAlbums: androidx.compose.runtime.snapshots.SnapshotStateList<Album>? = null, sharedFolders: androidx.compose.runtime.snapshots.SnapshotStateList<Folder>? = null, onFolder: ((Int) -> Unit)? = null) {
+    val albums = sharedAlbums ?: remember { mutableStateListOf<Album>() }
     var page by remember { mutableStateOf(0) }
     var lastPage by remember { mutableStateOf(1) }
     var error by remember { mutableStateOf<String?>(null) }
-    val folders = remember { mutableStateListOf<Folder>() }
+    val folders = sharedFolders ?: remember { mutableStateListOf<Folder>() }
 
     suspend fun loadMore() {
         if (page >= lastPage) return
@@ -225,7 +226,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
     fun current() = rows.firstOrNull { rowKey(it) == cursor }?.second
     fun openCurrent() {
         when (val c = current()) {
-            is Folder -> if (c.id in expanded) expanded.remove(c.id) else expanded.add(c.id)
+            is Folder -> { if (c.id in expanded) expanded.remove(c.id) else expanded.add(c.id); onFolder?.invoke(c.id) }
             is Album -> onOpen(c.id)
         }
     }
@@ -286,7 +287,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                     val open = r.id in expanded
                     Row(
                         Modifier.fillMaxWidth().background(if (hover == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else if (keysUsed && cursor == "f${r.id}") MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent).tvFocus().then(if (tv && "f${r.id}" == rowKey(rows.first())) Modifier.focusRequester(firstRow) else Modifier).combinedClickable(
-                            onClick = { if (open) expanded.remove(r.id) else expanded.add(r.id) },
+                            onClick = { if (open) expanded.remove(r.id) else expanded.add(r.id); onFolder?.invoke(r.id) },
                             onLongClick = { menuFor = r.id },
                         )
                             .padding(start = 8.dp + 16.dp * depth, end = 10.dp, top = 4.dp, bottom = 4.dp),
