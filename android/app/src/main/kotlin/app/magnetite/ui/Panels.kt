@@ -37,6 +37,12 @@ fun MeterPanel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Box(modifier.clip(RoundedCornerShape(6.dp)).background(PanelBg).padding(horizontal = 10.dp, vertical = 8.dp)) { content() }
 }
 
+/** A small dark panel for one meter or poster, the thumbnail in the player bars: no padding, the meter fills it. */
+@Composable
+fun MeterThumb(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(modifier.clip(RoundedCornerShape(4.dp)).background(PanelBg)) { content() }
+}
+
 /** Colour for a position on a -60..0 dB scale: green, amber from -18 dB, red from -6 dB. */
 fun meterColor(db: Float): Color = when {
     db > -6f -> MeterRed

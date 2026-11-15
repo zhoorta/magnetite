@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -50,25 +52,36 @@ fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMe
 
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant) {
         Column {
-            if (showMeters && meters.isNotEmpty()) {
-                // All chosen meters stack here; a tap or a swipe up opens Now Playing (the meters are chosen there or in the library menu).
-                var swiped by remember { mutableStateOf(0f) }
-                MeterPanel(
-                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp).clickable(onClick = onOpen).pointerInput(Unit) {
+            val duration = player.durationMs.coerceAtLeast(1L)
+            val fraction = dragging ?: (player.positionMs.toFloat() / duration)
+            // The seek bar is a thin line along the top edge (the times are on Now Playing), so the bar is one row tall.
+            SeekBar(
+                fraction.coerceIn(0f, 1f), player.durationMs > 0,
+                onDrag = { dragging = it },
+                onDone = { f -> dragging = null; f?.let { player.seekTo((it * duration).toLong()) } },
+                modifier = Modifier.fillMaxWidth().height(14.dp),
+            )
+            Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (showMeters) {
+                    // The thumbnail: the first meter (a poster is portrait, a meter is wide), or the cover when there are none. A tap or a swipe up opens Now Playing.
+                    var swiped by remember { mutableStateOf(0f) }
+                    val open = Modifier.clickable(onClick = onOpen).pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragStart = { swiped = 0f },
                             onVerticalDrag = { change, dy -> change.consume(); swiped += dy },
                             onDragEnd = { if (swiped < -40f) onOpen() },
                         )
-                    },
-                ) {
-                    Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)) {
-                        meters.forEach { MeterView(it, player.isPlaying, compact = true, track = player.current, position = { player.positionMs }) }
+                    }
+                    val first = meters.firstOrNull()
+                    if (first == null) {
+                        Cover(player.coverUrl, Modifier.padding(end = 10.dp).size(52.dp).then(open))
+                    } else {
+                        val poster = first.startsWith("poster-")
+                        MeterThumb(Modifier.padding(end = 10.dp).then(if (poster) Modifier.width(48.dp).height(64.dp) else Modifier.width(96.dp).height(48.dp)).then(open)) {
+                            MeterView(first, player.isPlaying, fill = true, track = player.current, position = { player.positionMs })
+                        }
                     }
                 }
-            }
-            Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                // the track's text opens the album or playlist it is playing from; the meters above open Now Playing
                 Column(Modifier.weight(1f).tvFocus().clickable(onClick = onOpenSource ?: onOpen)) {
                     Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                     player.artist?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
@@ -80,21 +93,9 @@ fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMe
                         }
                     }
                 }
-                TransportButton(Icon.Previous, "Previous", { player.previous() })
-                TransportButton(if (player.isPlaying) Icon.Pause else Icon.Play, if (player.isPlaying) "Pause" else "Play", { player.toggle() })
-                TransportButton(Icon.Next, "Next", { player.next() })
-            }
-            val duration = player.durationMs.coerceAtLeast(1L)
-            val fraction = dragging ?: (player.positionMs.toFloat() / duration)
-            Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(clock((fraction * duration).toLong()), style = MaterialTheme.typography.labelSmall)
-                SeekBar(
-                    fraction.coerceIn(0f, 1f), player.durationMs > 0,
-                    onDrag = { dragging = it },
-                    onDone = { f -> dragging = null; f?.let { player.seekTo((it * duration).toLong()) } },
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                )
-                Text(clock(player.durationMs), style = MaterialTheme.typography.labelSmall)
+                TransportButton(Icon.Previous, "Previous", { player.previous() }, size = 40.dp)
+                TransportButton(if (player.isPlaying) Icon.Pause else Icon.Play, if (player.isPlaying) "Pause" else "Play", { player.toggle() }, size = 40.dp)
+                TransportButton(Icon.Next, "Next", { player.next() }, size = 40.dp)
             }
         }
     }

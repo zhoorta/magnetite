@@ -59,7 +59,7 @@ fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onO
 
     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceVariant) {
         Row(
-            Modifier.fillMaxWidth().height(if (compact) 84.dp else 136.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().height(if (compact) 84.dp else 104.dp).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.SpaceBetween) {
@@ -97,7 +97,11 @@ fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onO
                 }
             }
             if (!compact && meters.isNotEmpty()) {
-                MeterPanel(Modifier.width(440.dp).fillMaxHeight().clickable(onClick = onOpen)) { MeterView(meters.first(), player.isPlaying, fill = true, track = player.current, position = { player.positionMs }) }
+                // a thumbnail, not a wide panel: a poster is portrait, a meter is wide
+                val poster = meters.first().startsWith("poster-")
+                MeterThumb(Modifier.then(if (poster) Modifier.width(66.dp).fillMaxHeight() else Modifier.width(200.dp).fillMaxHeight()).clickable(onClick = onOpen)) {
+                    MeterView(meters.first(), player.isPlaying, fill = true, track = player.current, position = { player.positionMs })
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TransportButton(Icon.Previous, "Previous", { player.previous() }, size = 52.dp)
