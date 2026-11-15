@@ -228,7 +228,7 @@ function shapes(g, d) {
         label(g, `LEVEL/${st.level.toFixed(2)}`, 58, 530, 8, font);
     }
 
-    // The list: four ranges, each with a wave (faster for a higher range, taller when louder) and a level line.
+    // The list: four ranges, high at the top, each with a wave (faster for a higher range, taller when louder) and a level line.
     line(g, 472, 196, 482, 182, 578, 182, 578, 196);
     for (let k = 0; k < 3; k++) {
         for (let j = 0; j < 3; j++) {
@@ -239,7 +239,7 @@ function shapes(g, d) {
     g.strokeRect(392, 196, 186, 208);
     RANGES.forEach((name, i) => {
         const v = (b[i * 2] + b[i * 2 + 1]) / 2;
-        const y = 204 + i * 49;
+        const y = 204 + (RANGES.length - 1 - i) * 49; // high at the top
         g.strokeRect(400, y, 36, 42);
         g.strokeRect(442, y, 128, 42);
         g.beginPath();
