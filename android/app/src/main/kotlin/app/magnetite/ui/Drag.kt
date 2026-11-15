@@ -43,6 +43,7 @@ fun Modifier.dragRow(
     onDrop: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ): Modifier {
+    fun scrollPos() = list.firstVisibleItemIndex * 100_000L + list.firstVisibleItemScrollOffset
     fun offset() = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }?.offset ?: 0
     fun edge(y: Float) {
         // near the top or bottom of the list: scroll it, so a long list can be dragged through
@@ -50,12 +51,16 @@ fun Modifier.dragRow(
         if (y < 120f) scope.launch { list.scrollBy(-28f) } else if (y > h - 120f) scope.launch { list.scrollBy(28f) }
     }
     var moved = false
+    var startScroll = 0L
+    // The list scrolled (or is scrolling) since the press began: this was a swipe, never a long press.
+    fun scrolled() = list.isScrollInProgress || scrollPos() != startScroll
     return this
         .pointerInput(key, enabled) {
             if (!enabled) return@pointerInput
             detectDragGesturesAfterLongPress(
                 onDragStart = { o ->
                     moved = false
+                    startScroll = scrollPos()
                     drag.key = key
                     drag.grabY = o.y
                     drag.fingerY = offset() + o.y
@@ -64,13 +69,14 @@ fun Modifier.dragRow(
                 onDrag = { change, amount ->
                     change.consume()
                     if (kotlin.math.abs(amount.y) > 0.5f || kotlin.math.abs(amount.x) > 0.5f) moved = true
+                    if (scrolled()) moved = true
                     drag.fingerY += amount.y
                     edge(drag.fingerY)
                     onMove(drag.fingerY)
                 },
-                onDragEnd = { drag.lastEnd = android.os.SystemClock.uptimeMillis(); if (!moved && onLongPress != null) onLongPress() else onDrop(); drag.key = null },
+                onDragEnd = { drag.lastEnd = android.os.SystemClock.uptimeMillis(); if (!moved && !scrolled() && onLongPress != null) onLongPress() else onDrop(); drag.key = null },
                 // a release without any movement ends the gesture as a cancel: that is the plain long press
-                onDragCancel = { drag.lastEnd = android.os.SystemClock.uptimeMillis(); drag.key = null; if (!moved) onLongPress?.invoke() },
+                onDragCancel = { drag.lastEnd = android.os.SystemClock.uptimeMillis(); drag.key = null; if (!moved && !scrolled()) onLongPress?.invoke() },
             )
         }
         .graphicsLayer {

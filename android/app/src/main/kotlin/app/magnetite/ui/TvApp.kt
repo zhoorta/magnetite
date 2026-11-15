@@ -141,7 +141,7 @@ fun TvApp(app: MagnetiteApp) {
                 ) {
                     val d = detail
                     Box(Modifier.fillMaxSize().then(if (showNowPlaying) Modifier.focusProperties { canFocus = false } else Modifier)) { when {
-                        d is TvDetail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = TvDetail.Edit(it) })
+                        d is TvDetail.Album -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = TvDetail.Edit(it) }, onPickMeters = { pickMeters = true })
                         d is TvDetail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null }, info = app.info)
                         d is TvDetail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = TvDetail.Album(it) }, onBack = { detail = null })
                         d is TvDetail.Truth -> TruthScreen(app.api, app.player, onBack = { detail = null })

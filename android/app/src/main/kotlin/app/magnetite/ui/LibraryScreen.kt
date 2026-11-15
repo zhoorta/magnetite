@@ -263,6 +263,7 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
     Scaffold(modifier = if (tv) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = {
         DenseBar("Library") {
             TransportButton(Icon.Search, "Search", onSearch)
+            TransportButton(Icon.Meters, "Meters", onPickMeters)
             var menu by remember { mutableStateOf(false) }
             androidx.compose.foundation.layout.Box {
                 TransportButton(Icon.Menu, "Menu", { menu = true })
@@ -271,7 +272,6 @@ fun LibraryScreen(api: Api, player: PlayerController, info: Int, onCycleInfo: ()
                     DropdownMenuItem(text = { Text("New folder") }, onClick = { menu = false; dialog = FolderDialog.Create(null) })
                     DropdownMenuItem(text = { Text("Truth") }, onClick = { menu = false; onTruth() })
                     DropdownMenuItem(text = { Text("Info: " + listOf("off", "DR", "all")[info]) }, onClick = { onCycleInfo() })
-                    DropdownMenuItem(text = { Text("Meters") }, onClick = { menu = false; onPickMeters() })
                     DropdownMenuItem(text = { Text("Theme") }, onClick = { menu = false; onPickTheme() })
                     DropdownMenuItem(text = { Text("Sign out") }, onClick = { menu = false; onSignOut() })
                 }

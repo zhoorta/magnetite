@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
                         if (!signedIn) LoginScreen(app.api, app.session.serverUrl, app.session.lastUsername) { signedIn = true }
                         // The library and the open page stay composed under Now Playing (their scroll, folders and selection survive it); they only stop taking focus.
                         else Box(Modifier.fillMaxSize().then(if (showNowPlaying) Modifier.focusProperties { canFocus = false } else Modifier)) { when {
-                            d is Detail.Album && !wide -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = Detail.Edit(it) })
+                            d is Detail.Album && !wide -> AlbumScreen(app.api, app.player, app.info, d.id, onBack = { detail = null }, onEdit = { detail = Detail.Edit(it) }, onPickMeters = { pickMeters = true })
                             d is Detail.Playlist -> PlaylistScreen(app.api, app.player, d.id, onBack = { detail = null }, info = app.info)
                             d is Detail.Search -> SearchScreen(app.api, app.player, app.info, onOpenAlbum = { detail = Detail.Album(it) }, onBack = { detail = null })
                             d is Detail.Edit -> EditScreen(app.api, d.id, onBack = { if (wide) { selected = d.id; detail = null } else detail = Detail.Album(d.id) }, onSaved = { if (wide) { selected = d.id; detail = null } else detail = Detail.Album(d.id) })

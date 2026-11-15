@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -135,10 +136,10 @@ fun NowPlayingScreen(
                 val side = minOf(maxHeight, maxWidth * 0.45f)
                 Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     Cover(player.coverUrl, Modifier.size(side).tvFocus().clickable(onClick = onOpenSource))
-                    Column(Modifier.weight(1f).verticalScroll(scroll)) { TrackDetails(player, info, Alignment.Start) }
+                    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll), verticalArrangement = Arrangement.Center) { TrackDetails(player, info, Alignment.Start) }
                 }
             } else {
-                Column(Modifier.fillMaxSize().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.fillMaxSize().verticalScroll(scroll), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Cover(player.coverUrl, Modifier.fillMaxWidth(0.7f).clickable(onClick = onOpenSource))
                     Spacer(Modifier.height(20.dp))
                     TrackDetails(player, info, Alignment.CenterHorizontally)

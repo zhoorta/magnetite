@@ -39,7 +39,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: () -> Unit, onEdit: (Int) -> Unit = {}, embedded: Boolean = false,
-    focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null) {
+    focus: androidx.compose.ui.focus.FocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }, onSwitchPane: (() -> Unit)? = null, onPickMeters: (() -> Unit)? = null) {
     var album by remember { mutableStateOf<Album?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -78,7 +78,7 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
     ActionHost(actions, api, player, emptyList(), onClose = { actions = null }, onChanged = { scope.launch { load() } }, onEdit = onEdit)
     androidx.activity.compose.BackHandler(onBack = onBack)
 
-    Scaffold(modifier = if (LocalTv.current) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = { DenseBar(album?.title ?: "", if (embedded) null else onBack) }) { padding ->
+    Scaffold(modifier = if (LocalTv.current) Modifier else Modifier.focusRequester(focus).focusable().onPreviewKeyEvent(onKey), topBar = { DenseBar(album?.title ?: "", if (embedded) null else onBack) { if (!embedded && onPickMeters != null) TransportButton(Icon.Meters, "Meters", onPickMeters) } }) { padding ->
         val a = album
         PullRefresh(padding, ::load) {
         if (a == null) {
