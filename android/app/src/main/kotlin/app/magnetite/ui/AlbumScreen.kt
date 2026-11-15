@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -94,14 +96,18 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
             tvActions?.invoke(this)
         }
         androidx.compose.foundation.layout.Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp)) {
-            Column(Modifier.weight(0.42f).fillMaxHeight(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
-                // half the width of its column: the text under it then fits above the player strip
-                Cover(a.coverUrl, Modifier.fillMaxWidth(0.5f).padding(bottom = 8.dp))
-                Text(a.title, style = MaterialTheme.typography.titleLarge, maxLines = 3)
-                (a.displayArtist ?: a.artist)?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 2) }
-                val facts = listOfNotNull(a.year?.toString(), "${a.tracks.size} tracks", a.tracks.sumOf { it.duration ?: 0.0 }.takeIf { it > 0 }?.let(::total))
-                Text(facts.joinToString(" · "), color = Palette.Muted, style = MaterialTheme.typography.bodyMedium)
-                if (info >= 1) Info.albumDr(a)?.let { Text(Info.dr(it)!!, color = Palette.Muted, style = MaterialTheme.typography.bodyMedium) }
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(0.42f).fillMaxHeight()) {
+                // The text under the cover needs about 130 dp; the cover takes what is left, and never more than half the column's width.
+                val cover = minOf(maxWidth * 0.5f, (maxHeight - 130.dp).coerceAtLeast(72.dp))
+                Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
+                    Cover(a.coverUrl, Modifier.size(cover))
+                    androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
+                    Text(a.title, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                    (a.displayArtist ?: a.artist)?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge, maxLines = 1) }
+                    val facts = listOfNotNull(a.year?.toString(), "${a.tracks.size} tracks", a.tracks.sumOf { it.duration ?: 0.0 }.takeIf { it > 0 }?.let(::total))
+                    Text(facts.joinToString(" · "), color = Palette.Muted, style = MaterialTheme.typography.bodyMedium)
+                    if (info >= 1) Info.albumDr(a)?.let { Text(Info.dr(it)!!, color = Palette.Muted, style = MaterialTheme.typography.bodyMedium) }
+                }
             }
             LazyColumn(Modifier.weight(0.58f).fillMaxHeight(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
                 itemsIndexed(a.tracks, key = { _, t -> t.id }) { i, track ->
