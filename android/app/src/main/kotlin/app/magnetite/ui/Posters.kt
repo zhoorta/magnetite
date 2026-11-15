@@ -81,6 +81,8 @@ class Cv {
     fun ellipse(cx: Float, cy: Float, rx: Float, ry: Float, a0: Float, a1: Float) {
         oval.set(cx - rx, cy - ry, cx + rx, cy + ry)
         var sweep = (a1 - a0) * 180f / PI_F
+        // The canvas goes clockwise: arc(PI, 0) is the half over the top (+180), not the half underneath (-180).
+        while (sweep < 0f) sweep += 360f
         if (sweep >= 360f) { path.addOval(oval, Path.Direction.CW); has = true; return }
         path.arcTo(oval, a0 * 180f / PI_F, sweep, !has)
         has = true
@@ -1286,7 +1288,7 @@ private class Terrain : Poster(needsGonio = true) {
         strokeRect(392f, 196f, 186f, 208f)
         ranges.forEachIndexed { k, name ->
             val v = (b[k * 2] + b[k * 2 + 1]) / 2
-            val y = 204f + k * 49
+            val y = 204f + (ranges.size - 1 - k) * 49 // high at the top
             strokeRect(400f, y, 36f, 42f); strokeRect(442f, y, 128f, 42f)
             beginPath()
             for (n in 0..28) {
