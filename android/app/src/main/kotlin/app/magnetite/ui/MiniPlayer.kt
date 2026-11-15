@@ -34,9 +34,9 @@ private fun clock(ms: Long): String {
     return "%d:%02d".format(s / 60, s % 60)
 }
 
-/** Bar at the bottom of every screen once something has been played: title, controls and a seek bar. */
+/** Bar at the bottom of every screen once something has been played: title, controls and a seek bar. The text opens [onOpenSource] (the album or playlist playing), the meters [onOpen] (Now Playing). */
 @Composable
-fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMeters: Boolean, onPickMeters: () -> Unit, onOpen: () -> Unit) {
+fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMeters: Boolean, onPickMeters: () -> Unit, onOpenSource: (() -> Unit)? = null, onOpen: () -> Unit) {
     val title = player.title ?: return
     var dragging by remember { mutableStateOf<Float?>(null) }
 
@@ -68,7 +68,8 @@ fun MiniPlayer(player: PlayerController, info: Int, meters: List<String>, showMe
                 }
             }
             Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).tvFocus().clickable(onClick = onOpen)) {
+                // the track's text opens the album or playlist it is playing from; the meters above open Now Playing
+                Column(Modifier.weight(1f).tvFocus().clickable(onClick = onOpenSource ?: onOpen)) {
                     Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                     player.artist?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
                     player.current?.let { t ->

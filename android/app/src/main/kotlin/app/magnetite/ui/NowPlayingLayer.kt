@@ -95,7 +95,7 @@ fun NowPlayingLayer(app: MagnetiteApp, onPickMeters: () -> Unit, onClose: () -> 
         }
         val playerBar = @Composable {
             Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)) {
-                MiniPlayer(app.player, app.info, app.meters, false, onPickMeters = {}) {}
+                MiniPlayer(app.player, app.info, app.meters, false, onPickMeters = {}, onOpenSource = onOpenSource) {}
             }
         }
         if (hasPoster) {

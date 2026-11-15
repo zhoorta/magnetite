@@ -126,7 +126,16 @@ class MainActivity : ComponentActivity() {
                     }
                     if (signedIn) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        MiniPlayer(app.player, app.info, app.meters, !showNowPlaying, { pickMeters = true }) { showNowPlaying = true }
+                        MiniPlayer(
+                            app.player, app.info, app.meters, !showNowPlaying, { pickMeters = true },
+                            onOpenSource = {
+                                when (val o = app.player.origin()) {
+                                    is PlaySource.Album -> { tab = Tab.Library; detail = Detail.Album(o.id) }
+                                    is PlaySource.Playlist -> detail = Detail.Playlist(o.id)
+                                    null -> showNowPlaying = true
+                                }
+                            },
+                        ) { showNowPlaying = true }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         Row(Modifier.fillMaxWidth().height(40.dp)) {
                             Tab.entries.forEach { t ->

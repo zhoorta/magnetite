@@ -46,7 +46,7 @@ private fun clock(ms: Long): String {
  * [compact] (while Now Playing shows the meters itself): no meter and no format line, a thinner strip.
  */
 @Composable
-fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onOpen: () -> Unit, compact: Boolean = false, titleFocus: androidx.compose.ui.focus.FocusRequester? = null) {
+fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onOpen: () -> Unit, compact: Boolean = false, titleFocus: androidx.compose.ui.focus.FocusRequester? = null, onOpenSource: (() -> Unit)? = null) {
     val title = player.title ?: return
 
     LaunchedEffect(player.isPlaying) {
@@ -63,7 +63,7 @@ fun TvPlayerStrip(player: PlayerController, info: Int, meters: List<String>, onO
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.SpaceBetween) {
-                Column(Modifier.fillMaxWidth().then(if (titleFocus != null) Modifier.focusRequester(titleFocus) else Modifier).tvFocus().clickable(onClick = onOpen).padding(horizontal = 6.dp)) {
+                Column(Modifier.fillMaxWidth().then(if (titleFocus != null) Modifier.focusRequester(titleFocus) else Modifier).tvFocus().clickable(onClick = onOpenSource ?: onOpen).padding(horizontal = 6.dp)) {
                     Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                     player.artist?.let { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
                     player.current?.let { t ->

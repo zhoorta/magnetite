@@ -162,7 +162,16 @@ fun TvApp(app: MagnetiteApp) {
             }
             run {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                TvPlayerStrip(app.player, app.info, app.meters, { showNowPlaying = true }, compact = showNowPlaying && app.meters.isNotEmpty(), titleFocus = stripFocus)
+                TvPlayerStrip(
+                    app.player, app.info, app.meters, { showNowPlaying = true }, compact = showNowPlaying && app.meters.isNotEmpty(), titleFocus = stripFocus,
+                    onOpenSource = {
+                        when (val o = app.player.origin()) {
+                            is PlaySource.Album -> { tab = TvTab.Library; selected = o.id; detail = null }
+                            is PlaySource.Playlist -> detail = TvDetail.Playlist(o.id)
+                            null -> showNowPlaying = true
+                        }
+                    },
+                )
             }
         }
         // Now Playing covers everything; its top bar and the player strip hide after a few seconds and come back on a key (see TvNowPlayingLayer).
