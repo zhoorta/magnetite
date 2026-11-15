@@ -88,6 +88,8 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
         if (a == null) { ScrollingMessage(error ?: "Loading…"); return }
         val firstTrack = remember { androidx.compose.ui.focus.FocusRequester() }
         LaunchedEffect(a.id) { kotlinx.coroutines.delay(200); runCatching { firstTrack.requestFocus() } }
+        // Without the Scaffold of the other layouts nothing sets the text colour (black by default): the Surface does.
+        androidx.compose.material3.Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
         Column(Modifier.fillMaxSize()) {
         // the library's top bar stays, full width: Back on the left, Search, Meters and the menu on the right
         androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -102,7 +104,7 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
                 Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)) {
                     Cover(a.coverUrl, Modifier.size(cover))
                     androidx.compose.foundation.layout.Spacer(Modifier.height(4.dp))
-                    Text(a.title, style = MaterialTheme.typography.titleMedium, maxLines = 2)
+                    Text(a.title, color = Palette.Text, style = MaterialTheme.typography.titleMedium, maxLines = 2)
                     (a.displayArtist ?: a.artist)?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge, maxLines = 1) }
                     val facts = listOfNotNull(a.year?.toString(), "${a.tracks.size} tracks", a.tracks.sumOf { it.duration ?: 0.0 }.takeIf { it > 0 }?.let(::total))
                     Text(facts.joinToString(" · "), color = Palette.Muted, style = MaterialTheme.typography.bodyMedium)
@@ -119,6 +121,7 @@ fun AlbumScreen(api: Api, player: PlayerController, info: Int, id: Int, onBack: 
                     )
                 }
             }
+        }
         }
         }
         return
