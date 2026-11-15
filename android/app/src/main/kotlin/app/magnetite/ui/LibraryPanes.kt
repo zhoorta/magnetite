@@ -69,7 +69,7 @@ fun LibraryPanes(
         Box(Modifier.weight(1.2f).fillMaxHeight().focusRequester(rightFocus).focusGroup()) {
             if (selected == null && tv) {
                 FolderGrid(
-                    folders, albums, gridFolder, playingAlbum = app.player.albumId,
+                    folders, albums, gridFolder, playingAlbum = app.player.albumId, flat = app.flat,
                     onFolder = { fromRight = true; gridFolder = it },
                     onAlbum = { fromRight = true; onSelect(it) },
                 )

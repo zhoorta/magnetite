@@ -29,20 +29,21 @@ import app.magnetite.data.Folder
  * [folderId] null is the top level.
  */
 @Composable
-fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFolder: (Int?) -> Unit, onAlbum: (Int) -> Unit, playingAlbum: Int? = null) {
+fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFolder: (Int?) -> Unit, onAlbum: (Int) -> Unit, playingAlbum: Int? = null, flat: Boolean = false) {
     val path = generateSequence(folders.firstOrNull { it.id == folderId }) { f -> folders.firstOrNull { it.id == f.parentId } }.toList().reversed()
-    val subfolders = folders.filter { it.parentId == folderId }
-    val here = albums.filter { it.folderId == folderId }
+    // The flat view has no folders: every album, in the library's own order.
+    val subfolders = if (flat) emptyList() else folders.filter { it.parentId == folderId }
+    val here = if (flat) albums.toList() else albums.filter { it.folderId == folderId }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (folderId != null) {
+            if (folderId != null && !flat) {
                 Text(
                     "← Back", Modifier.tvFocus().clickable { onFolder(path.dropLast(1).lastOrNull()?.id) }.padding(horizontal = 10.dp, vertical = 6.dp),
                     color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium,
                 )
             }
             Text(
-                (listOf("Library") + path.map { it.name }).joinToString(" / "), Modifier.weight(1f).padding(start = 8.dp),
+                (if (flat) listOf("Library", "all albums") else listOf("Library") + path.map { it.name }).joinToString(" / "), Modifier.weight(1f).padding(start = 8.dp),
                 color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Text("${subfolders.size + here.size}", color = Palette.Muted, style = MaterialTheme.typography.bodySmall)
