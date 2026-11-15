@@ -12,8 +12,8 @@ android {
         applicationId = "app.magnetite"
         minSdk = 26
         targetSdk = 37
-        versionCode = 14
-        versionName = "0.4.6"
+        versionCode = 15
+        versionName = "0.4.7"
     }
 
     // Key and passwords come from ~/.gradle/gradle.properties, never from the repo.
