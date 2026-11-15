@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Choose up to [MAX_METERS] meters, as pictures like the web's meter menu: the meters two across, the posters three across. Tapping adds or
- * removes one; a chosen one has its position on it, and the order row below moves it up. [onChange] gets the whole list at every change, so it
+ * removes one; a chosen one has its position on it, and the order list below moves it up or removes it. [onChange] gets the whole list at every change, so it
  * is saved at once (and shared with the web) like there.
  */
 @Composable
@@ -45,8 +45,9 @@ fun MeterPicker(chosen: List<String>, onChange: (List<String>) -> Unit, onClose:
     fun Tile(m: MeterInfo, label: String, ratio: Float, modifier: Modifier) {
         val at = chosen.indexOf(m.id)
         val on = at >= 0
+        // A full list dims the unchosen tiles but leaves them focusable, so a remote can still move through the whole list.
         val enabled = on || chosen.size < MAX_METERS
-        Column(modifier.alpha(if (enabled) 1f else 0.4f).clip(RoundedCornerShape(6.dp)).clickable(enabled = enabled) { onChange(if (on) chosen - m.id else chosen + m.id) }.padding(3.dp)) {
+        Column(modifier.alpha(if (enabled) 1f else 0.4f).clip(RoundedCornerShape(6.dp)).tvFocus().clickable { if (enabled) onChange(if (on) chosen - m.id else chosen + m.id) }.padding(3.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceVariant).border(BorderStroke(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline), RoundedCornerShape(4.dp))) {
                 pictures[m.id]?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
                 if (on) Text("${at + 1}", Modifier.align(Alignment.TopEnd).padding(3.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)).padding(horizontal = 6.dp), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall)
@@ -76,13 +77,14 @@ fun MeterPicker(chosen: List<String>, onChange: (List<String>) -> Unit, onClose:
                 Grid(plain, 2, 7f / 4f) { it.label }
                 Text("Posters", Modifier.padding(top = 12.dp, bottom = 2.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Grid(posters, 3, 3f / 4f) { it.label.removePrefix("Poster: ") }
-                if (chosen.size > 1) {
+                if (chosen.isNotEmpty()) {
                     Text("Order", Modifier.padding(top = 12.dp, bottom = 2.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     chosen.forEachIndexed { at, id ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("${at + 1}", Modifier.padding(end = 12.dp), color = MaterialTheme.colorScheme.primary)
                             Text(MeterCatalog.firstOrNull { it.id == id }?.label ?: id, Modifier.weight(1f))
-                            if (at > 0) Text("↑", Modifier.clickable { onChange(chosen.toMutableList().also { it.add(at - 1, it.removeAt(at)) }) }.padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.primary)
+                            if (at > 0) Text("↑", Modifier.clip(RoundedCornerShape(6.dp)).tvFocus().clickable { onChange(chosen.toMutableList().also { it.add(at - 1, it.removeAt(at)) }) }.padding(horizontal = 12.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary)
+                            Text("×", Modifier.clip(RoundedCornerShape(6.dp)).tvFocus().clickable { onChange(chosen - id) }.padding(horizontal = 12.dp, vertical = 4.dp), color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
