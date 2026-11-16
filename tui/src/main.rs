@@ -945,6 +945,17 @@ impl App {
     }
 
     /// ▶ while it plays, a pause mark while it is paused (also a restored track waiting for space).
+    /// The folders that hold the album being played, at any depth (the web marks them too, so a closed folder says where the music is).
+    fn folders_holding_playing(&self) -> BTreeSet<u64> {
+        let mut set = BTreeSet::new();
+        let folder = self.playing_album().and_then(|id| self.albums.iter().find(|a| a.id == id)).and_then(|a| a.folder_id);
+        if let Some(f) = folder.filter(|f| self.folders.iter().any(|x| x.id == *f)) {
+            set.insert(f);
+            set.extend(tree::ancestors(&self.folders, f));
+        }
+        set
+    }
+
     fn play_icon(&self) -> &'static str {
         if self.player.paused() || self.resume.is_some() { "‖" } else { "▶" }
     }
@@ -1590,15 +1601,19 @@ impl App {
         let [left, right] = Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)]).areas(body);
         let pane = |on: bool, title: String| Block::new().borders(Borders::ALL).border_style(Style::new().fg(if on { accent } else { muted })).title(title).style(Style::new().bg(c(th.surface)).fg(text));
         let sel = Style::new().fg(c(th.bg)).bg(accent);
+        let holding = self.folders_holding_playing();
         let items: Vec<ListItem> = self
             .rows
             .iter()
             .map(|row| match row {
-                tree::Row::Folder { name, albums, .. } => ListItem::new(Line::from(vec![
-                    Span::styled(tree::prefix(row), Style::new().fg(accent)),
-                    Span::styled(name.clone(), Style::new().fg(accent).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("  {albums}"), Style::new().fg(muted)),
-                ])),
+                tree::Row::Folder { id, name, albums, .. } => {
+                    let mut spans = vec![Span::styled(tree::prefix(row), Style::new().fg(accent)), Span::styled(name.clone(), Style::new().fg(accent).add_modifier(Modifier::BOLD))];
+                    if holding.contains(id) {
+                        spans.push(Span::styled(format!(" {}", self.play_icon()), Style::new().fg(c(th.accent2))));
+                    }
+                    spans.push(Span::styled(format!("  {albums}"), Style::new().fg(muted)));
+                    ListItem::new(Line::from(spans))
+                }
                 tree::Row::Album { index, .. } => {
                     let a = &self.albums[*index];
                     let on = self.playing_album() == Some(a.id);
@@ -2321,5 +2336,18 @@ mod folder_tests {
         assert_eq!(app.albums[0].folder_id, None); // Kind of Blue moved up
         assert_eq!(lines(&app), ["▸ Live", "  Kind of Blue", "  Loose"]);
         assert!(!app.open_folders.contains(&1));
+    }
+
+    #[test]
+    fn the_folders_above_the_playing_album_are_marked_closed_or_not() {
+        let Some(mut app) = app() else { return };
+        assert!(app.folders_holding_playing().is_empty()); // nothing playing
+        app.now = Some(0);
+        app.queue_albums = vec![3]; // At Newport: in Live, in Jazz
+        assert_eq!(app.folders_holding_playing().into_iter().collect::<Vec<_>>(), [1, 2]);
+        app.queue_albums = vec![1]; // Kind of Blue: in Jazz only
+        assert_eq!(app.folders_holding_playing().into_iter().collect::<Vec<_>>(), [1]);
+        app.queue_albums = vec![2]; // a loose album: no folder
+        assert!(app.folders_holding_playing().is_empty());
     }
 }
