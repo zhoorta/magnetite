@@ -190,6 +190,36 @@ pub fn axis(w: usize, max_hz: f32) -> String {
     row.into_iter().collect()
 }
 
+/// How many rows `lines` take when wrapped at `width` columns, word by word as `Paragraph` does (a word longer than a row is
+/// split), so the box above the graph is as tall as its text and nothing is cut off.
+pub fn wrapped_rows(lines: &[Line], width: u16) -> u16 {
+    let width = width.max(1) as usize;
+    let mut rows = 0usize;
+    for line in lines {
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        let (mut used, mut r) = (0usize, 1usize);
+        for word in text.split(' ') {
+            let w = word.chars().count();
+            let need = if used == 0 { w } else { used + 1 + w };
+            if need <= width {
+                used = need;
+            } else if w > width {
+                // a long word starts on a fresh row and fills whole rows
+                if used > 0 {
+                    r += 1;
+                }
+                r += w.saturating_sub(1) / width;
+                used = w - (w.saturating_sub(1) / width) * width;
+            } else {
+                r += 1;
+                used = w;
+            }
+        }
+        rows += r;
+    }
+    rows.min(u16::MAX as usize) as u16
+}
+
 /// One track's details over the lists.
 pub struct Details {
     pub track: Track,
@@ -198,8 +228,8 @@ pub struct Details {
 
 pub fn draw(f: &mut Frame, d: &Details, th: &Theme, level: u8) {
     let (text, muted, accent) = (c(th.text), c(th.muted), c(th.accent));
-    let width = 100.min(f.area().width);
-    let height = 34.min(f.area().height);
+    let width = 110.min(f.area().width);
+    let height = 40.min(f.area().height);
     let [row] = Layout::vertical([Constraint::Length(height)]).flex(Flex::Center).areas(f.area());
     let [area]: [Rect; 1] = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center).areas(row);
     f.render_widget(Clear, area);
@@ -216,13 +246,15 @@ pub fn draw(f: &mut Frame, d: &Details, th: &Theme, level: u8) {
 
     let mut lines = vec![Line::from(Span::styled(t.album.clone().unwrap_or_default(), Style::new().fg(muted))), Line::raw("")];
     lines.extend(truth_lines(t, th, level.max(2))); // the details always say everything: they are what the info level leaves out
-    let text_h = (lines.len() as u16).min(inner.height.saturating_sub(7));
+    // the box is as tall as the wrapped text; the graph gets what is left, and when that is too little it is left out
+    // (cutting the findings off would hide what the file is, the graph can wait for a taller window)
+    let text_h = wrapped_rows(&lines, inner.width).min(inner.height);
     let [top, rest] = Layout::vertical([Constraint::Length(text_h), Constraint::Min(0)]).areas(inner);
     f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), top);
 
     let Some(tr) = t.truth.as_ref().filter(|x| x.analyzed) else { return };
     // the graph: a title line, the curve, the axis
-    if rest.height < 5 || rest.width < 20 {
+    if rest.height < 6 || rest.width < 20 {
         return;
     }
     let [head, plot, ax] = Layout::vertical([Constraint::Length(1), Constraint::Min(3), Constraint::Length(1)]).areas(rest);
@@ -280,6 +312,35 @@ mod tests {
         assert_eq!(dots(&[], Some(0.5), 5, 2).len(), 2);
         assert_eq!(dots(&[-50.0], None, 5, 2).len(), 2);
         let _ = dots(&[f32::NAN, -50.0, f32::INFINITY], None, 7, 3);
+    }
+
+    #[test]
+    fn wrapped_rows_count_words_that_do_not_fit_and_long_words() {
+        let l = |t: &str| Line::from(t.to_string());
+        assert_eq!(wrapped_rows(&[l("one two"), l("")], 20), 2);
+        assert_eq!(wrapped_rows(&[l("aaaa bbbb cccc")], 9), 2); // "aaaa bbbb" then "cccc"
+        assert_eq!(wrapped_rows(&[l("aaaa bbbb cccc")], 4), 3);
+        assert_eq!(wrapped_rows(&[l("abcdefghij")], 4), 3); // split in 4 + 4 + 2
+        assert_eq!(wrapped_rows(&[l("x")], 0), 1); // never divides by zero
+    }
+
+    #[test]
+    fn long_finding_text_is_shown_to_the_end_and_does_not_run_into_the_graph() {
+        use ratatui::{backend::TestBackend, Terminal};
+        let th = crate::theme::builtin().remove(0);
+        let long = "Between the samples the reconstructed wave goes over full scale; some players and lossy encoders will clip it.";
+        let mut tr = track(json!((0..44).map(|i| -40.0 - i as f32).collect::<Vec<_>>()));
+        tr.truth.as_mut().unwrap().flags = vec![json!({"level": "warn", "label": "Peaks", "detail": long})];
+        let d = Details { track: tr, error: None };
+        let mut t = Terminal::new(TestBackend::new(90, 40)).unwrap();
+        t.draw(|f| draw(f, &d, &th, 2)).unwrap();
+        let buf = t.backend().buffer().clone();
+        let screen: Vec<String> = (0..40u16).map(|y| (0..90u16).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>()).collect();
+        let all = screen.join("\n");
+        assert!(all.contains("will clip it."), "the end of the text is cut off:\n{all}");
+        let heading = screen.iter().position(|r| r.contains("Average spectrum")).expect("the graph's title");
+        let last_text = screen.iter().position(|r| r.contains("will clip it.")).unwrap();
+        assert!(last_text < heading, "text and graph overlap");
     }
 
     #[test]
