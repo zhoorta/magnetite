@@ -511,6 +511,48 @@
             </form>
         </div>
 
+        {{-- What AcoustID knows about one track: a fingerprint lookup; title, artist and track number are applied only if ticked. --}}
+        <div x-show="lookup" x-cloak x-transition.opacity @keydown.escape.window="lookup && ! $store.dialog.open && closeLookup()" class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="closeLookup()"
+             role="dialog" aria-modal="true" aria-label="Track information found online">
+            <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-theme border border-white/15 bg-surface p-5 text-sm shadow-xl">
+                <h2 class="mb-1 font-semibold">Track “<span x-text="lookup?.title"></span>”</h2>
+                <p class="mb-3 text-xs text-muted">Identified by its fingerprint at AcoustID (only the fingerprint and length leave the server). Tick what to apply. Changes the library only, not the file or its tags.</p>
+                <p x-show="lookup?.loading" class="py-6 text-center text-muted" role="status" x-text="lookup?.progress || 'Looking up…'">Looking up…</p>
+                <p x-show="lookup?.error" x-text="lookup?.error" class="py-4 text-red-500"></p>
+                <p x-show="lookup && ! lookup.loading && ! lookup.error && lookup.candidates.length === 0" class="py-4 text-muted">AcoustID does not know this recording (no match above 50%).</p>
+                <template x-if="lookup && lookup.candidates.length">
+                    <div class="flex min-h-0 flex-col gap-3">
+                        <div class="flex flex-wrap gap-2" x-show="lookup.candidates.length > 1">
+                            <template x-for="(c, i) in lookup.candidates" :key="c.id">
+                                <button type="button" class="rounded-theme border px-2 py-0.5 text-xs" :class="lookup.pick === i ? 'border-accent text-accent' : 'border-white/15 text-muted hover:text-accent'" @click="pickRecording(i)" x-text="c.title + ' · ' + Math.round(c.score * 100) + '%'"></button>
+                            </template>
+                        </div>
+                        <p class="text-xs text-muted" x-text="(lookup.candidates[lookup.pick].artist || 'unknown artist') + ' · ' + Math.round(lookup.candidates[lookup.pick].score * 100) + '% match' + (lookup.candidates[lookup.pick].duration ? ' · ' + Math.floor(lookup.candidates[lookup.pick].duration / 60) + ':' + String(lookup.candidates[lookup.pick].duration % 60).padStart(2, '0') : '')"></p>
+                        <div class="space-y-1.5 rounded-theme border border-white/15 p-2 text-xs">
+                            <label class="flex cursor-pointer items-center gap-2"><input type="checkbox" x-model="lookup.parts.title" class="accent-[var(--c-accent)]"><span class="w-24 shrink-0 text-muted">Title</span><span class="min-w-0 truncate"><span class="text-muted" x-text="lookup.track.title + ' → '"></span><span x-text="lookup.candidates[lookup.pick].title"></span></span></label>
+                            <label class="flex cursor-pointer items-center gap-2" :class="! lookup.candidates[lookup.pick].artist && 'opacity-50'"><input type="checkbox" x-model="lookup.parts.artist" :disabled="! lookup.candidates[lookup.pick].artist" class="accent-[var(--c-accent)]"><span class="w-24 shrink-0 text-muted">Artist</span><span class="min-w-0 truncate"><span class="text-muted" x-text="(lookup.track.artist || 'none') + ' → '"></span><span x-text="lookup.candidates[lookup.pick].artist || '—'"></span></span></label>
+                            <label class="flex cursor-pointer items-center gap-2" :class="lookup.candidates[lookup.pick].releases[lookup.release]?.number == null && 'opacity-50'"><input type="checkbox" x-model="lookup.parts.number" :disabled="lookup.candidates[lookup.pick].releases[lookup.release]?.number == null" class="accent-[var(--c-accent)]"><span class="w-24 shrink-0 text-muted">Track number</span><span class="min-w-0 truncate"><span class="text-muted" x-text="(lookup.track.track_number ?? 'none') + ' → '"></span><span x-text="lookup.candidates[lookup.pick].releases[lookup.release]?.number ?? '—'"></span></span></label>
+                        </div>
+                        <div class="min-h-0">
+                            <p class="mb-1 text-xs text-muted" x-text="'Appears on ' + lookup.candidates[lookup.pick].release_count + (lookup.candidates[lookup.pick].release_count === 1 ? ' release' : ' releases') + ' (pick the one the number comes from)'"></p>
+                            <ul class="max-h-48 divide-y divide-white/5 overflow-y-auto rounded-theme border border-white/15 text-xs">
+                                <template x-for="(rel, j) in lookup.candidates[lookup.pick].releases" :key="j">
+                                    <li><button type="button" class="flex w-full items-baseline gap-2 px-2 py-1 text-left hover:text-accent" :class="lookup.release === j && 'text-accent'" @click="pickTrackRelease(j)">
+                                        <span class="min-w-0 flex-1 truncate" x-text="rel.title + (rel.artist ? ' — ' + rel.artist : '')"></span>
+                                        <span class="shrink-0 text-muted" x-text="[rel.year, rel.format, rel.country, rel.number != null ? 'no. ' + rel.number + (rel.tracks ? '/' + rel.tracks : '') : ''].filter(Boolean).join(' · ')"></span>
+                                    </button></li>
+                                </template>
+                            </ul>
+                        </div>
+                    </div>
+                </template>
+                <div class="mt-4 flex justify-end gap-2">
+                    <button type="button" class="rounded-theme border border-white/15 px-3 py-1 hover:text-accent" @click="closeLookup()">Close</button>
+                    <button type="button" x-show="lookup?.candidates.length" :disabled="! lookupHasParts || lookup?.saving" @click="applyLookup()" class="rounded-theme bg-accent px-3 py-1 font-medium text-bg disabled:opacity-60">Apply</button>
+                </div>
+            </div>
+        </div>
+
         {{-- Edit one track without an album (an album's tracks are in the edit table). --}}
         <div x-show="edit" x-cloak x-transition.opacity @keydown.escape.window="edit && ! $store.dialog.open && (edit = null, focusRoot())"
              class="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4" @click.self="edit = null; focusRoot()" role="dialog" aria-modal="true" aria-label="Edit track">

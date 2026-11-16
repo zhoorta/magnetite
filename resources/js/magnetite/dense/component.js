@@ -80,6 +80,7 @@ export default function dense(data) {
         cmd: null, // the command line: { text, list, index }
         table: null, // the edit table
         titles: null, // details found online for an album
+        lookup: null, // what AcoustID knows about the selected track
         gd: null, // the "name an album" dialog for tracks without one
         trackMarks: [], // marked tracks without an album (to group)
         suggestions: data.suggestions,
@@ -292,7 +293,7 @@ export default function dense(data) {
                 return [['j k', 'move'], ['Enter', 'play'], ['Tab', 'tracks'], ['N', 'new'], ...(mine ? [['r', 'rename'], ['S', 'share'], ['d', 'delete']] : [['y', 'copy']]), ...common];
             }
             if (this.pane === 'grid') return [['h j k l', 'move'], ['Enter', 'open'], ['x', 'mark'], ['v', 'move to'], ['⌫', 'up'], ['Tab', 'tree'], ...common];
-            if (this.pane === 'tracks') return [['j k', 'move'], ['Enter', 'play'], ['l', 'details'], ['e', 'edit'], ['A', 'analyse'], ['o', 'problems'], ['⌫', 'back'], ['Esc', 'tree'], ...common];
+            if (this.pane === 'tracks') return [['j k', 'move'], ['Enter', 'play'], ['l', 'details'], ['e', 'edit'], ['i', 'look up'], ['A', 'analyse'], ['o', 'problems'], ['⌫', 'back'], ['Esc', 'tree'], ...common];
             const r = this.row;
             if (r?.kind === 'folder') return [['j k', 'move'], ['h l', 'fold'], ['Tab', 'tiles'], ['N', 'new folder'], ['r', 'rename'], ['v', 'move'], ['d', 'delete'], ['⌫', 'up'], ...common];
             if (r?.kind === 'album') return [['j k', 'move'], ['Enter', 'play'], ['Tab', 'tracks'], ['x', 'mark'], ['v', 'move'], ['e', 'edit'], ['i', 'look up'], ['A', 'analyse'], ['S', 'share'], ['⌫', 'folder'], ...common];
@@ -542,7 +543,7 @@ export default function dense(data) {
             // A control that has focus keeps its own keys (Enter on a button presses it); fields keep every key; a dialog has the keyboard.
             if (e.defaultPrevented || e.target !== this.libraryRoot || isTextTarget(e.target) || this.$store.dialog.open || this.$store.player.expanded) return; // full screen has the keyboard
             if (this.mover) return this.moverKey(e);
-            if (this.fd || this.edit || this.table || this.titles || this.gd || this.cmd || this.typing) return;
+            if (this.fd || this.edit || this.table || this.titles || this.lookup || this.gd || this.cmd || this.typing) return;
             const action = actionFor(this.mode === 'tree' ? this.pane : this.mode, e);
             if (!action) return;
             e.preventDefault();
@@ -1441,6 +1442,9 @@ export default function dense(data) {
         // ---- details found online (MusicBrainz): a diff to tick through ----
 
         openDetails() {
+            // With a track selected in the tracks pane `i` is about that track; the album is looked up from the tree.
+            const track = this.pane === 'tracks' ? this.tracks[this.tsel] : null;
+            if (track) return this.findTrack(track);
             const r = this.row;
             if (r?.kind === 'loose') return this.findAlbums();
             if (r?.kind !== 'album') return this.say('Select an album to look up (i)');
@@ -1464,6 +1468,68 @@ export default function dense(data) {
                 this.pickRelease(0);
             } else t.error = r.data?.message || 'Could not search.';
             t.loading = false;
+        },
+
+        // ---- one track: what AcoustID knows (title, artist, number), applied only where ticked ----
+
+        async findTrack(track) {
+            this.lookup = { id: track.id, title: track.title, loading: true, progress: '', candidates: [], track: {}, pick: 0, release: 0, parts: { title: false, artist: false, number: false }, error: '', saving: false };
+            const l = this.lookup;
+            const poll = setInterval(async () => {
+                const p = await send('GET', `/library/tracks/${track.id}/lookup/progress`);
+                if (p.ok && l.loading) l.progress = p.data.text || '';
+            }, 1000);
+            const r = await send('POST', `/library/tracks/${track.id}/lookup`);
+            clearInterval(poll);
+            if (r.ok) {
+                l.track = r.data.track;
+                l.candidates = r.data.candidates;
+                this.pickRecording(0);
+            } else l.error = r.data?.message || 'Could not look the track up.';
+            l.loading = false;
+        },
+
+        /** Choosing a recording picks its first release and ticks what differs from the track as it is. */
+        pickRecording(i) {
+            const l = this.lookup;
+            const c = l.candidates[i];
+            l.pick = i;
+            l.release = 0;
+            if (!c) return;
+            l.parts = { title: c.title !== l.track.title, artist: !!c.artist && c.artist !== (l.track.artist || ''), number: false };
+            this.pickTrackRelease(0);
+        },
+
+        pickTrackRelease(j) {
+            const l = this.lookup;
+            const rel = l.candidates[l.pick]?.releases[j];
+            l.release = j;
+            l.parts.number = !!rel && rel.number != null && rel.number !== l.track.track_number;
+        },
+
+        get lookupHasParts() {
+            return !!this.lookup && Object.values(this.lookup.parts).some(Boolean);
+        },
+
+        async applyLookup() {
+            const l = this.lookup;
+            l.saving = true;
+            l.error = '';
+            const r = await send('POST', `/library/tracks/${l.id}/lookup/apply`, { candidate: l.pick, release: l.release, parts: Object.keys(l.parts).filter((k) => l.parts[k]) });
+            l.saving = false;
+            if (r.ok) {
+                this.lookup = null;
+                await this.reload();
+                this.focusRoot();
+
+                return this.say('track updated');
+            }
+            l.error = r.data?.message || 'Could not save.';
+        },
+
+        closeLookup() {
+            this.lookup = null;
+            this.focusRoot();
         },
 
         /** Choosing a release ticks what it would change: a different date or label, and track titles that differ. */

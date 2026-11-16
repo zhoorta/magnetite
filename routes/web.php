@@ -28,6 +28,7 @@ use App\Http\Controllers\SetupController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StreamController;
+use App\Http\Controllers\TrackLookupController;
 use App\Http\Controllers\UiSettingController;
 use App\Http\Controllers\UploadController;
 use App\Support\DemoTracks;
@@ -109,6 +110,9 @@ Route::middleware('auth')->group(function () {
 
     Route::patch('/library/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('library.albums.update');
     Route::patch('/library/albums/{album}/details', [LibraryEditController::class, 'details'])->whereNumber('album')->name('library.albums.details');
+    Route::get('/library/tracks/{track}/lookup/progress', [TrackLookupController::class, 'progress'])->whereNumber('track')->name('library.tracks.lookup.progress');
+    Route::post('/library/tracks/{track}/lookup', [TrackLookupController::class, 'find'])->whereNumber('track')->name('library.tracks.lookup');
+    Route::post('/library/tracks/{track}/lookup/apply', [TrackLookupController::class, 'apply'])->whereNumber('track')->name('library.tracks.lookup.apply');
     Route::patch('/library/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('library.tracks.update');
     Route::post('/library/folders', [FolderController::class, 'store'])->name('library.folders.store');
     Route::patch('/library/folders/{folder}', [FolderController::class, 'update'])->whereNumber('folder')->name('library.folders.update');

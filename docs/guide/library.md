@@ -57,6 +57,8 @@ Edits change the library only, not the files or their tags, and a later scan kee
 
 `i` on an album looks it up on MusicBrainz by title and artist, and offers the release date, the record label and the track titles. Each can be ticked separately; a track title is only replaced when the track's length matches. Only the album title and artist are sent.
 
+When the server has `fpcalc` and an AcoustID key, the album look-up also tries audio fingerprints if the title search finds nothing that fits, and the dialog lists what each step did (and shows its progress while it runs). `i` with a track selected in the tracks list looks up that one track by its fingerprint: AcoustID names the recording (title, artist) and the releases it is on, with the track number on each. Title, artist and track number can be ticked separately; only the library changes, never the file. Only a fingerprint and the length of that track are sent.
+
 `C` looks for a cover for an album that has none (MusicBrainz and the Cover Art Archive, then iTunes). Only the artist and the album title are sent.
 
 `:merge` joins the marked albums into the selected one, for an album that was split in two by its tags.
