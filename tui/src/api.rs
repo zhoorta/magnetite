@@ -186,6 +186,24 @@ impl Api {
         serde_json::from_value(v["folder"].clone()).map_err(|e| e.to_string())
     }
 
+    /// Rename a folder.
+    pub fn rename_folder(&self, id: u64, name: &str) -> Result<()> {
+        let _: Value = self.send("PATCH", &format!("/folders/{id}")).send_json(json!({ "name": name })).json_body()?;
+        Ok(())
+    }
+
+    /// Move a folder into another one (`None`: the top level).
+    pub fn move_folder(&self, id: u64, parent: Option<u64>) -> Result<()> {
+        let _: Value = self.send("PATCH", &format!("/folders/{id}")).send_json(json!({ "parent_id": parent })).json_body()?;
+        Ok(())
+    }
+
+    /// Delete a folder; its albums and subfolders move up to its parent, no music is deleted.
+    pub fn delete_folder(&self, id: u64) -> Result<()> {
+        let _: Value = self.send("DELETE", &format!("/folders/{id}")).call().json_body()?;
+        Ok(())
+    }
+
     /// Put an album in a folder, or back at the top level (`None`).
     pub fn move_album(&self, album: u64, folder: Option<u64>) -> Result<()> {
         let _: Value = self.send("PUT", &format!("/albums/{album}/folder")).send_json(json!({ "folder_id": folder })).json_body()?;

@@ -202,6 +202,7 @@ struct App {
     flat: bool, // z: every album in one list, no folders
     marks: BTreeSet<u64>, // ids of the albums marked with x, to be moved together
     prompt: Option<organize::Prompt>, // N: typing the name of a new folder
+    confirm: Option<organize::Confirm>, // d: asking before a folder is deleted
     mover: Option<organize::Mover>, // v: choosing the folder to move albums to
     rows: Vec<tree::Row>, // the lines of the album list; `album_sel` is a line, not an album
     album_sel: ListState,
@@ -261,7 +262,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), flat, marks: BTreeSet::new(), prompt: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -341,6 +342,10 @@ impl App {
             self.mover_key(code);
             return;
         }
+        if self.confirm.is_some() {
+            self.confirm_key(code);
+            return;
+        }
         if self.ab.is_some() && mods != KeyModifiers::CONTROL && self.ab_key(code) {
             return;
         }
@@ -408,6 +413,8 @@ impl App {
             (KeyCode::Char('v'), _) if self.in_album_list() => self.open_mover(),
             (KeyCode::Char('N'), _) if self.in_album_list() => self.start_new_folder(),
             (KeyCode::Char('z'), _) if self.in_album_list() => self.toggle_flat(),
+            (KeyCode::Char('r'), _) if self.in_album_list() => self.start_rename(),
+            (KeyCode::Char('d'), _) if self.in_album_list() => self.start_delete(),
             (KeyCode::Down | KeyCode::Char('j'), _) => self.mv(1),
             (KeyCode::Up | KeyCode::Char('k'), _) => self.mv(-1),
             (KeyCode::Left | KeyCode::Char('h'), _) if self.focus == Focus::Albums => self.fold_left(),
@@ -452,14 +459,17 @@ impl App {
             Some(tree::Row::Album { index, .. }) => self.albums.get(*index).and_then(|a| a.folder_id).filter(|id| self.folders.iter().any(|f| f.id == *id)),
             None => None,
         };
-        self.prompt = Some(organize::Prompt { text: String::new(), parent });
+        self.prompt = Some(organize::Prompt { text: String::new(), parent, rename: None });
         self.show_prompt();
     }
 
     fn show_prompt(&mut self) {
         let Some(p) = &self.prompt else { return };
         let into = p.parent.and_then(|id| self.folders.iter().find(|f| f.id == id)).map_or("the top level".to_string(), |f| format!("\"{}\"", f.name));
-        self.status = format!("new folder in {into}: {}▏  ·  enter creates · esc cancels", p.text);
+        self.status = match p.rename {
+            Some(id) => format!("rename \"{}\" to: {}▏  ·  enter renames · esc cancels", self.folders.iter().find(|f| f.id == id).map_or("", |f| f.name.as_str()), p.text),
+            None => format!("new folder in {into}: {}▏  ·  enter creates · esc cancels", p.text),
+        };
     }
 
     fn prompt_key(&mut self, code: KeyCode) {
@@ -479,6 +489,23 @@ impl App {
                 if name.is_empty() {
                     self.prompt = None;
                     self.status.clear();
+                    return;
+                }
+                if let Some(id) = p.rename {
+                    match self.api.rename_folder(id, &name) {
+                        Ok(()) => {
+                            self.prompt = None;
+                            if let Some(f) = self.folders.iter_mut().find(|f| f.id == id) {
+                                f.name = name.clone();
+                            }
+                            self.rebuild_rows();
+                            if let Some(at) = self.rows.iter().position(|r| matches!(r, tree::Row::Folder { id: i, .. } if *i == id)) {
+                                self.album_sel.select(Some(at));
+                            }
+                            self.status = format!("renamed to \"{name}\"");
+                        }
+                        Err(e) => self.status = e,
+                    }
                     return;
                 }
                 match self.api.create_folder(&name, parent) {
@@ -505,16 +532,74 @@ impl App {
         self.show_prompt();
     }
 
+    /// The folder under the selection: (id, name).
+    fn selected_folder(&self) -> Option<(u64, String)> {
+        match self.album_sel.selected().and_then(|i| self.rows.get(i)) {
+            Some(tree::Row::Folder { id, name, .. }) => Some((*id, name.clone())),
+            _ => None,
+        }
+    }
+
+    /// `r`: rename the selected folder (the prompt starts with its name).
+    fn start_rename(&mut self) {
+        let Some((id, name)) = self.selected_folder() else { return self.status = "r renames a folder: select one".into() };
+        self.prompt = Some(organize::Prompt { text: name, parent: None, rename: Some(id) });
+        self.show_prompt();
+    }
+
+    /// `d`: ask before deleting the selected folder. Its albums and subfolders move up; no music is deleted.
+    fn start_delete(&mut self) {
+        let Some((id, name)) = self.selected_folder() else { return self.status = "d deletes a folder (not albums): select one".into() };
+        let albums = self.albums.iter().filter(|a| a.folder_id == Some(id)).count();
+        let subfolders = self.folders.iter().filter(|f| f.parent_id == Some(id)).count();
+        self.status = organize::delete_note(&name, albums, subfolders);
+        self.confirm = Some(organize::Confirm { id, name });
+    }
+
+    fn confirm_key(&mut self, code: KeyCode) {
+        let Some(c) = self.confirm.take() else { return };
+        if !matches!(code, KeyCode::Char('y' | 'Y')) {
+            self.status = "not deleted".into();
+            return;
+        }
+        match self.api.delete_folder(c.id) {
+            Ok(()) => {
+                let parent = self.folders.iter().find(|f| f.id == c.id).and_then(|f| f.parent_id);
+                for a in self.albums.iter_mut().filter(|a| a.folder_id == Some(c.id)) {
+                    a.folder_id = parent;
+                }
+                for f in self.folders.iter_mut().filter(|f| f.parent_id == Some(c.id)) {
+                    f.parent_id = parent;
+                }
+                self.folders.retain(|f| f.id != c.id);
+                self.open_folders.remove(&c.id);
+                self.rebuild_rows();
+                self.status = format!("deleted folder \"{}\"", c.name);
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// `v`: choose a folder for the marked albums, or for the selected one when none is marked.
     fn open_mover(&mut self) {
+        if self.marks.is_empty() {
+            if let Some((id, _)) = self.selected_folder() {
+                let targets = organize::targets(&self.folders, Some(id));
+                let here = self.folders.iter().find(|f| f.id == id).and_then(|f| f.parent_id);
+                let sel = targets.iter().position(|(t, _)| *t == here).unwrap_or(0);
+                self.mover = Some(organize::Mover { targets, sel, albums: vec![], folder: Some(id) });
+                self.status.clear();
+                return;
+            }
+        }
         let albums: Vec<u64> = if self.marks.is_empty() { self.selected_album().and_then(|i| self.albums.get(i)).map(|a| a.id).into_iter().collect() } else { self.marks.iter().copied().collect() };
         if albums.is_empty() {
             return self.status = "select an album, or mark some with x, then v".into();
         }
-        let targets = organize::targets(&self.folders);
+        let targets = organize::targets(&self.folders, None);
         let here = self.albums.iter().find(|a| a.id == albums[0]).and_then(|a| a.folder_id);
         let sel = targets.iter().position(|(id, _)| *id == here && here.is_some()).unwrap_or(0);
-        self.mover = Some(organize::Mover { targets, sel, albums });
+        self.mover = Some(organize::Mover { targets, sel, albums, folder: None });
         self.status.clear();
     }
 
@@ -528,9 +613,32 @@ impl App {
             KeyCode::End | KeyCode::Char('G') => m.sel = m.targets.len() - 1,
             KeyCode::Enter => {
                 let Some(m) = self.mover.take() else { return };
-                self.move_albums(&m.albums, m.targets[m.sel].0, &m.targets[m.sel].1);
+                match m.folder {
+                    Some(id) => self.move_folder(id, m.targets[m.sel].0, &m.targets[m.sel].1),
+                    None => self.move_albums(&m.albums, m.targets[m.sel].0, &m.targets[m.sel].1),
+                }
             }
             _ => {}
+        }
+    }
+
+    fn move_folder(&mut self, id: u64, to: Option<u64>, label: &str) {
+        match self.api.move_folder(id, to) {
+            Ok(()) => {
+                if let Some(f) = self.folders.iter_mut().find(|f| f.id == id) {
+                    f.parent_id = to;
+                }
+                if let Some(t) = to {
+                    self.open_folders.insert(t);
+                    self.open_folders.extend(tree::ancestors(&self.folders, t));
+                }
+                self.rebuild_rows();
+                if let Some(at) = self.rows.iter().position(|r| matches!(r, tree::Row::Folder { id: i, .. } if *i == id)) {
+                    self.album_sel.select(Some(at));
+                }
+                self.status = format!("moved the folder to {}", label.trim());
+            }
+            Err(e) => self.status = e, // e.g. too deep: the folder stays where it was
         }
     }
 
@@ -573,6 +681,7 @@ impl App {
         self.open_folders = self.cfg.open_folders.iter().copied().filter(|id| folders.iter().any(|f| f.id == *id)).collect();
         self.folders = folders;
         self.rebuild_rows();
+        self.album_sel.select(if self.rows.is_empty() { None } else { Some(0) }); // the start: the top of the list, not wherever the first album ended up
     }
 
     /// Remember which folders are open for the next start.
@@ -2070,8 +2179,9 @@ mod folder_tests {
     #[test]
     fn v_moves_the_selected_album_when_none_is_marked_and_esc_cancels() {
         let Some(mut app) = app() else { return };
-        app.key(KeyCode::Char('v'), KeyModifiers::NONE);
-        assert!(app.mover.is_none() && app.status.contains("select an album")); // a folder line
+        app.key(KeyCode::Char('v'), KeyModifiers::NONE); // on a folder line it moves the folder
+        assert_eq!(app.mover.as_ref().map(|m| m.folder), Some(Some(1)));
+        app.key(KeyCode::Esc, KeyModifiers::NONE);
         app.key(KeyCode::Char('j'), KeyModifiers::NONE);
         app.key(KeyCode::Char('v'), KeyModifiers::NONE);
         assert_eq!(app.mover.as_ref().unwrap().albums, [2]);
@@ -2138,5 +2248,67 @@ mod folder_tests {
         app.set_folders(vec![]);
         app.key(KeyCode::Char('z'), KeyModifiers::NONE);
         assert!(!app.flat && app.status.contains("already flat"));
+    }
+
+    #[test]
+    fn r_renames_the_selected_folder_starting_from_its_name() {
+        let Some(mut app) = app_at(&mock_server(1), json!([])) else { return };
+        app.key(KeyCode::Char('r'), KeyModifiers::NONE); // Jazz
+        assert!(app.status.contains("rename \"Jazz\" to: Jazz▏"), "{}", app.status);
+        for _ in 0..4 {
+            app.key(KeyCode::Backspace, KeyModifiers::NONE);
+        }
+        for ch in "Swing".chars() {
+            app.key(KeyCode::Char(ch), KeyModifiers::NONE);
+        }
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.prompt.is_none(), "{}", app.status);
+        assert_eq!(lines(&app), ["▸ Swing", "  Loose"]);
+        assert_eq!(app.search.folders[0].path, "Swing"); // the search follows
+    }
+
+    #[test]
+    fn r_and_d_on_an_album_say_to_select_a_folder() {
+        let Some(mut app) = app() else { return };
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // Loose
+        app.key(KeyCode::Char('r'), KeyModifiers::NONE);
+        assert!(app.prompt.is_none() && app.status.contains("select one"));
+        app.key(KeyCode::Char('d'), KeyModifiers::NONE);
+        assert!(app.confirm.is_none() && app.status.contains("select one"));
+    }
+
+    #[test]
+    fn v_on_a_folder_moves_the_folder_and_cannot_choose_itself_or_below() {
+        let Some(mut app) = app_at(&mock_server(1), json!([1])) else { return };
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // Live, inside the open Jazz
+        assert_eq!(app.selected_folder().map(|f| f.0), Some(2));
+        app.key(KeyCode::Char('v'), KeyModifiers::NONE);
+        let m = app.mover.as_ref().unwrap();
+        assert_eq!(m.folder, Some(2));
+        assert_eq!(m.targets.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [None, Some(1)]);
+        assert_eq!(m.sel, 1); // it is in Jazz now
+        app.key(KeyCode::Char('k'), KeyModifiers::NONE); // the top level
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.mover.is_none(), "{}", app.status);
+        assert_eq!(app.folders.iter().find(|f| f.id == 2).unwrap().parent_id, None);
+        assert_eq!(app.selected_folder().map(|f| f.0), Some(2)); // still selected, now at the top
+    }
+
+    #[test]
+    fn d_asks_and_only_y_deletes_and_the_contents_move_up() {
+        let Some(mut app) = app_at(&mock_server(1), json!([1])) else { return };
+        app.key(KeyCode::Char('d'), KeyModifiers::NONE); // Jazz: 1 album, 1 subfolder
+        assert!(app.confirm.is_some() && app.status.contains("its 1 album and 1 subfolder move up one level"), "{}", app.status);
+        app.key(KeyCode::Char('n'), KeyModifiers::NONE);
+        assert!(app.confirm.is_none() && app.folders.len() == 2 && app.status == "not deleted");
+
+        app.key(KeyCode::Char('d'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('y'), KeyModifiers::NONE);
+        assert!(app.confirm.is_none(), "{}", app.status);
+        assert_eq!(app.folders.len(), 1);
+        assert_eq!(app.folders[0].parent_id, None); // Live moved up
+        assert_eq!(app.albums[0].folder_id, None); // Kind of Blue moved up
+        assert_eq!(lines(&app), ["▸ Live", "  Kind of Blue", "  Loose"]);
+        assert!(!app.open_folders.contains(&1));
     }
 }

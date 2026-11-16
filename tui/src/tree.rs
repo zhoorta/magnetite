@@ -37,7 +37,7 @@ fn parent_of(folders: &[Folder], f: &Folder) -> Option<u64> {
 }
 
 /// The folder and everything below it.
-fn below(folders: &[Folder], id: u64) -> BTreeSet<u64> {
+pub fn below(folders: &[Folder], id: u64) -> BTreeSet<u64> {
     let mut set = BTreeSet::from([id]);
     loop {
         let before = set.len();
