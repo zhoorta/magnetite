@@ -75,9 +75,13 @@
             {{-- Docked, as in docs/mockups/dense-library.html: a "Now playing" box with the track on the left, the meters on the right, and the progress and buttons under both. Full screen: the meters fill the screen. --}}
             <div :class="$store.player.expanded ? 'relative flex min-h-0 flex-1 flex-col' : 'relative grid grid-cols-1 gap-x-4 rounded-theme border border-white/15 px-3 md:grid-cols-2'">
             <span x-show="! $store.player.expanded" class="absolute -top-2.5 left-3 bg-bg px-1.5 text-xs text-muted">Now playing</span>
+            <button type="button" x-show="! $store.player.expanded" x-cloak class="absolute -top-2.5 right-3 bg-bg px-1.5 text-xs text-muted hover:text-accent md:hidden"
+                    :aria-expanded="! $store.player.compact" :aria-label="$store.player.compact ? 'Show meters and details' : 'Hide meters and details'" @click="$store.player.toggleCompact()">
+                <span x-text="$store.player.compact ? 'Meters ▴' : 'Hide ▾'"></span>
+            </button>
 
             <canvas x-ref="canvas" x-show="$store.player.panels.length"
-                    :class="$store.player.expanded ? 'flex-1' : 'order-2 my-2 h-28 md:order-none md:col-start-2 md:row-start-1 md:my-3'"
+                    :class="$store.player.expanded ? 'flex-1' : ($store.player.compact ? 'max-md:hidden ' : '') + 'order-2 my-2 h-28 md:order-none md:col-start-2 md:row-start-1 md:my-3'"
                     class="w-full"></canvas>
 
             {{-- No meters: the player is just the small-cover row below, so the page keeps its space; the big centred cover only in full screen. --}}
@@ -187,7 +191,7 @@
                 <div class="flex min-h-10 items-center justify-between text-sm">
                     <div x-show="$store.player.panels.length || ! $store.player.expanded" class="flex min-w-0 items-center gap-3">
                         {{-- Full screen has no small cover: the meters, or the big cover when there are none, already fill the screen. --}}
-                        <div x-show="! $store.player.expanded" class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
+                        <div x-show="! $store.player.expanded" :class="$store.player.compact && 'max-md:h-10 max-md:w-10'" class="h-24 w-24 shrink-0 overflow-hidden rounded-theme bg-surface">
                             <img x-show="$store.player.current?.cover" :src="$store.player.current?.cover" alt="" class="h-full w-full object-cover">
                         </div>
                         <div class="min-w-0 leading-snug">
@@ -195,9 +199,9 @@
                                 <span x-text="$store.player.expanded && $store.player.current ? [$store.player.current.artist, $store.player.current.album, $store.player.current.title].filter(Boolean).join(' / ') : ($store.player.current?.title ?? 'Nothing playing')" class="font-bold" :class="[$store.player.expanded && '!font-normal text-muted', $store.player.current?.album_id && 'cursor-pointer hover:text-accent']" :title="$store.player.current?.album_id ? 'Show in the library' : null" @click="$store.player.showInLibrary()"></span>
                             </p>
                             <p x-show="$store.player.current?.artist && ! $store.player.expanded" x-text="$store.player.current?.artist" class="truncate text-accent"></p>
-                            <p x-show="$store.player.current?.album && ! $store.player.expanded" class="truncate text-xs text-muted" :class="$store.player.current?.album_id && 'cursor-pointer hover:text-accent'" @click="$store.player.showInLibrary()" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
+                            <p x-show="$store.player.current?.album && ! $store.player.expanded" class="truncate text-xs text-muted" :class="[$store.player.current?.album_id && 'cursor-pointer hover:text-accent', $store.player.compact && 'max-md:hidden']" @click="$store.player.showInLibrary()" x-text="[$store.player.current?.album, $store.player.current?.year, $store.player.position].filter(Boolean).join(' · ')"></p>
                             {{-- Format, DR and loudness (info level 1 and up), then the findings (level 2): see dense/info.js --}}
-                            <p x-show="$store.player.dock.line && ! $store.player.expanded" class="truncate text-xs" x-text="$store.player.dock.line"></p>
+                            <p x-show="$store.player.dock.line && ! $store.player.expanded" :class="$store.player.compact && 'max-md:hidden'" class="truncate text-xs" x-text="$store.player.dock.line"></p>
                             <p x-show="$store.player.note" x-cloak x-text="$store.player.note" class="truncate text-xs text-accent2" aria-live="polite"></p>
                             <p x-show="$store.player.dock.findings.length && ! $store.player.expanded" class="truncate text-xs">
                                 <template x-for="f in $store.player.dock.findings" :key="f.code">

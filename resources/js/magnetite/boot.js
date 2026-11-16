@@ -147,6 +147,7 @@ Alpine.store('player', {
     time: 0,
     duration: 0,
     expanded: false,
+    compact: false, // phones: the docked player without the meters and with a small cover (saved; first visit on a phone starts compact)
     idle: false, // full screen only: nothing has moved for a few seconds, so the controls are hidden (see wake)
     pinned: false, // key H: keep the controls showing in full screen
     helpOpen: false, // the keyboard shortcut list
@@ -211,8 +212,16 @@ Alpine.store('player', {
         this.wake();
     },
 
+    toggleCompact() {
+        this.compact = !this.compact;
+        safeStorage((s) => s.setItem('magnetite.dockCompact', this.compact ? '1' : '0'));
+    },
+
     mount(audio, canvas) {
         if (this.engine) return;
+
+        const savedCompact = safeStorage((s) => s.getItem('magnetite.dockCompact'));
+        this.compact = savedCompact === null || savedCompact === undefined ? window.matchMedia('(max-width: 767px)').matches : savedCompact === '1';
 
         this.engine = new AudioEngine(audio);
         this.engine.onState = (state) => (this.audioState = state);
