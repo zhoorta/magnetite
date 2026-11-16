@@ -153,6 +153,20 @@ fn theme_cmd(id: Option<&String>) {
 /// Library order: the artist that is shown (the server's `display_artist`, so an album without an album-artist tag sorts under its
 /// tracks' artist and not first), then year, then title. The server sorts the same way once it is updated; this keeps an older one right.
 /// The queue's tracks of album `id` take the fresh numbers (and format) of the same tracks in `fresh`.
+/// What a finished copy says: how many tracks arrived (and were there already, or failed).
+fn copy_note(v: &serde_json::Value) -> String {
+    let n = |k: &str| v[k].as_u64().unwrap_or(0);
+    let mut s = format!("copied {} track{} into your library", n("added"), if n("added") == 1 { "" } else { "s" });
+    if n("existing") > 0 {
+        s.push_str(&format!(" ({} already there)", n("existing")));
+    }
+    if n("failed") > 0 {
+        s.push_str(&format!(" · {} failed", n("failed")));
+    }
+    s.push_str(" · they show in the library once the scan is done (P goes round to it)");
+    s
+}
+
 fn merge_truth(queue: &mut [Track], queue_albums: &[u64], id: u64, fresh: &[Track]) {
     for (i, q) in queue.iter_mut().enumerate() {
         if queue_albums.get(i) == Some(&id) {
@@ -207,6 +221,15 @@ enum View {
 enum Source {
     Library,
     Playlists,
+    Shared, // what everyone shares (`P` goes Library, Playlists, Shared)
+}
+
+/// One line of the shared list.
+#[derive(Clone)]
+enum SharedEntry {
+    Album(Album),
+    Track(Track),
+    Playlist(Playlist),
 }
 
 #[derive(PartialEq)]
@@ -225,6 +248,10 @@ struct App {
     folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
     open_folders: BTreeSet<u64>,
     source: Source,
+    shared: Vec<SharedEntry>,
+    shared_sel: ListState,
+    playlist_mine: bool, // the open playlist is yours (reordering and removing apply)
+    copying: Option<std::sync::mpsc::Receiver<Result<String, String>>>, // y: a copy running on a thread
     playlists: Vec<Playlist>,
     playlist_sel: ListState,
     open_playlist: Option<u64>, // the playlist whose tracks are in the right list (`open` then stands in for an album: id 0)
@@ -300,7 +327,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), source: Source::Library, playlists: vec![], playlist_sel: ListState::default(), open_playlist: None, shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, adder: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), source: Source::Library, shared: vec![], shared_sel: ListState::default(), playlist_mine: true, copying: None, playlists: vec![], playlist_sel: ListState::default(), open_playlist: None, shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, adder: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -339,6 +366,7 @@ impl App {
         self.cover.poll();
         self.truth.poll();
         self.poll_analysis();
+        self.poll_copy();
         if self.view == View::Search {
             self.search.tick(&self.api, false);
         }
@@ -460,6 +488,8 @@ impl App {
             },
             (KeyCode::Char('d'), _) if self.view == View::Library && self.focus == Focus::Tracks && !self.full && self.ab.is_none() => self.open_details(),
             (KeyCode::Char('P'), _) if self.in_left_list() => self.toggle_source(),
+            (KeyCode::Char('S'), _) if self.in_album_list() || self.in_playlist_list() || self.in_track_list() => self.toggle_share(),
+            (KeyCode::Char('y'), _) if self.in_shared_list() => self.copy_selected(),
             (KeyCode::Char('N'), _) if self.in_playlist_list() => self.start_new_playlist(),
             (KeyCode::Char('r'), _) if self.in_playlist_list() => self.start_rename_playlist(),
             (KeyCode::Char('d'), _) if self.in_playlist_list() => self.start_delete_playlist(),
@@ -544,6 +574,10 @@ impl App {
         self.in_left_list() && self.source == Source::Playlists
     }
 
+    fn in_shared_list(&self) -> bool {
+        self.in_left_list() && self.source == Source::Shared
+    }
+
     /// A track list is in front of you (an album's or a playlist's).
     fn in_track_list(&self) -> bool {
         self.view == View::Library && self.focus == Focus::Tracks && !self.full && self.ab.is_none()
@@ -551,7 +585,7 @@ impl App {
 
     /// The tracks of one of your playlists are in front of you (reordering and removing apply).
     fn in_playlist_tracks(&self) -> bool {
-        self.in_track_list() && self.open_playlist.is_some()
+        self.in_track_list() && self.open_playlist.is_some() && self.playlist_mine
     }
 
     /// Read the playlists again (counts change) and keep the selection on the same one.
@@ -567,7 +601,7 @@ impl App {
     /// Read the open playlist's tracks again (after something was added to it).
     fn reload_open_playlist(&mut self) {
         let Some(id) = self.open_playlist else { return };
-        if let Ok((_, tracks)) = self.api.playlist(id) {
+        if let Ok((_, tracks, _)) = self.api.playlist(id) {
             if let Some(o) = self.open.as_mut() {
                 o.tracks = tracks;
                 let n = o.tracks.len();
@@ -758,19 +792,158 @@ impl App {
 
     /// `P`: the playlists in the left list, or back to the folders and albums.
     fn toggle_source(&mut self) {
-        if self.source == Source::Playlists {
-            self.source = Source::Library;
-            self.status.clear();
-            return;
+        match self.source {
+            Source::Library => match self.api.playlists() {
+                Ok(list) => {
+                    self.playlists = list;
+                    self.playlist_sel.select(if self.playlists.is_empty() { None } else { Some(0) });
+                    self.source = Source::Playlists;
+                    self.status = if self.playlists.is_empty() { "no playlists yet · N makes one".into() } else { "playlists · enter opens one · P goes on to what is shared".into() };
+                }
+                Err(e) => self.status = e,
+            },
+            Source::Playlists => match self.api.shared() {
+                Ok(s) => {
+                    self.shared = s.albums.into_iter().map(SharedEntry::Album).chain(s.playlists.into_iter().map(SharedEntry::Playlist)).chain(s.tracks.into_iter().map(SharedEntry::Track)).collect();
+                    self.shared_sel.select(if self.shared.is_empty() { None } else { Some(0) });
+                    self.source = Source::Shared;
+                    self.status = if self.shared.is_empty() { "nothing is shared yet".into() } else { "shared · enter opens or plays · y copies to yours · P goes back to the library".into() };
+                }
+                Err(e) => self.status = e,
+            },
+            Source::Shared => {
+                self.source = Source::Library;
+                self.reload_library(); // a copy made meanwhile has been scanned by now
+                self.status.clear();
+            }
         }
-        match self.api.playlists() {
-            Ok(list) => {
-                self.playlists = list;
-                self.playlist_sel.select(if self.playlists.is_empty() { None } else { Some(0) });
-                self.source = Source::Playlists;
-                self.status = if self.playlists.is_empty() { "no playlists yet".into() } else { "playlists · enter opens one · P goes back to the library".into() };
+    }
+
+    /// Read the albums and the folders again (after copies from the shared area arrived).
+    fn reload_library(&mut self) {
+        if let Ok(mut albums) = self.api.albums() {
+            sort_albums(&mut albums);
+            self.albums = albums;
+            let folders = self.api.folders();
+            let sel = self.album_sel.selected();
+            self.set_folders(folders);
+            if let Some(i) = sel {
+                self.album_sel.select(Some(i.min(self.rows.len().saturating_sub(1))));
+            }
+        }
+    }
+
+    /// Enter in the shared list: an album opens its tracks, a playlist opens too, a single track plays.
+    fn open_shared_at(&mut self) {
+        let Some(entry) = self.shared_sel.selected().and_then(|i| self.shared.get(i)).cloned() else { return };
+        match entry {
+            SharedEntry::Album(a) => match self.api.album(a.id) {
+                Ok(full) => {
+                    self.track_sel.select(if full.tracks.is_empty() { None } else { Some(0) });
+                    self.open = Some(full);
+                    self.open_playlist = None;
+                    self.focus = Focus::Tracks;
+                    self.status.clear();
+                }
+                Err(e) => self.status = e,
+            },
+            SharedEntry::Playlist(p) => match self.api.playlist(p.id) {
+                Ok((name, tracks, mine)) => {
+                    let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, shared: false, shared_by: p.shared_by.clone(), tracks };
+                    self.track_sel.select(if album.tracks.is_empty() { None } else { Some(0) });
+                    self.open = Some(album);
+                    self.open_playlist = Some(p.id);
+                    self.playlist_mine = mine;
+                    self.focus = Focus::Tracks;
+                    self.status.clear();
+                }
+                Err(e) => self.status = e,
+            },
+            SharedEntry::Track(t) => {
+                self.queue_albums = vec![t.album_id.unwrap_or(0)];
+                self.queue = vec![t];
+                self.start(0);
+            }
+        }
+    }
+
+    /// `S`: put the selected album, track or playlist of yours into the shared area, or take it out (the server answers 404 for
+    /// what is not yours).
+    fn toggle_share(&mut self) {
+        // (kind, id, name, shared now)
+        let target: Option<(&str, u64, String, bool)> = if self.focus == Focus::Tracks && self.in_track_list() {
+            self.track_sel.selected().and_then(|i| self.open.as_ref().and_then(|a| a.tracks.get(i))).map(|t| ("tracks", t.id, t.title.clone(), t.shared))
+        } else if self.in_playlist_list() {
+            self.playlist_sel.selected().and_then(|i| self.playlists.get(i)).map(|p| ("playlists", p.id, p.name.clone(), p.shared))
+        } else if self.in_album_list() {
+            self.selected_album().and_then(|i| self.albums.get(i)).map(|a| ("albums", a.id, a.title.clone(), a.shared))
+        } else {
+            None
+        };
+        let Some((kind, id, name, shared)) = target else { return self.status = "S shares an album, a track or a playlist: select one".into() };
+        if kind == "tracks" && self.open_playlist.is_some() && !self.playlist_mine {
+            return self.status = "that track is not yours to share".into();
+        }
+        match self.api.share(kind, id, !shared) {
+            Ok(()) => {
+                let on = !shared;
+                match kind {
+                    "albums" => {
+                        if let Some(a) = self.albums.iter_mut().find(|a| a.id == id) {
+                            a.shared = on;
+                        }
+                    }
+                    "playlists" => {
+                        if let Some(p) = self.playlists.iter_mut().find(|p| p.id == id) {
+                            p.shared = on;
+                        }
+                    }
+                    _ => {
+                        if let Some(t) = self.open.as_mut().and_then(|o| o.tracks.iter_mut().find(|t| t.id == id)) {
+                            t.shared = on;
+                        }
+                    }
+                }
+                self.status = if on { format!("shared \"{name}\" with everyone on this server") } else { format!("\"{name}\" is no longer shared") };
             }
             Err(e) => self.status = e,
+        }
+    }
+
+    /// `y` in the shared list: copy the selected album or track into your library as real files (a background request: the server
+    /// fetches the files), or a playlist into your playlists.
+    fn copy_selected(&mut self) {
+        if self.copying.is_some() {
+            return self.status = "a copy is already running".into();
+        }
+        let Some(entry) = self.shared_sel.selected().and_then(|i| self.shared.get(i)).cloned() else { return };
+        let api = self.api.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let what = match &entry {
+            SharedEntry::Album(a) => format!("\"{}\"", a.title),
+            SharedEntry::Track(t) => format!("\"{}\"", t.title),
+            SharedEntry::Playlist(p) => format!("the playlist \"{}\"", p.name),
+        };
+        self.status = format!("copying {what} to yours…");
+        self.copying = Some(rx);
+        std::thread::spawn(move || {
+            let msg = match entry {
+                SharedEntry::Album(a) => api.copy_music("albums", a.id).map(|v| copy_note(&v)),
+                SharedEntry::Track(t) => api.copy_music("tracks", t.id).map(|v| copy_note(&v)),
+                SharedEntry::Playlist(p) => api.copy_playlist(p.id).map(|_| "copied the playlist to your playlists".to_string()),
+            };
+            let _ = tx.send(msg);
+        });
+    }
+
+    fn poll_copy(&mut self) {
+        let Some(rx) = &self.copying else { return };
+        if let Ok(msg) = rx.try_recv() {
+            self.copying = None;
+            self.status = match msg {
+                Ok(note) => note,
+                Err(e) => format!("copy: {e}"),
+            };
         }
     }
 
@@ -778,11 +951,12 @@ impl App {
     fn open_playlist_at(&mut self) {
         let Some(p) = self.playlist_sel.selected().and_then(|i| self.playlists.get(i)).cloned() else { return };
         match self.api.playlist(p.id) {
-            Ok((name, tracks)) => {
-                let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, tracks };
+            Ok((name, tracks, _mine)) => {
+                let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, shared: false, shared_by: None, tracks };
                 self.track_sel.select(if album.tracks.is_empty() { None } else { Some(0) });
                 self.open = Some(album);
                 self.open_playlist = Some(p.id);
+                self.playlist_mine = _mine;
                 self.focus = Focus::Tracks;
                 self.status.clear();
             }
@@ -1591,7 +1765,7 @@ impl App {
             return;
         }
         let (album, track, owner, what) = match self.focus {
-            Focus::Albums if self.source == Source::Playlists => return self.status = "open the playlist and select a track to analyse".into(),
+            Focus::Albums if self.source != Source::Library => return self.status = "open the album or playlist and select a track to analyse".into(),
             Focus::Albums => {
                 let Some(a) = self.selected_album().and_then(|i| self.albums.get(i)) else { return self.status = "select an album (a folder line is not one)".into() };
                 (Some(a.id), None, Some(a.id), a.title.clone())
@@ -1728,6 +1902,7 @@ impl App {
     fn mv(&mut self, d: i32) {
         let (state, len) = match self.focus {
             Focus::Albums if self.source == Source::Playlists => (&mut self.playlist_sel, self.playlists.len()),
+            Focus::Albums if self.source == Source::Shared => (&mut self.shared_sel, self.shared.len()),
             Focus::Albums => (&mut self.album_sel, self.rows.len()),
             Focus::Tracks => (&mut self.track_sel, self.open.as_ref().map_or(0, |a| a.tracks.len())),
         };
@@ -1740,6 +1915,7 @@ impl App {
     fn enter(&mut self) {
         match self.focus {
             Focus::Albums if self.source == Source::Playlists => self.open_playlist_at(),
+            Focus::Albums if self.source == Source::Shared => self.open_shared_at(),
             Focus::Albums => {
                 // a folder line opens or closes; an album line opens its tracks
                 if let Some(tree::Row::Folder { id, open, .. }) = self.album_sel.selected().and_then(|i| self.rows.get(i)).cloned() {
@@ -2022,6 +2198,25 @@ impl App {
                 })
                 .collect();
             f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, " Playlists ".into())).highlight_style(sel), left, &mut self.playlist_sel);
+        } else if self.source == Source::Shared {
+            let items: Vec<ListItem> = self
+                .shared
+                .iter()
+                .map(|e| {
+                    let (tag, title, who, by) = match e {
+                        SharedEntry::Album(a) => ("album  ", a.title.clone(), a.shown_artist(), a.shared_by.clone()),
+                        SharedEntry::Playlist(p) => ("list   ", p.name.clone(), format!("{} track{}", p.track_count, if p.track_count == 1 { "" } else { "s" }), p.shared_by.clone()),
+                        SharedEntry::Track(t) => ("track  ", t.title.clone(), t.artist.clone().unwrap_or_default(), t.shared_by.clone()),
+                    };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(tag, Style::new().fg(c(th.accent2))),
+                        Span::raw(title),
+                        Span::styled(format!("  {who}"), Style::new().fg(muted)),
+                        Span::styled(by.map_or(String::new(), |b| format!(" · by {b}")), Style::new().fg(muted)),
+                    ]))
+                })
+                .collect();
+            f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, " Shared ".into())).highlight_style(sel), left, &mut self.shared_sel);
         } else {
         let holding = self.folders_holding_playing();
         let items: Vec<ListItem> = self
@@ -2050,7 +2245,7 @@ impl App {
                         (pad, Span::raw(""))
                     };
                     let title = if on { Span::styled(a.title.clone(), Style::new().fg(c(th.accent2))) } else { Span::raw(a.title.clone()) };
-                    ListItem::new(Line::from(vec![Span::raw(pad), mark, title, Span::styled(format!("  {}", a.shown_artist()), Style::new().fg(muted))]))
+                    ListItem::new(Line::from(vec![Span::raw(pad), mark, title, Span::styled(format!("  {}{}", a.shown_artist(), if a.shared { " · shared" } else { "" }), Style::new().fg(muted))]))
                 }
             })
             .collect();
@@ -2071,6 +2266,9 @@ impl App {
                 let n = t.number.map_or(String::new(), |n| n.to_string());
                 let style = if Some(t.id) == playing { Style::new().fg(c(th.accent2)) } else if t.open { Style::new() } else { Style::new().fg(muted) };
                 let mut spans = vec![Span::raw(format!("{mark}{n:>2} {:<30} {:>6}", t.title, mmss(t.duration.unwrap_or(0.0))))];
+                if t.shared {
+                    spans.push(Span::styled(" shared", Style::new().fg(muted)));
+                }
                 // what the analysis found, as much as the info level (I) says: DR, and at level 2 a marker (✗ problem, ! warning, · note)
                 if let Some((text, flagged)) = info::row_extra(t, self.info, analyze::mark(t)) {
                     spans.push(Span::styled(text, Style::new().fg(if flagged { c(th.accent2) } else { muted })));
@@ -2488,8 +2686,16 @@ mod folder_tests {
                     r#"{"added":true}"#
                 } else if head.starts_with("GET /api/v1/playlists/4") {
                     r#"{"data":{"id":4,"name":"Road","mine":true,"tracks":[{"id":11,"title":"A","album_id":7,"open":true,"stream_url":"http://127.0.0.1:1/a"},{"id":12,"title":"B","album_id":9,"open":true,"stream_url":"http://127.0.0.1:1/b"},{"id":13,"title":"C","album_id":9,"open":false}]}}"#
-                } else if head.starts_with("GET /api/v1/playlists") {
+                } else if head.starts_with("GET /api/v1/playlists ") {
                     r#"{"data":[{"id":4,"name":"Road","track_count":3,"shared":false},{"id":5,"name":"Mine","track_count":1,"shared":true}]}"#
+                } else if head.starts_with("GET /api/v1/shared") {
+                    r#"{"albums":[{"id":20,"title":"Theirs","artist":"Bob","shared_by":"bob"}],"tracks":[{"id":30,"title":"Single","open":true,"stream_url":"http://127.0.0.1:1/s","shared_by":"bob"}],"playlists":[{"id":5,"name":"Mine","track_count":1,"shared_by":"bob"}]}"#
+                } else if head.starts_with("POST /api/v1/copy/") {
+                    r#"{"added":2,"existing":1,"failed":0}"#
+                } else if head.starts_with("POST /api/v1/playlists/5/copy") {
+                    r#"{"id":9,"tracks":1}"#
+                } else if head.starts_with("GET /api/v1/playlists/5") {
+                    r#"{"data":{"id":5,"name":"Mine","mine":false,"tracks":[{"id":41,"title":"X","album_id":3,"open":true,"stream_url":"http://127.0.0.1:1/x"}]}}"#
                 } else {
                     r#"{"album":{"id":1,"folder_id":1}}"#
                 };
@@ -2909,7 +3115,7 @@ mod folder_tests {
 
     #[test]
     fn p_shows_the_playlists_enter_opens_one_and_enter_on_a_track_plays_it_with_each_tracks_album() {
-        let Some(mut app) = app_at(&mock_server(2), json!([])) else { return };
+        let Some(mut app) = app_at(&mock_server(3), json!([])) else { return };
         app.key(KeyCode::Char('P'), KeyModifiers::NONE);
         assert!(app.source == Source::Playlists, "{}", app.status);
         assert_eq!(app.playlists.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Road", "Mine"]);
@@ -2938,7 +3144,9 @@ mod folder_tests {
         assert_eq!(app.now, Some(1));
 
         app.key(KeyCode::Esc, KeyModifiers::NONE);
-        app.key(KeyCode::Char('P'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('P'), KeyModifiers::NONE); // on to what is shared
+        assert!(app.source == Source::Shared, "{}", app.status);
+        app.key(KeyCode::Char('P'), KeyModifiers::NONE); // and round to the library
         assert!(app.source == Source::Library);
     }
 
@@ -3035,5 +3243,74 @@ mod folder_tests {
         app.key(KeyCode::Char('y'), KeyModifiers::NONE);
         assert!(app.confirm.is_none() && app.open.is_none() && app.open_playlist.is_none(), "{}", app.status);
         assert!(app.playlists.iter().all(|p| p.id != 4));
+    }
+
+    fn in_shared(server: &str) -> Option<App> {
+        let mut app = app_at(server, json!([]))?;
+        app.key(KeyCode::Char('P'), KeyModifiers::NONE); // playlists
+        app.key(KeyCode::Char('P'), KeyModifiers::NONE); // shared
+        Some(app)
+    }
+
+    #[test]
+    fn s_shares_and_unshares_an_album_a_track_or_a_playlist_and_marks_it() {
+        let Some(mut app) = app_at(&mock_server(2), json!([])) else { return };
+        app.key(KeyCode::Char('S'), KeyModifiers::NONE); // a folder line
+        assert!(app.status.contains("select one"), "{}", app.status);
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // Loose
+        app.key(KeyCode::Char('S'), KeyModifiers::NONE);
+        assert!(app.albums[1].shared && app.status.contains("shared \"Loose\""), "{}", app.status);
+        app.key(KeyCode::Char('S'), KeyModifiers::NONE);
+        assert!(!app.albums[1].shared && app.status.contains("no longer shared"), "{}", app.status);
+
+        // a track of the open album
+        let Some(mut app) = app_at(&mock_server(1), json!([])) else { return };
+        app.open = Some(serde_json::from_value(json!({"id": 1, "title": "Alb", "tracks": [{"id": 7, "title": "T", "open": true}]})).unwrap());
+        app.track_sel.select(Some(0));
+        app.focus = Focus::Tracks;
+        app.key(KeyCode::Char('S'), KeyModifiers::NONE);
+        assert!(app.open.as_ref().unwrap().tracks[0].shared);
+    }
+
+    #[test]
+    fn p_p_lists_what_is_shared_enter_plays_a_single_and_opens_a_playlist_that_is_not_yours() {
+        // requests: playlists, shared, and for the second part the playlist
+        let Some(mut app) = in_shared(&mock_server(3)) else { return };
+        assert!(app.source == Source::Shared, "{}", app.status);
+        assert_eq!(app.shared.len(), 3);
+        assert!(matches!(app.shared[0], SharedEntry::Album(_)) && matches!(app.shared[1], SharedEntry::Playlist(_)) && matches!(app.shared[2], SharedEntry::Track(_)));
+
+        app.shared_sel.select(Some(2));
+        app.key(KeyCode::Enter, KeyModifiers::NONE); // the single track
+        assert_eq!((app.queue.len(), app.now), (1, Some(0)));
+
+        app.shared_sel.select(Some(1));
+        app.key(KeyCode::Enter, KeyModifiers::NONE); // somebody's playlist
+        assert!(app.focus == Focus::Tracks && app.open_playlist == Some(5) && !app.playlist_mine, "{}", app.status);
+        app.key(KeyCode::Char('x'), KeyModifiers::NONE); // not yours: nothing is removed, no request
+        assert_eq!(app.open.as_ref().unwrap().tracks.len(), 1);
+    }
+
+    #[test]
+    fn y_copies_an_album_in_the_background_and_says_what_arrived() {
+        let Some(mut app) = in_shared(&mock_server(3)) else { return };
+        app.shared_sel.select(Some(0));
+        app.key(KeyCode::Char('y'), KeyModifiers::NONE);
+        assert!(app.copying.is_some() && app.status.contains("copying \"Theirs\""), "{}", app.status);
+        for _ in 0..200 {
+            app.poll_copy();
+            if app.copying.is_none() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(app.copying.is_none());
+        assert!(app.status.starts_with("copied 2 tracks into your library (1 already there)"), "{}", app.status);
+    }
+
+    #[test]
+    fn copy_notes_count_what_arrived() {
+        assert!(copy_note(&json!({"added": 1, "existing": 0, "failed": 0})).starts_with("copied 1 track into your library ·"));
+        assert!(copy_note(&json!({"added": 0, "existing": 2, "failed": 1})).contains("(2 already there) · 1 failed"));
     }
 }

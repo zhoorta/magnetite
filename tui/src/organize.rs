@@ -155,7 +155,7 @@ mod tests {
 
     #[test]
     fn the_playlist_chooser_starts_with_a_new_playlist_and_notes_say_what_stays() {
-        let p = |id: u64, name: &str, n: u64| crate::api::Playlist { id, name: name.into(), track_count: n, shared: false };
+        let p = |id: u64, name: &str, n: u64| crate::api::Playlist { id, name: name.into(), track_count: n, shared: false, shared_by: None };
         let t = playlist_targets(&[p(4, "Road", 3), p(5, "Mine", 1)]);
         assert_eq!(t.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [None, Some(4), Some(5)]);
         assert_eq!((t[1].1.as_str(), t[2].1.as_str()), ("Road  (3 tracks)", "Mine  (1 track)"));

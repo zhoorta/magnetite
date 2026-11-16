@@ -15,6 +15,12 @@ pub struct Album {
     /// The folder the album is in (the owner's own albums only; none when it is loose or the server is older).
     #[serde(default)]
     pub folder_id: Option<u64>,
+    /// In the shared area (your own albums only).
+    #[serde(default)]
+    pub shared: bool,
+    /// Who shares it, in the shared list.
+    #[serde(default)]
+    pub shared_by: Option<String>,
     #[serde(default)]
     pub tracks: Vec<Track>,
 }
@@ -46,6 +52,19 @@ pub struct Playlist {
     pub track_count: u64,
     #[serde(default)]
     pub shared: bool,
+    #[serde(default)]
+    pub shared_by: Option<String>,
+}
+
+/// `GET /shared`.
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct Shared {
+    #[serde(default)]
+    pub albums: Vec<Album>,
+    #[serde(default)]
+    pub tracks: Vec<Track>,
+    #[serde(default)]
+    pub playlists: Vec<Playlist>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -59,6 +78,11 @@ pub struct Track {
     pub duration: Option<f64>,
     pub codec: Option<String>,
     pub open: bool,
+    /// Shared on its own (your own tracks only).
+    #[serde(default)]
+    pub shared: bool,
+    #[serde(default)]
+    pub shared_by: Option<String>,
     pub stream_url: Option<String>,
     pub cover_url: Option<String>,
     pub truth: Option<Truth>,
@@ -243,10 +267,33 @@ impl Api {
     }
 
     /// A playlist's name and tracks in order; tracks you cannot play come with `open: false` and no stream url.
-    pub fn playlist(&self, id: u64) -> Result<(String, Vec<Track>)> {
+    pub fn playlist(&self, id: u64) -> Result<(String, Vec<Track>, bool)> {
         let v: Value = self.get(&format!("/playlists/{id}")).call().json_body()?;
         let tracks = serde_json::from_value(v["data"]["tracks"].clone()).map_err(|e| e.to_string())?;
-        Ok((v["data"]["name"].as_str().unwrap_or("").to_string(), tracks))
+        Ok((v["data"]["name"].as_str().unwrap_or("").to_string(), tracks, v["data"]["mine"].as_bool().unwrap_or(true)))
+    }
+
+    /// The shared area: what everyone shares, yours included, with who shares it.
+    pub fn shared(&self) -> Result<Shared> {
+        self.get("/shared").call().json_body()
+    }
+
+    /// Put your own album, track or playlist (`kind`: albums, tracks, playlists) into the shared area or take it out.
+    pub fn share(&self, kind: &str, id: u64, on: bool) -> Result<()> {
+        let _: Value = self.send(if on { "POST" } else { "DELETE" }, &format!("/share/{kind}/{id}")).call().json_body()?;
+        Ok(())
+    }
+
+    /// Copy shared music of someone else into your library as real files (`kind`: albums or tracks); the answer counts them.
+    /// It can take a while (files are fetched), and the server scans afterwards.
+    pub fn copy_music(&self, kind: &str, id: u64) -> Result<Value> {
+        self.send("POST", &format!("/copy/{kind}/{id}")).call().json_body()
+    }
+
+    /// A copy of a playlist you can see, in your own playlists (the tracks you can play); its id.
+    pub fn copy_playlist(&self, id: u64) -> Result<u64> {
+        let v: Value = self.send("POST", &format!("/playlists/{id}/copy")).call().json_body()?;
+        v["id"].as_u64().ok_or_else(|| "the server did not say which playlist it made".to_string())
     }
 
     /// A new playlist, optionally with a first track or a whole album in it.
@@ -481,7 +528,7 @@ mod artist_tests {
 
     fn album(artist: Option<&str>, display: Option<&str>, tracks: &[&str]) -> Album {
         let t = |a: &str| serde_json::from_value::<Track>(serde_json::json!({"id": 1, "title": "x", "artist": a, "open": true})).unwrap();
-        Album { id: 1, title: "A".into(), artist: artist.map(Into::into), display_artist: display.map(Into::into), year: None, folder_id: None, track_count: None, dr: None, tracks: tracks.iter().map(|a| t(a)).collect() }
+        Album { id: 1, title: "A".into(), artist: artist.map(Into::into), display_artist: display.map(Into::into), year: None, folder_id: None, shared: false, shared_by: None, track_count: None, dr: None, tracks: tracks.iter().map(|a| t(a)).collect() }
     }
 
     #[test]
