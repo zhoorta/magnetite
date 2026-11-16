@@ -85,7 +85,7 @@ fn login(server: Option<&String>) {
     };
     match result {
         Ok((token, username)) => {
-            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint), loudness: config::load().and_then(|c| c.loudness), cell_aspect: config::load().and_then(|c| c.cell_aspect), open_folders: vec![] }).expect("could not save the config");
+            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint), loudness: config::load().and_then(|c| c.loudness), cell_aspect: config::load().and_then(|c| c.cell_aspect), open_folders: vec![], flat: config::load().is_some_and(|c| c.flat) }).expect("could not save the config");
             println!("Signed in as {username}.");
         }
         Err(e) => eprintln!("Sign-in failed: {e}"),
@@ -199,6 +199,7 @@ struct App {
     albums: Vec<Album>,
     folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
     open_folders: BTreeSet<u64>,
+    flat: bool, // z: every album in one list, no folders
     marks: BTreeSet<u64>, // ids of the albums marked with x, to be moved together
     prompt: Option<organize::Prompt>, // N: typing the name of a new folder
     mover: Option<organize::Mover>, // v: choosing the folder to move albums to
@@ -254,12 +255,13 @@ impl App {
         let tint = cfg.tint.unwrap_or(true);
         let loud = loudness::Mode::from_id(cfg.loudness.as_deref().unwrap_or("off"));
         let tint_cur = { let t = &themes[theme]; [t.accent.0 as f32, t.accent.1 as f32, t.accent.2 as f32, t.accent2.0 as f32, t.accent2.1 as f32, t.accent2.2 as f32] };
+        let flat = cfg.flat;
         let rows = tree::rows(&[], &albums, &BTreeSet::new());
         let mut album_sel = ListState::default();
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), marks: BTreeSet::new(), prompt: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), flat, marks: BTreeSet::new(), prompt: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -405,6 +407,7 @@ impl App {
             (KeyCode::Char('x'), _) if self.in_album_list() => self.toggle_mark(),
             (KeyCode::Char('v'), _) if self.in_album_list() => self.open_mover(),
             (KeyCode::Char('N'), _) if self.in_album_list() => self.start_new_folder(),
+            (KeyCode::Char('z'), _) if self.in_album_list() => self.toggle_flat(),
             (KeyCode::Down | KeyCode::Char('j'), _) => self.mv(1),
             (KeyCode::Up | KeyCode::Char('k'), _) => self.mv(-1),
             (KeyCode::Left | KeyCode::Char('h'), _) if self.focus == Focus::Albums => self.fold_left(),
@@ -441,6 +444,9 @@ impl App {
 
     /// `N`: ask for a name. The folder goes inside the selected folder, beside the selected album, else at the top level.
     fn start_new_folder(&mut self) {
+        if self.flat {
+            return self.status = "the list is flat: z goes back to the folders, then N".into();
+        }
         let parent = match self.album_sel.selected().and_then(|i| self.rows.get(i)) {
             Some(tree::Row::Folder { id, .. }) => Some(*id),
             Some(tree::Row::Album { index, .. }) => self.albums.get(*index).and_then(|a| a.folder_id).filter(|id| self.folders.iter().any(|f| f.id == *id)),
@@ -578,6 +584,27 @@ impl App {
         }
     }
 
+    /// The lines of the album list: the folder tree, or every album when `z` made it flat.
+    fn make_rows(&self) -> Vec<tree::Row> {
+        if self.flat {
+            tree::rows(&[], &self.albums, &BTreeSet::new())
+        } else {
+            tree::rows(&self.folders, &self.albums, &self.open_folders)
+        }
+    }
+
+    /// `z`: all albums in one list (find one without knowing its folder), again to go back to the folders. Remembered.
+    fn toggle_flat(&mut self) {
+        if self.folders.is_empty() {
+            return self.status = "no folders: the list is already flat".into();
+        }
+        self.flat = !self.flat;
+        self.cfg.flat = self.flat;
+        let _ = config::save(&self.cfg);
+        self.rebuild_rows();
+        self.status = if self.flat { "flat list: every album, no folders · z goes back".into() } else { String::new() };
+    }
+
     /// Tell the search which folders there are and how many albums each holds.
     fn sync_search_folders(&mut self) {
         let all: BTreeSet<u64> = self.folders.iter().map(|f| f.id).collect();
@@ -592,7 +619,7 @@ impl App {
     fn rebuild_rows(&mut self) {
         self.sync_search_folders();
         let was = self.album_sel.selected().and_then(|i| self.rows.get(i)).cloned();
-        self.rows = tree::rows(&self.folders, &self.albums, &self.open_folders);
+        self.rows = self.make_rows();
         let at = was.and_then(|w| self.rows.iter().position(|r| match (&w, r) {
             (tree::Row::Folder { id: a, .. }, tree::Row::Folder { id: b, .. }) => a == b,
             (tree::Row::Album { index: a, .. }, tree::Row::Album { index: b, .. }) => a == b,
@@ -612,11 +639,11 @@ impl App {
 
     /// Select an album in the list, opening the folders above it.
     fn reveal(&mut self, album_index: usize) {
-        if let Some(f) = self.albums.get(album_index).and_then(|a| a.folder_id) {
+        if let Some(f) = self.albums.get(album_index).and_then(|a| a.folder_id).filter(|_| !self.flat) {
             self.open_folders.insert(f);
             self.open_folders.extend(tree::ancestors(&self.folders, f));
         }
-        self.rows = tree::rows(&self.folders, &self.albums, &self.open_folders);
+        self.rows = self.make_rows();
         let at = self.rows.iter().position(|r| matches!(r, tree::Row::Album { index, .. } if *index == album_index));
         self.album_sel.select(at);
         self.save_open();
@@ -1091,8 +1118,10 @@ impl App {
             return;
         }
         if let Some(search::Hit::Folder(f)) = self.search.selected() {
-            // a folder: back to the list with it open and selected
+            // a folder: back to the list (as a tree) with it open and selected
             let id = f.id;
+            self.flat = false;
+            self.cfg.flat = false;
             self.open_folders.insert(id);
             self.open_folders.extend(tree::ancestors(&self.folders, id));
             self.rebuild_rows();
@@ -1479,7 +1508,7 @@ impl App {
                 }
             })
             .collect();
-        f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, if self.folders.is_empty() { " Albums ".into() } else { " Folders and albums ".into() })).highlight_style(sel), left, &mut self.album_sel);
+        f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, if self.folders.is_empty() { " Albums ".into() } else if self.flat { " Albums (flat) ".into() } else { " Folders and albums ".into() })).highlight_style(sel), left, &mut self.album_sel);
 
         let playing = self.now.and_then(|i| self.queue.get(i)).map(|t| t.id);
         let mt = self.meter_theme(&th);
@@ -2067,5 +2096,47 @@ mod folder_tests {
         let Some(app) = app() else { return };
         let infos = &app.search.folders;
         assert_eq!(infos.iter().map(|f| (f.id, f.path.as_str(), f.albums)).collect::<Vec<_>>(), [(1, "Jazz", 2), (2, "Jazz / Live", 1)]);
+    }
+
+    #[test]
+    fn z_makes_the_list_flat_and_back_and_keeps_the_selected_album() {
+        let Some(mut app) = app() else { return };
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // Loose
+        app.key(KeyCode::Char('z'), KeyModifiers::NONE);
+        assert_eq!(lines(&app), ["  Kind of Blue", "  Loose", "  At Newport"]);
+        assert_eq!(app.selected_album(), Some(1));
+        assert!(app.cfg.flat && app.status.contains("flat"));
+
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE); // making folders waits for the tree
+        assert!(app.prompt.is_none() && app.status.contains("flat"));
+        app.key(KeyCode::Char('x'), KeyModifiers::NONE); // marking and moving work in the flat list
+        assert_eq!(app.marks.len(), 1);
+
+        app.key(KeyCode::Char('z'), KeyModifiers::NONE);
+        assert!(!app.flat && !app.cfg.flat);
+        assert_eq!(app.rows.len(), 2); // the closed tree again
+        assert_eq!(app.selected_album(), None); // the selected album is inside a closed folder: the selection falls back to the top
+    }
+
+    #[test]
+    fn a_remembered_flat_list_starts_flat_and_a_folder_hit_leaves_it() {
+        let Some(mut app) = app() else { return };
+        app.cfg.flat = true;
+        app.flat = true;
+        app.rebuild_rows();
+        assert_eq!(app.rows.len(), 3);
+        app.view = View::Search;
+        app.search.hits = vec![search::Hit::Folder(search::FolderInfo { id: 1, path: "Jazz".into(), albums: 2 })];
+        app.search.sel.select(Some(0));
+        app.search_activate();
+        assert!(!app.flat && lines(&app)[0] == "▾ Jazz");
+    }
+
+    #[test]
+    fn z_without_folders_says_so() {
+        let Some(mut app) = app() else { return };
+        app.set_folders(vec![]);
+        app.key(KeyCode::Char('z'), KeyModifiers::NONE);
+        assert!(!app.flat && app.status.contains("already flat"));
     }
 }

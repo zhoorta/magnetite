@@ -41,6 +41,7 @@ const LIBRARY: Section = ("Library", &[
     ("enter", "open an album / play from a track"),
     ("l / enter", "open or close a folder, open an album"),
     ("h", "close a folder or go to the one above; from the tracks, back to the albums"),
+    ("z", "flat list: every album, no folders (again goes back)"),
     ("x", "mark the album for a move (and go down)"),
     ("v", "move the marked albums, or the selected one, to a folder"),
     ("N", "new folder (inside the selected folder, beside the selected album)"),

@@ -27,6 +27,9 @@ pub struct Config {
     /// The folders that were open in the album list (ids), so the list looks the same at the next start.
     #[serde(default)]
     pub open_folders: Vec<u64>,
+    /// `z`: the album list as one flat list, without folders.
+    #[serde(default)]
+    pub flat: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
