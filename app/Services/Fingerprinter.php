@@ -119,8 +119,14 @@ class Fingerprinter
             if (($result['score'] ?? 0) < 0.8) {
                 continue; // a weak fingerprint match says little about the release
             }
+            // With `meta=releaseids` the releases sit directly on the result; with `releases` or `recordings`
+            // they sit under each recording. Read both.
+            $lists = [$result['releases'] ?? []];
             foreach ($result['recordings'] ?? [] as $recording) {
-                foreach ($recording['releases'] ?? [] as $release) {
+                $lists[] = $recording['releases'] ?? [];
+            }
+            foreach ($lists as $releases) {
+                foreach ($releases as $release) {
                     if (preg_match('/^[0-9a-f-]{36}$/', $release['id'] ?? '')) {
                         $ids[$release['id']] = true;
                     }

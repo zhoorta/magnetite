@@ -243,9 +243,11 @@ it('reads the AcoustID answer and ignores weak matches', function () {
     Http::fake(['api.acoustid.org/*' => Http::response(['results' => [
         ['score' => 0.95, 'recordings' => [['releases' => [['id' => '11111111-2222-3333-4444-555555555555'], ['id' => 'not-an-id']]]]],
         ['score' => 0.4, 'recordings' => [['releases' => [['id' => '22222222-2222-3333-4444-555555555555']]]]],
+        // the shape AcoustID really answers with for meta=releaseids
+        ['score' => 0.9, 'releases' => [['id' => '33333333-2222-3333-4444-555555555555']]],
     ]])]);
 
-    expect((new Fingerprinter)->lookup(200, 'AQAA'))->toBe(['11111111-2222-3333-4444-555555555555']);
+    expect((new Fingerprinter)->lookup(200, 'AQAA'))->toBe(['11111111-2222-3333-4444-555555555555', '33333333-2222-3333-4444-555555555555']);
     Http::assertSent(fn ($r) => $r['client'] === 'key' && $r['meta'] === 'releaseids');
 });
 
