@@ -114,6 +114,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/library/folders/{folder}', [FolderController::class, 'update'])->whereNumber('folder')->name('library.folders.update');
     Route::delete('/library/folders/{folder}', [FolderController::class, 'destroy'])->whereNumber('folder')->name('library.folders.destroy');
     Route::put('/library/albums/{album}/folder', [FolderController::class, 'moveAlbum'])->whereNumber('album')->name('library.albums.folder');
+    Route::get('/library/albums/{album}/titles/progress', [AlbumTitlesController::class, 'progress'])->whereNumber('album')->name('library.albums.titles.progress');
     Route::post('/library/albums/{album}/titles/find', [AlbumTitlesController::class, 'find'])->whereNumber('album')->name('library.albums.titles.find');
     Route::post('/library/albums/{album}/titles', [AlbumTitlesController::class, 'apply'])->whereNumber('album')->name('library.albums.titles.apply');
     Route::get('/library/tracks/loose', [LooseTrackController::class, 'index'])->name('library.tracks.loose');

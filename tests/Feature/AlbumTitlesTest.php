@@ -123,3 +123,10 @@ it('asks MusicBrainz again when it is busy', function () {
 
     $this->actingAs($this->alice)->postJson(route('library.albums.titles.find', $this->album))->assertOk()->assertJson(['candidates' => []]);
 });
+
+it('tells what a running search is doing, to its owner only', function () {
+    Cache::put("magnetite.titles.progress.{$this->alice->id}.{$this->album->id}", 'Fingerprinting track 2 of 5…', 60);
+
+    $this->actingAs($this->alice)->getJson(route('library.albums.titles.progress', $this->album))->assertOk()->assertJson(['text' => 'Fingerprinting track 2 of 5…']);
+    $this->actingAs($this->bob)->getJson(route('library.albums.titles.progress', $this->album))->assertNotFound();
+});

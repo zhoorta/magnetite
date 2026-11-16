@@ -1448,9 +1448,15 @@ export default function dense(data) {
         },
 
         async findTitles(id, title) {
-            this.titles = { id, title, loading: true, album: {}, candidates: [], report: [], pick: 0, parts: { date: false, label: false, titles: false }, error: '', saving: false };
+            this.titles = { id, title, loading: true, album: {}, candidates: [], report: [], progress: '', pick: 0, parts: { date: false, label: false, titles: false }, error: '', saving: false };
             const t = this.titles;
+            // The search is one request that can take many seconds (fingerprints); ask what it is doing meanwhile.
+            const poll = setInterval(async () => {
+                const p = await send('GET', `/library/albums/${id}/titles/progress`);
+                if (p.ok && t.loading) t.progress = p.data.text || '';
+            }, 1000);
             const r = await send('POST', `/library/albums/${id}/titles/find`);
+            clearInterval(poll);
             if (r.ok) {
                 t.album = r.data.album;
                 t.candidates = r.data.candidates;

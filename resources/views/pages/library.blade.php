@@ -456,7 +456,7 @@
             <div class="flex max-h-[85vh] w-full max-w-lg flex-col rounded-theme border border-white/15 bg-surface p-5 text-sm shadow-xl">
                 <h2 class="mb-1 font-semibold">Details for “<span x-text="titles?.title"></span>”</h2>
                 <p class="mb-3 text-xs text-muted">Looked up on MusicBrainz by album title and artist, and compared with the number and length of the tracks. Tick what to apply. Changes the library only, not the files or their tags.</p>
-                <p x-show="titles?.loading" class="py-6 text-center text-muted">Searching…</p>
+                <p x-show="titles?.loading" class="py-6 text-center text-muted" role="status" x-text="titles?.progress || 'Searching…'">Searching…</p>
                 <p x-show="titles && ! titles.loading && ! titles.error && titles.candidates.length === 0" class="py-4 text-muted">No release on MusicBrainz fits this album (title, artist, number of tracks and their lengths). Check the title and artist with Edit, then try again.</p>
                 <ul x-show="titles && ! titles.loading && titles.report?.length" class="mb-3 space-y-0.5 text-xs text-muted" aria-label="What the search did">
                     <template x-for="s in titles?.report || []" :key="s.step">

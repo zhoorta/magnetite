@@ -27,6 +27,9 @@ class Fingerprinter
     /** What the last `releases()` call did, for the report shown to the owner. @var array{sampled: int, fingerprinted: int, matched: int, failed: int} */
     public array $stats = ['sampled' => 0, 'fingerprinted' => 0, 'matched' => 0, 'failed' => 0];
 
+    /** @var (callable(string): void)|null told what is going on, track by track */
+    public $progress = null;
+
     /** Why `available()` is false, in words. */
     public function unavailableReason(): ?string
     {
@@ -66,8 +69,9 @@ class Fingerprinter
         $sample = $this->sample($tracks);
         $this->stats = ['sampled' => count($sample), 'fingerprinted' => 0, 'matched' => 0, 'failed' => 0];
 
-        foreach ($sample as $track) {
+        foreach ($sample as $i => $track) {
             try {
+                $this->say('Fingerprinting track '.($i + 1).' of '.count($sample).'…');
                 $file = $store->fetch($track->path);
                 $print = $file ? $this->fingerprint($file) : null;
                 if ($print === null) {
@@ -76,6 +80,7 @@ class Fingerprinter
 
                 $this->stats['fingerprinted']++;
 
+                $this->say('Asking AcoustID about track '.($i + 1).' of '.count($sample).'…');
                 Sleep::for(350)->milliseconds(); // AcoustID allows three requests a second
                 $ids = $this->lookup($print['duration'], $print['fingerprint']);
                 $this->stats['matched'] += $ids === [] ? 0 : 1;
@@ -91,6 +96,13 @@ class Fingerprinter
         arsort($votes);
 
         return $votes;
+    }
+
+    private function say(string $text): void
+    {
+        if ($this->progress !== null) {
+            ($this->progress)($text);
+        }
     }
 
     /** @return list<Track> */

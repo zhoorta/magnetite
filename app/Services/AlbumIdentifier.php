@@ -41,6 +41,9 @@ class AlbumIdentifier
 
     private ?Throwable $failure = null;
 
+    /** @var (callable(string): void)|null */
+    private $say = null;
+
     /** @var array<string, int> release id => tracks that voted for it, from the last fingerprint step */
     private array $votes = [];
 
@@ -51,6 +54,13 @@ class AlbumIdentifier
     public function report(): array
     {
         return $this->report;
+    }
+
+    /** Gets told in words what the search is doing now (the details dialog polls it). @param  callable(string): void  $say */
+    public function onProgress(callable $say): void
+    {
+        $this->say = $say;
+        $this->fingerprints->progress = $say;
     }
 
     private function note(string $step, string $status, string $note): void
@@ -317,6 +327,10 @@ class AlbumIdentifier
                 continue;
             }
 
+            if ($this->say !== null && $via !== 'fingerprint') {
+                ($this->say)($via === 'album' ? 'Searching MusicBrainz by album name…' : 'Searching MusicBrainz by track titles…');
+            }
+
             // A step that fails (MusicBrainz busy, say) must not stop the next ones: the fingerprint step talks to
             // AcoustID, not MusicBrainz, and can still find the release.
             try {
@@ -330,6 +344,9 @@ class AlbumIdentifier
 
             $kept = 0;
             $failed = 0;
+            if ($this->say !== null && $ids !== []) {
+                ($this->say)('Checking '.min(count($ids), self::MAX_CANDIDATES + 2).' release'.(count($ids) === 1 ? '' : 's').' against the track lengths…');
+            }
             foreach (array_slice($ids, 0, self::MAX_CANDIDATES + 2) as $id) {
                 $seen[] = $id;
                 try {

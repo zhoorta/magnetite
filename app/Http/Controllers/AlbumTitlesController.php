@@ -24,9 +24,25 @@ class AlbumTitlesController extends Controller
         return "magnetite.titles.{$request->user()->id}.{$album->id}";
     }
 
+    private function progressKey(Request $request, Album $album): string
+    {
+        return "magnetite.titles.progress.{$request->user()->id}.{$album->id}";
+    }
+
+    /** What the running search is doing, for the dialog to show while it waits for `find`. */
+    public function progress(Request $request, Album $album): JsonResponse
+    {
+        abort_unless($request->user()->can('update', $album), 404);
+
+        return response()->json(['text' => Cache::get($this->progressKey($request, $album), '')]);
+    }
+
     public function find(Request $request, Album $album, AlbumIdentifier $identifier): JsonResponse
     {
         abort_unless($request->user()->can('update', $album), 404);
+
+        $progress = $this->progressKey($request, $album);
+        $identifier->onProgress(fn (string $text) => Cache::put($progress, $text, 120));
 
         try {
             $candidates = $identifier->titlesFor($album);
@@ -34,6 +50,7 @@ class AlbumTitlesController extends Controller
             return response()->json(['message' => 'MusicBrainz could not be reached. Try again in a moment.'], 502);
         }
 
+        Cache::forget($progress);
         Cache::put($this->key($request, $album), $candidates, self::KEEP);
 
         return response()->json([
