@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\SharedController;
 use App\Http\Controllers\Api\TokenController;
 use App\Http\Controllers\Api\TrackController;
 use App\Http\Controllers\Api\UploadController;
+use App\Http\Controllers\CopyController;
 use App\Http\Controllers\CoverSearchController;
 use App\Http\Controllers\FolderController as FolderWrites;
 use App\Http\Controllers\LibraryEditController;
@@ -72,6 +73,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/albums', [AlbumGroupController::class, 'store'])->name('api.albums.store');
             Route::patch('/albums/{album}', [LibraryEditController::class, 'album'])->whereNumber('album')->name('api.albums.update');
             Route::patch('/albums/{album}/details', [LibraryEditController::class, 'details'])->whereNumber('album')->name('api.albums.details');
+            Route::post('/copy/{kind}/{id}', [CopyController::class, 'store'])->whereIn('kind', ['albums', 'tracks'])->whereNumber('id')->middleware('throttle:30,1')->name('api.copy');
             Route::post('/share/{kind}/{id}', [ShareController::class, 'store'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('api.share.store');
             Route::delete('/share/{kind}/{id}', [ShareController::class, 'destroy'])->whereIn('kind', ['albums', 'tracks', 'playlists'])->whereNumber('id')->name('api.share.destroy');
             Route::patch('/tracks/{track}', [LibraryEditController::class, 'track'])->whereNumber('track')->name('api.tracks.update');

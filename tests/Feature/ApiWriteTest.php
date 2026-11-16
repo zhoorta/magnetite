@@ -556,3 +556,30 @@ describe('in a Ferrite library', function () {
         expect($this->loose->fresh()->path)->toBe('Loose.flac')->and($this->loose->fresh()->album_id)->toBeNull();
     });
 });
+
+describe('copying shared music', function () {
+    it('copies a shared album of someone else into your library and refuses what is not shared or is your own', function () {
+        $h = writer($this->bob);
+
+        // not shared: a 404, as for the web
+        $this->postJson("/api/v1/copy/albums/{$this->album->id}", [], $h)->assertNotFound();
+
+        SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->album->id]);
+        $this->postJson("/api/v1/copy/albums/{$this->album->id}", [], $h)->assertCreated()->assertJson(['added' => $this->album->tracks()->count(), 'failed' => 0]);
+        expect(File::allFiles($this->music.'/users/bob/From alice'))->toHaveCount($this->album->tracks()->count());
+
+        $this->postJson('/api/v1/copy/playlists/1', [], $h)->assertNotFound(); // only albums and tracks
+    });
+
+    it('does not copy your own music onto itself', function () {
+        SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->album->id]);
+
+        $this->postJson("/api/v1/copy/albums/{$this->album->id}", [], writer($this->alice))->assertNotFound();
+    });
+
+    it('is not open to a read-only token', function () {
+        SharedItem::create(['user_id' => $this->alice->id, 'album_id' => $this->album->id]);
+
+        $this->postJson("/api/v1/copy/albums/{$this->album->id}", [], writer($this->bob, readOnly: true))->assertForbidden();
+    });
+});
