@@ -896,8 +896,8 @@ impl App {
                 None => format!("{k} tracks"),
             });
         }
-        if let Some(dr) = album.and_then(|a| a.dr) {
-            al.push(format!("album DR{}", dr.round() as i32));
+        if let Some(dr) = album.and_then(|a| a.dr).filter(|_| self.info >= 1) {
+            al.push(format!("album DR{}", dr.round() as i32)); // a number about the files: info off leaves it out
         }
         lines.push(Line::from(al.join(" · ")).style(dim));
         // the format only (`OPUS · 32-bit / 48 kHz`); the numbers, the findings and the graph are in the details (`d` on a track row)
@@ -2394,5 +2394,20 @@ mod folder_tests {
         assert!(app.details.as_ref().unwrap().error.is_some()); // no server here: the numbers show, the graph says why not
         app.key(KeyCode::Char('q'), KeyModifiers::NONE);
         assert!(app.details.is_none() && !app.quit); // q closes the panel, not the program
+    }
+
+    #[test]
+    fn the_album_line_has_the_album_dr_only_when_info_is_on() {
+        let Some(mut app) = app() else { return };
+        app.albums[0].dr = Some(9.0);
+        app.queue = vec![serde_json::from_value(json!({"id": 5, "title": "T", "open": true, "number": 3})).unwrap()];
+        app.queue_albums = vec![app.albums[0].id];
+        app.now = Some(0);
+        let th = app.themes[app.theme].clone();
+        let text = |app: &App| app.summary_lines(&th).iter().map(|l| l.spans.iter().map(|s| s.content.to_string()).collect::<String>()).collect::<Vec<_>>().join("\n");
+        for (level, has) in [(0, false), (1, true), (2, true)] {
+            app.info = level;
+            assert_eq!(text(&app).contains("album DR9"), has, "info {level}");
+        }
     }
 }
