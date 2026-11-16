@@ -1,7 +1,7 @@
 <x-layouts.bare title="Sign in · Magnetite">
     <form method="POST" action="{{ route('login.store') }}" class="flex w-full max-w-xs flex-col items-stretch gap-4">
         @csrf
-        <a href="{{ route('welcome') }}" aria-label="Magnetite, back to the start page">
+        <a href="{{ config('magnetite.public_site') ? route('welcome') : route('login') }}" aria-label="Magnetite, back to the start page">
             <img src="/logo.svg" alt="Magnetite" width="512" height="512" class="mx-auto w-full border border-white/10">
         </a>
 

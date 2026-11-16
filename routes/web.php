@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminUsersController;
 use App\Http\Controllers\AlbumGroupController;
 use App\Http\Controllers\AlbumMergeController;
 use App\Http\Controllers\AlbumTitlesController;
@@ -31,16 +32,18 @@ use App\Support\DemoTracks;
 use App\Support\Guide;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn () => view('pages.welcome', ['demo' => array_values(DemoTracks::available()), 'demoAlbums' => auth()->check() ? [] : DemoTracks::albumIds()]))->name('welcome');
-Route::get('/themes', fn () => view('pages.themes'))->name('themes');
+Route::middleware('public-site')->group(function () {
+    Route::get('/', fn () => view('pages.welcome', ['demo' => array_values(DemoTracks::available()), 'demoAlbums' => auth()->check() ? [] : DemoTracks::albumIds()]))->name('welcome');
+    Route::get('/themes', fn () => view('pages.themes'))->name('themes');
 
-// The guide (docs/guide): only the pages listed in Guide::PAGES, never a path from the request.
-Route::get('/docs/{page?}', function (?string $page = null) {
-    $html = Guide::html($page) ?? abort(404);
+    // The guide (docs/guide): only the pages listed in Guide::PAGES, never a path from the request.
+    Route::get('/docs/{page?}', function (?string $page = null) {
+        $html = Guide::html($page) ?? abort(404);
 
-    return view('pages.guide', ['page' => $page, 'html' => $html, 'pages' => Guide::PAGES, 'neighbours' => Guide::neighbours($page)]);
-})->where('page', '[a-z-]+')->name('guide');
-Route::get('/demo/{id}', DemoController::class)->where('id', '[a-z0-9-]+')->middleware('throttle:120,1')->name('demo');
+        return view('pages.guide', ['page' => $page, 'html' => $html, 'pages' => Guide::PAGES, 'neighbours' => Guide::neighbours($page)]);
+    })->where('page', '[a-z-]+')->name('guide');
+    Route::get('/demo/{id}', DemoController::class)->where('id', '[a-z0-9-]+')->middleware('throttle:120,1')->name('demo');
+});
 
 // First run only: 404 as soon as a user exists.
 Route::get('/setup', [SetupController::class, 'create'])->name('setup');
@@ -60,7 +63,7 @@ Route::middleware('auth:web,sanctum')->group(function () {
 });
 
 // A visitor who is not signed in sees the demo tracks here, read only (or the sign-in page when there are none).
-Route::get('/library', [LibraryController::class, 'library'])->name('library');
+Route::get('/library', [LibraryController::class, 'library'])->middleware('public-site')->name('library');
 
 // The library's data, the files and the upload are only for signed-in users.
 Route::middleware('auth')->group(function () {
@@ -116,6 +119,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/identify/{suggestion}/accept', [IdentifyController::class, 'accept'])->whereNumber('suggestion')->name('identify.accept');
     Route::delete('/identify/{suggestion}', [IdentifyController::class, 'dismiss'])->whereNumber('suggestion')->name('identify.dismiss');
 
+    Route::get('/admin/users', [AdminUsersController::class, 'index'])->middleware('admin')->name('admin.users');
     Route::get('/storage', [StorageController::class, 'show'])->name('storage');
     Route::post('/storage/test', [StorageController::class, 'test'])->name('storage.test');
     Route::delete('/storage/cache', [StorageController::class, 'clearCache'])->name('storage.cache.clear');

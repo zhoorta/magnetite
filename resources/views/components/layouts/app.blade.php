@@ -32,6 +32,9 @@
                 @endauth
                 @auth
                     <a href="{{ route('storage') }}" wire:navigate class="{{ $link('storage') }}">Storage</a>
+                    @if (auth()->user()->is_admin)
+                        <a href="{{ route('admin.users') }}" wire:navigate class="{{ $link('admin.users') }}">Users</a>
+                    @endif
                 @endauth
                 <div class="sm:ml-auto"><x-themes-menu /></div>
                 @auth

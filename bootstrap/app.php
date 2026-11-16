@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\PublicSite;
 use App\Http\Middleware\RedirectToSetup;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias(['abilities' => CheckAbilities::class]);
+        $middleware->alias(['abilities' => CheckAbilities::class, 'public-site' => PublicSite::class, 'admin' => EnsureAdmin::class]);
         $middleware->appendToGroup('web', RedirectToSetup::class);
         $middleware->redirectUsersTo(fn () => route('library'));
 

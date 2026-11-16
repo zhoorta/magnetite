@@ -1,6 +1,10 @@
 <?php
 
 return [
+    // false turns the start page, the demo library and the public documentation off: visitors go straight to the
+    // sign-in page (MAGNETITE_PUBLIC_SITE=false).
+    'public_site' => (bool) env('MAGNETITE_PUBLIC_SITE', true),
+
     // Optional. When set, the first-run form at /setup also asks for it. Left empty, whoever opens /setup first
     // while there is no user becomes the administrator.
     'setup_token' => env('MAGNETITE_SETUP_TOKEN'),

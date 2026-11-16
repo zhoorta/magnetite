@@ -20,6 +20,7 @@ Until that form is finished, anyone who can reach the address can fill it in and
 |---|---|---|
 | `MAGNETITE_USER` | Name of the first user, created on the first start from the shell instead of the set-up page | none |
 | `MAGNETITE_PASSWORD` | Password of that user | generated and printed once in `docker compose logs app` |
+| `MAGNETITE_PUBLIC_SITE` | `false` turns off the start page, the demo and the public documentation: visitors go straight to the sign-in page | `true` |
 | `MAGNETITE_SETUP_TOKEN` | When set, the set-up page asks for it too | none |
 | `MAGNETITE_PORT` | Port on the host | 8080 |
 | `MAGNETITE_MUSIC_DIR` | A folder on the host that holds the music | a Docker volume |
