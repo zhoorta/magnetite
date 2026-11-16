@@ -41,6 +41,9 @@ class AlbumIdentifier
 
     private ?Throwable $failure = null;
 
+    /** @var array<string, int> release id => tracks that voted for it, from the last fingerprint step */
+    private array $votes = [];
+
     /** @var list<array{step: string, status: string, note: string}> what each search step did last time */
     private array $report = [];
 
@@ -433,7 +436,9 @@ class AlbumIdentifier
     {
         $tracks = array_map(fn ($t) => $byId[$t['id']], $guess['tracks']);
 
-        return array_keys($this->fingerprints->releases($user, $tracks));
+        $this->votes = $this->fingerprints->releases($user, $tracks);
+
+        return array_keys($this->votes);
     }
 
     /** Titles like "Track 01" or "07" say nothing and would only find noise. */
@@ -457,6 +462,9 @@ class AlbumIdentifier
         return [
             'source' => 'musicbrainz',
             'via' => $via,
+            // How many of the fingerprinted tracks named this release (fingerprint search only).
+            'votes' => $via === 'fingerprint' ? ($this->votes[$id] ?? null) : null,
+            'voted_of' => $via === 'fingerprint' ? $this->fingerprints->stats['fingerprinted'] : null,
             'mbid' => $detail['id'],
             'title' => $detail['title'] ?? $guess['album'],
             'artist' => $artist,
