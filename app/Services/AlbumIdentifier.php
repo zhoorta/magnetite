@@ -281,10 +281,26 @@ class AlbumIdentifier
                 break;
             }
 
-            $ids = array_values(array_diff($find(), $seen));
+            // A step that fails (MusicBrainz busy, say) must not stop the next ones: the fingerprint step talks to
+            // AcoustID, not MusicBrainz, and can still find the release.
+            try {
+                $ids = array_values(array_diff($find(), $seen));
+            } catch (Throwable $e) {
+                Log::info('Release search failed', ['step' => $via, 'error' => $e->getMessage()]);
+
+                continue;
+            }
+
             foreach (array_slice($ids, 0, self::MAX_CANDIDATES + 2) as $id) {
                 $seen[] = $id;
-                if (($candidate = $this->score($id, $via, $guess, $local)) !== null) {
+                try {
+                    $candidate = $this->score($id, $via, $guess, $local);
+                } catch (Throwable $e) {
+                    Log::info('Release details failed', ['step' => $via, 'release' => $id, 'error' => $e->getMessage()]);
+
+                    continue;
+                }
+                if ($candidate !== null) {
                     $out[] = $candidate;
                 }
             }
