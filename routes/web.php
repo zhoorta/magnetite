@@ -131,6 +131,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/admin/users/{user}/reset', [PasswordController::class, 'link'])->whereNumber('user')->middleware('admin')->name('admin.users.reset');
     Route::post('/admin/invitations', [InvitationController::class, 'store'])->middleware('admin')->name('admin.invitations.store');
     Route::delete('/admin/invitations/{invitation}', [InvitationController::class, 'destroy'])->whereNumber('invitation')->middleware('admin')->name('admin.invitations.destroy');
+    Route::patch('/admin/users/{user}/role', [AdminUsersController::class, 'role'])->whereNumber('user')->middleware('admin')->name('admin.users.role');
+    Route::delete('/admin/users/{user}', [AdminUsersController::class, 'destroy'])->whereNumber('user')->middleware('admin')->name('admin.users.destroy');
     Route::patch('/admin/users/{user}/quota', [AdminUsersController::class, 'quota'])->whereNumber('user')->middleware('admin')->name('admin.users.quota');
     Route::get('/storage', [StorageController::class, 'show'])->name('storage');
     Route::post('/storage/test', [StorageController::class, 'test'])->name('storage.test');

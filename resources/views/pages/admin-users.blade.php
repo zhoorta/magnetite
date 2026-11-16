@@ -22,6 +22,10 @@
             </div>
         @endif
 
+        @error('confirm')
+            <p class="mb-4 text-xs text-accent2" role="alert">{{ $message }}</p>
+        @enderror
+
         @if (session('status'))
             <p class="mb-4 text-xs text-accent" role="status">{{ session('status') }}</p>
         @endif
@@ -60,10 +64,31 @@
                         </td>
                         <td class="py-2 pr-4 text-muted">{{ $u->created_at?->toDateString() }}</td>
                         <td class="py-1 text-right">
-                            <form method="POST" action="{{ route('admin.users.reset', $u) }}">
-                                @csrf
-                                <button type="submit" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent" title="Make a one-time link for a new password">Reset password</button>
-                            </form>
+                            <div class="flex flex-wrap items-center justify-end gap-1">
+                                <form method="POST" action="{{ route('admin.users.reset', $u) }}">
+                                    @csrf
+                                    <button type="submit" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent" title="Make a one-time link for a new password">Reset password</button>
+                                </form>
+                                @unless ($u->is(auth()->user()))
+                                    <form method="POST" action="{{ route('admin.users.role', $u) }}">
+                                        @csrf
+                                        @method('PATCH')
+                                        <input type="hidden" name="is_admin" value="{{ $u->is_admin ? 0 : 1 }}">
+                                        <button type="submit" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent">{{ $u->is_admin ? 'Remove admin' : 'Make admin' }}</button>
+                                    </form>
+                                    <details class="relative">
+                                        <summary class="cursor-pointer list-none rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent">Delete…</summary>
+                                        <form method="POST" action="{{ route('admin.users.destroy', $u) }}" class="absolute right-0 z-10 mt-1 w-64 rounded-theme border border-white/10 bg-surface p-3 text-left shadow-lg">
+                                            @csrf
+                                            @method('DELETE')
+                                            <p class="mb-2 text-xs text-muted">Removes the account, its library entries, playlists and shares. The music files stay on the disk. Type <strong class="text-text">{{ $u->username }}</strong> to confirm.</p>
+                                            <input type="text" name="confirm" autocomplete="off" aria-label="Type the username to confirm" required
+                                                   class="mb-2 w-full rounded-theme border border-white/10 bg-bg px-2 py-1 text-sm focus:border-accent focus:outline-none">
+                                            <button type="submit" class="rounded-theme bg-accent2 px-2 py-1 text-xs font-medium text-bg">Delete {{ $u->username }}</button>
+                                        </form>
+                                    </details>
+                                @endunless
+                            </div>
                         </td>
                     </tr>
                 @endforeach
