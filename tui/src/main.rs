@@ -900,11 +900,12 @@ impl App {
             al.push(format!("album DR{}", dr.round() as i32));
         }
         lines.push(Line::from(al.join(" · ")).style(dim));
-        if self.info == 0 {
-            return lines; // info off: the title, the artist and the album line only
+        // the format only (`OPUS · 32-bit / 48 kHz`); the numbers, the findings and the graph are in the details (`d` on a track row)
+        let format = info::meta_line(t, self.info);
+        if !format.is_empty() {
+            lines.push(Line::raw(""));
+            lines.push(Line::from(format).style(Style::new().fg(text)));
         }
-        lines.push(Line::raw(""));
-        lines.extend(details::truth_lines(t, th, self.info));
         lines
     }
 
@@ -1502,10 +1503,10 @@ impl App {
         }
     }
 
-    /// 2 info lines (the track, and its format), the meter panels (6 rows for one or two, 11 for a 2 x 2 grid), the progress line and the border.
+    /// 2 info lines (the track, and its format), the meter panels (6 rows for one or two, 11 for a 2 x 2 grid; 6 for the cover and the track's lines when there are none), the progress line and the border.
     fn now_height(&self, total: u16) -> u16 {
         let panels = match self.panels.len() {
-            0 => 12,
+            0 => 6,
             1 | 2 => 6,
             _ => 11,
         };
