@@ -117,3 +117,9 @@ it('reports what each search step did', function () {
     expect(collect($report)->pluck('step')->all())->toBe(['Album name', 'Track titles', 'Fingerprints'])
         ->and(collect($report)->firstWhere('step', 'Fingerprints')['status'])->toBe('skipped');
 });
+
+it('asks MusicBrainz again when it is busy', function () {
+    Http::fake(['musicbrainz.org/*' => Http::sequence()->push('', 503)->push(['releases' => []])]);
+
+    $this->actingAs($this->alice)->postJson(route('library.albums.titles.find', $this->album))->assertOk()->assertJson(['candidates' => []]);
+});

@@ -8,6 +8,7 @@ use App\Models\Track;
 use App\Models\User;
 use App\Support\PathGuess;
 use App\Support\ReleaseMatch;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -529,6 +530,8 @@ class AlbumIdentifier
 
     private function http()
     {
-        return Http::withUserAgent(config('magnetite.covers.user_agent'))->timeout(10)->withOptions(['allow_redirects' => false]);
+        // MusicBrainz answers 503 when busy; it usually passes within a second or two, so ask again before giving up.
+        return Http::withUserAgent(config('magnetite.covers.user_agent'))->timeout(10)->withOptions(['allow_redirects' => false])
+            ->retry(2, 1200, fn ($e) => $e instanceof RequestException && $e->response->status() === 503, throw: false);
     }
 }
