@@ -1,6 +1,6 @@
 # Docker
 
-One image (`Dockerfile`) and one container (`compose.yaml`): FrankenPHP (Caddy with PHP) serves the web app and a queue worker runs beside it for library scans. SQLite lives in a volume, so there is no database container. This is the shortest way to run Magnetite; magnetite.stackcare.pt itself runs without Docker (`docs/bare-metal.md`).
+One image (`Dockerfile`) and one container (`compose.yaml`): FrankenPHP (Caddy with PHP) serves the web app and a queue worker runs beside it for library scans. SQLite lives in a volume, so there is no database container. This is the shortest way to run Magnetite; the demo server itself runs without Docker (`docs/bare-metal.md`).
 
 ## Quick start
 

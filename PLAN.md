@@ -19,7 +19,7 @@ Stay standalone with a thin library of our own (scanner, covers, ALAC conversion
 - [x] Dense, keyboard-first library as the web UI: tree, tracks, command line, edit table, search, truth view (`docs/dense-library.md`)
 - [x] Ferrite as library storage (`docs/ferrite-storage.md`)
 - [x] Clients: Android phone, tablet and TV, released as 0.4.0 (`docs/android.md`); iOS in the simulator (`docs/ios.md`); terminal client in Rust (`docs/tui.md`)
-- [x] Live since 2026-10-09 at magnetite.stackcare.pt, no Docker (`docs/bare-metal.md`); Docker image for others (`docs/docker.md`)
+- [x] Live since 2026-10-09 (the demo server), no Docker (`docs/bare-metal.md`); Docker image for others (`docs/docker.md`)
 
 ## Open
 

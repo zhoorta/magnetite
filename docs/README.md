@@ -8,7 +8,7 @@ Start with `PLAN.md` (short status) at the repo root. `history.md` is the long d
 |---|---|
 | `guide/` | The guide for people who install and use it, shown on the site at `/docs` (pages listed in `App\Support\Guide`) |
 | `docker.md` | One image, two containers (web and queue worker), SQLite in a volume |
-| `bare-metal.md` | nginx, PHP-FPM, MySQL and systemd, as magnetite.stackcare.pt runs; deploy an update; the APK is copied by hand |
+| `bare-metal.md` | nginx, PHP-FPM, MySQL and systemd, as the demo server runs; deploy an update; the APK is copied by hand |
 | `../CREDITS.md` | Credits and licences of the demo music on the start page |
 | `auth-and-upload.md` | Sign-in, who can do what, zip upload rules |
 | `multi-user.md` | Own libraries, the shared area, `magnetite:claim` |

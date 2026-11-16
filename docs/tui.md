@@ -7,7 +7,7 @@ The point is real meters (spectrum, VU, correlation, later LUFS and true peak), 
 
 ## Use
 ```
-cd tui && cargo run --release -- login https://magnetite.stackcare.pt   # shows a code, approve it at /device
+cd tui && cargo run --release -- login https://music.example.com   # shows a code, approve it at /device
 cargo run --release                                                      # the player
 ```
 The token is kept in `~/.config/magnetite/tui.json` (mode 600). Keys: `j/k` move, `enter` open an album or play from a track, `space` pause, `n`/`p` next and previous (`p` and the system's previous restart the track when it is more than 3 s in), `,`/`.` seek ∓10 s, `tab` choose the active meter panel (its title is marked ▸), `m`/`M` next/previous plain meter for it (never one already shown), `w`/`W` the same through the posters (from the other group each starts at that group's first or last), `+`/`-` add or remove a panel (0 to 4, 2 x 2; `-` removes the last one too and `m`, `w` or `+` brings one back), `c` meter colours from the cover on/off, `L` loudness matching (off, album, track), `/` search (below), `A` analyse the selected album or track (below), `i` file-truth table (below), `f` full screen (esc closes), `t`/`T` next/previous theme, `h` back, `?` help, `q` quit.
@@ -80,7 +80,7 @@ The seven built-in themes are read from `resources/js/magnetite/themes.json` at 
 - The file-truth line (codec, bits/rate, DR, findings) and the LUFS / LRA / true peak readouts come from `TrackResource.truth` (owner's tracks only); the live meters are computed locally.
 
 ## Known limits (v0)
-- Playback streams in 256 KB Range chunks with 3 chunks of read-ahead (`src/stream.rs`), so it starts after the first chunk and an MP4 with its index at the end costs one more chunk. The next track is opened in the background. Chunks stay in memory for the track's life. Needs `Range` support from `/stream` (it has it). On a slow link (2026-11-09 from home: about 20 KB/s to magnetite.stackcare.pt, for static files too, while other hosts gave 3 MB/s) playback starts after about 23 s and then stalls: a 19 MB ALAC needs far more.
+- Playback streams in 256 KB Range chunks with 3 chunks of read-ahead (`src/stream.rs`), so it starts after the first chunk and an MP4 with its index at the end costs one more chunk. The next track is opened in the background. Chunks stay in memory for the track's life. Needs `Range` support from `/stream` (it has it). On a slow link (2026-11-09 from home: about 20 KB/s to the demo server, for static files too, while other hosts gave 3 MB/s) playback starts after about 23 s and then stalls: a 19 MB ALAC needs far more.
 - Seek is `,`/`.` (±10 s, coarse); no seek bar click. No queue view, no search, no playlists or shared tab yet.
 - Decoding is symphonia 0.6.1 (FLAC, ALAC, MP3, AAC, Vorbis, WAV) plus Opus through `symphonia-adapter-opus-rs` (pure Rust, no `cmake` or `libopus`), registered in `codecs()` in `src/audio.rs`. Checked against ffmpeg on real tracks from the library (2026-11-09): Opus 75 dB SNR, Vorbis 139 dB, ALAC 133 dB, all the same length; the ignored test `matches_ffmpeg_on_a_real_file` does it for any file. Seeks are exact: the reader lands at or before the target and the frames before it are dropped (Opus: up to 6.5 ms late, its pre-skip). M4A has no gapless trimming in symphonia, so an ALAC file starts with about 48 ms of encoder-delay silence that ffmpeg would cut.
 - Resampling is linear (fine for meters, not audiophile); output must be f32 (macOS default).

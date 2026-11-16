@@ -1,6 +1,6 @@
 # Bare-metal install (Ubuntu, no Docker)
 
-How magnetite.stackcare.pt runs (since 2026-10-09): nginx + PHP-FPM 8.5 + MySQL + a systemd queue worker, code from GitHub with a deploy key. Libraries live in Ferrite (`ferrite.stackcare.pt`, same host, Germany), so there is no music folder on this server. The Docker image (`docs/docker.md`) still works; this is the alternative for a shared server with other sites.
+How the demo server runs (since 2026-10-09): nginx + PHP-FPM 8.5 + MySQL + a systemd queue worker, code from GitHub with a deploy key. Libraries live in Ferrite (`files.example.com`, same host, Germany), so there is no music folder on this server. The Docker image (`docs/docker.md`) still works; this is the alternative for a shared server with other sites.
 
 Layout: Linux user `magnetite` (home `/home/magnetite`), code in `/var/www/magnetite/app` (git checkout, nginx root `app/public`), PHP temp files in `/var/www/magnetite/tmp`, cache of Ferrite files in `app/storage/app/private/ferrite-cache` (`MAGNETITE_CACHE_MAX_GB`).
 
@@ -53,7 +53,7 @@ As `magnetite` (`sudo -iu magnetite`):
 
     APP_ENV=production
     APP_DEBUG=false
-    APP_URL=https://magnetite.stackcare.pt
+    APP_URL=https://music.example.com
     LOG_LEVEL=warning
     DB_CONNECTION=mysql
     DB_HOST=127.0.0.1
@@ -109,7 +109,7 @@ A separate pool (own socket), so other sites on the same FPM are untouched: do n
     server {
         listen 80;
         listen [::]:80;
-        server_name magnetite.stackcare.pt;
+        server_name music.example.com;
         root /var/www/magnetite/app/public;
         index index.php;
         charset utf-8;
@@ -155,8 +155,8 @@ A separate pool (own socket), so other sites on the same FPM are untouched: do n
     }
 
     sudo nginx -t && sudo systemctl reload nginx
-    sudo certbot --nginx -d magnetite.stackcare.pt
-    curl -I https://magnetite.stackcare.pt/up
+    sudo certbot --nginx -d music.example.com
+    curl -I https://music.example.com/up
 
 A proxy or CDN in front needs the same body limits (Cloudflare's free plan caps a request at 100 MB).
 
@@ -191,7 +191,7 @@ Required: scans, prefetch, analysis and Ferrite uploads all run on the queue. `/
 A token per user in Ferrite (Settings > API tokens), scoped to that user's folder, read and write plus the trash access if they upload and delete. As `magnetite`, in `app`:
 
     php artisan magnetite:user jose                  # asks for the password; --admin for an administrator
-    php artisan magnetite:storage jose --ferrite=https://ferrite.stackcare.pt     # asks for the token
+    php artisan magnetite:storage jose --ferrite=https://files.example.com     # asks for the token
     php artisan magnetite:storage jose --test
     php artisan magnetite:scan jose --queue
 
@@ -236,4 +236,4 @@ SQLite does not convert to MySQL by a dump. The Docker instance was started over
 
 ## Remote test (planned)
 
-Magnetite and Ferrite run on one host in Germany, so the proxy hop costs almost nothing there. The open measurement from `docs/ferrite-storage.md` is a Magnetite on a US server against `ferrite.stackcare.pt`: first byte and seek time of `/stream` for an uncached track at full size, the effect of prefetch at track changes, scan time for a real album, and the 429 limits (Ferrite's 120 reads a minute may need raising). Repeat the checklist above on that server, with `MAGNETITE_CACHE_MAX_GB` sized to its disk, and write the numbers into `docs/ferrite-storage.md`.
+Magnetite and Ferrite run on one host in Germany, so the proxy hop costs almost nothing there. The open measurement from `docs/ferrite-storage.md` is a Magnetite on a US server against `files.example.com`: first byte and seek time of `/stream` for an uncached track at full size, the effect of prefetch at track changes, scan time for a real album, and the 429 limits (Ferrite's 120 reads a minute may need raising). Repeat the checklist above on that server, with `MAGNETITE_CACHE_MAX_GB` sized to its disk, and write the numbers into `docs/ferrite-storage.md`.

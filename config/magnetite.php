@@ -2,7 +2,7 @@
 
 return [
     // Off by default: visitors go straight to the sign-in page. MAGNETITE_PUBLIC_SITE=true turns the start page, the
-    // demo library and the public documentation on (magnetite.stackcare.pt does).
+    // demo library and the public documentation on (the demo site does).
     'public_site' => (bool) env('MAGNETITE_PUBLIC_SITE', false),
 
     // Disk limit in GB given to every new (non-administrator) user; empty = no limit. Administrators change it per user
