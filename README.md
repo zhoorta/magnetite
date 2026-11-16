@@ -2,6 +2,8 @@
 
 Magnetite is a self-hosted music player for the browser. It plays the files stored on the server it is installed on, shows loudness meters, analyses every file, and restyles the whole interface from a small JSON theme. A personal project by the author of Ferrite.
 
+It is for people who run their own server (a small VPS, a NAS, a home machine) and want to play a music folder they own, with a good look at the files. One Docker command installs it. It is a personal project shared in case it is useful: issues and pull requests are read on a best-effort basis (see `CONTRIBUTING.md`).
+
 ![The library with the Terminal theme: folders and albums, tracks with their dynamic range, and the player with two meters](public/screenshots/library.png)
 
 ## What it does
@@ -15,6 +17,14 @@ Magnetite is a self-hosted music player for the browser. It plays the files stor
 - Clients: the web app, a terminal client (`tui/`, Rust), Android for phone, tablet and TV (`android/`) and iOS (`ios/`).
 
 ![The truth view: every file in one list, worst first](public/screenshots/truth.png)
+
+## Compared to others
+
+- **Navidrome** is the mature choice: a small Go server, very large libraries, the Subsonic API and many third-party clients. Magnetite has no Subsonic API yet (planned) and fewer clients; it adds per-file measurements (`magnetite:analyze`), the keyboard-first library and themes as files.
+- **Koel** is a Laravel web player with a polished interface. Magnetite is closer to a workbench: meters, file truth and its own terminal, Android and iOS clients, less to a streaming-service look.
+- **Feishin** is a desktop and web client for servers such as Navidrome and Jellyfin, not a server. Magnetite brings its own library, scanner and users.
+
+What Magnetite does not do: no downloader or music store, no podcasts or radio, no Subsonic clients yet, and it has been run in production only by its author.
 
 ## Run it
 
