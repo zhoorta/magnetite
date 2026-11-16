@@ -10,6 +10,7 @@ mod help;
 mod loudness;
 mod media;
 mod meters;
+mod organize;
 mod panels;
 mod posters;
 mod search;
@@ -85,7 +86,7 @@ fn login(server: Option<&String>) {
     };
     match result {
         Ok((token, username)) => {
-            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint), loudness: config::load().and_then(|c| c.loudness), cell_aspect: config::load().and_then(|c| c.cell_aspect) }).expect("could not save the config");
+            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint), loudness: config::load().and_then(|c| c.loudness), cell_aspect: config::load().and_then(|c| c.cell_aspect), open_folders: vec![] }).expect("could not save the config");
             println!("Signed in as {username}.");
         }
         Err(e) => eprintln!("Sign-in failed: {e}"),
@@ -199,6 +200,9 @@ struct App {
     albums: Vec<Album>,
     folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
     open_folders: BTreeSet<u64>,
+    marks: BTreeSet<u64>, // ids of the albums marked with x, to be moved together
+    prompt: Option<organize::Prompt>, // N: typing the name of a new folder
+    mover: Option<organize::Mover>, // v: choosing the folder to move albums to
     rows: Vec<tree::Row>, // the lines of the album list; `album_sel` is a line, not an album
     album_sel: ListState,
     open: Option<Album>, // the album whose tracks are shown
@@ -257,7 +261,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, find: None, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), marks: BTreeSet::new(), prompt: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, find: None, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -329,6 +333,14 @@ impl App {
             }
             return;
         }
+        if self.prompt.is_some() {
+            self.prompt_key(code);
+            return;
+        }
+        if self.mover.is_some() {
+            self.mover_key(code);
+            return;
+        }
         if self.find.is_some() {
             self.find_key(code);
             return;
@@ -397,6 +409,9 @@ impl App {
                 Some(p) => self.resume = Some((p - 10.0).max(0.0)),
                 None => self.player.seek_by(-10.0),
             },
+            (KeyCode::Char('x'), _) if self.in_album_list() => self.toggle_mark(),
+            (KeyCode::Char('v'), _) if self.in_album_list() => self.open_mover(),
+            (KeyCode::Char('N'), _) if self.in_album_list() => self.start_new_folder(),
             (KeyCode::Down | KeyCode::Char('j'), _) => self.mv(1),
             (KeyCode::Up | KeyCode::Char('k'), _) => self.mv(-1),
             (KeyCode::Left | KeyCode::Char('h'), _) if self.focus == Focus::Albums => self.fold_left(),
@@ -417,10 +432,157 @@ impl App {
         let _ = config::save(&self.cfg);
     }
 
+    fn in_album_list(&self) -> bool {
+        self.view == View::Library && self.focus == Focus::Albums && !self.full && self.ab.is_none()
+    }
+
+    /// `x`: mark or unmark the selected album for a move, and go down one line.
+    fn toggle_mark(&mut self) {
+        let Some(id) = self.selected_album().and_then(|i| self.albums.get(i)).map(|a| a.id) else { return self.status = "mark albums with x, not folders".into() };
+        if !self.marks.remove(&id) {
+            self.marks.insert(id);
+        }
+        self.status = if self.marks.is_empty() { String::new() } else { format!("{} marked · v moves them to a folder", self.marks.len()) };
+        self.mv(1);
+    }
+
+    /// `N`: ask for a name. The folder goes inside the selected folder, beside the selected album, else at the top level.
+    fn start_new_folder(&mut self) {
+        let parent = match self.album_sel.selected().and_then(|i| self.rows.get(i)) {
+            Some(tree::Row::Folder { id, .. }) => Some(*id),
+            Some(tree::Row::Album { index, .. }) => self.albums.get(*index).and_then(|a| a.folder_id).filter(|id| self.folders.iter().any(|f| f.id == *id)),
+            None => None,
+        };
+        self.prompt = Some(organize::Prompt { text: String::new(), parent });
+        self.show_prompt();
+    }
+
+    fn show_prompt(&mut self) {
+        let Some(p) = &self.prompt else { return };
+        let into = p.parent.and_then(|id| self.folders.iter().find(|f| f.id == id)).map_or("the top level".to_string(), |f| format!("\"{}\"", f.name));
+        self.status = format!("new folder in {into}: {}▏  ·  enter creates · esc cancels", p.text);
+    }
+
+    fn prompt_key(&mut self, code: KeyCode) {
+        let Some(p) = self.prompt.as_mut() else { return };
+        match code {
+            KeyCode::Esc => {
+                self.prompt = None;
+                self.status.clear();
+                return;
+            }
+            KeyCode::Backspace => {
+                p.text.pop();
+            }
+            KeyCode::Char(ch) if p.text.chars().count() < organize::NAME_MAX => p.text.push(ch),
+            KeyCode::Enter => {
+                let (name, parent) = (p.text.trim().to_string(), p.parent);
+                if name.is_empty() {
+                    self.prompt = None;
+                    self.status.clear();
+                    return;
+                }
+                match self.api.create_folder(&name, parent) {
+                    Ok(folder) => {
+                        let id = folder.id;
+                        self.prompt = None;
+                        if let Some(p) = parent {
+                            self.open_folders.insert(p);
+                            self.open_folders.extend(tree::ancestors(&self.folders, p));
+                        }
+                        self.folders.push(folder);
+                        self.rebuild_rows();
+                        if let Some(at) = self.rows.iter().position(|r| matches!(r, tree::Row::Folder { id: i, .. } if *i == id)) {
+                            self.album_sel.select(Some(at));
+                        }
+                        self.status = format!("created folder \"{name}\" · x marks albums, v moves them in");
+                    }
+                    Err(e) => self.status = e, // the prompt stays: change the name and try again
+                }
+                return;
+            }
+            _ => {}
+        }
+        self.show_prompt();
+    }
+
+    /// `v`: choose a folder for the marked albums, or for the selected one when none is marked.
+    fn open_mover(&mut self) {
+        let albums: Vec<u64> = if self.marks.is_empty() { self.selected_album().and_then(|i| self.albums.get(i)).map(|a| a.id).into_iter().collect() } else { self.marks.iter().copied().collect() };
+        if albums.is_empty() {
+            return self.status = "select an album, or mark some with x, then v".into();
+        }
+        let targets = organize::targets(&self.folders);
+        let here = self.albums.iter().find(|a| a.id == albums[0]).and_then(|a| a.folder_id);
+        let sel = targets.iter().position(|(id, _)| *id == here && here.is_some()).unwrap_or(0);
+        self.mover = Some(organize::Mover { targets, sel, albums });
+        self.status.clear();
+    }
+
+    fn mover_key(&mut self, code: KeyCode) {
+        let Some(m) = self.mover.as_mut() else { return };
+        match code {
+            KeyCode::Esc | KeyCode::Char('q' | 'v') => self.mover = None,
+            KeyCode::Down | KeyCode::Char('j') => m.sel = (m.sel + 1).min(m.targets.len() - 1),
+            KeyCode::Up | KeyCode::Char('k') => m.sel = m.sel.saturating_sub(1),
+            KeyCode::Home | KeyCode::Char('g') => m.sel = 0,
+            KeyCode::End | KeyCode::Char('G') => m.sel = m.targets.len() - 1,
+            KeyCode::Enter => {
+                let Some(m) = self.mover.take() else { return };
+                self.move_albums(&m.albums, m.targets[m.sel].0, &m.targets[m.sel].1);
+            }
+            _ => {}
+        }
+    }
+
+    fn move_albums(&mut self, ids: &[u64], to: Option<u64>, label: &str) {
+        let mut done = 0;
+        for id in ids {
+            match self.api.move_album(*id, to) {
+                Ok(()) => {
+                    if let Some(a) = self.albums.iter_mut().find(|a| a.id == *id) {
+                        a.folder_id = to;
+                    }
+                    self.marks.remove(id);
+                    done += 1;
+                }
+                Err(e) => {
+                    self.status = format!("{} (moved {done} of {})", e, ids.len());
+                    break;
+                }
+            }
+        }
+        if done == 0 {
+            return;
+        }
+        if let Some(f) = to {
+            self.open_folders.insert(f);
+            self.open_folders.extend(tree::ancestors(&self.folders, f));
+        }
+        let first = self.albums.iter().position(|a| ids.first() == Some(&a.id));
+        match first {
+            Some(i) => self.reveal(i),
+            None => self.rebuild_rows(),
+        }
+        if done == ids.len() {
+            self.status = organize::moved_note(done, label);
+        }
+    }
+
     /// The user's folders: the list becomes a tree (all closed). Without any it stays flat.
     fn set_folders(&mut self, folders: Vec<tree::Folder>) {
+        self.open_folders = self.cfg.open_folders.iter().copied().filter(|id| folders.iter().any(|f| f.id == *id)).collect();
         self.folders = folders;
         self.rebuild_rows();
+    }
+
+    /// Remember which folders are open for the next start.
+    fn save_open(&mut self) {
+        let now: Vec<u64> = self.open_folders.iter().copied().collect();
+        if now != self.cfg.open_folders {
+            self.cfg.open_folders = now;
+            let _ = config::save(&self.cfg);
+        }
     }
 
     /// The album list lines again after a folder opened or closed; the selection stays on the same folder or album when it still shows.
@@ -433,6 +595,7 @@ impl App {
             _ => false,
         }));
         self.album_sel.select(at.or(if self.rows.is_empty() { None } else { Some(0) }));
+        self.save_open();
     }
 
     /// The album under the selection (an index into `albums`); none on a folder line.
@@ -452,6 +615,7 @@ impl App {
         self.rows = tree::rows(&self.folders, &self.albums, &self.open_folders);
         let at = self.rows.iter().position(|r| matches!(r, tree::Row::Album { index, .. } if *index == album_index));
         self.album_sel.select(at);
+        self.save_open();
     }
 
     /// Left in the album list: close the open folder under the selection, else go to the folder above it.
@@ -1310,6 +1474,9 @@ impl App {
             let w = if self.ab.is_some() { help::Where::Ab } else if self.full { help::Where::Full } else { match self.view { View::Library => help::Where::Library, View::Truth => help::Where::Truth, View::Search => help::Where::Search } };
             help::draw(f, w, &self.themes[self.theme].clone());
         }
+        if let Some(m) = &self.mover {
+            organize::draw_mover(f, m, &self.themes[self.theme].clone());
+        }
     }
 
     fn draw_screen(&mut self, f: &mut Frame) {
@@ -1367,7 +1534,14 @@ impl App {
                     let on = self.playing_album() == Some(a.id);
                     // the playing mark replaces the two spaces before the title, so the indentation stays
                     let pad = tree::prefix(row);
-                    let (pad, mark) = if on { (pad[..pad.len().saturating_sub(2)].to_string(), Span::styled(format!("{} ", self.play_icon()), Style::new().fg(c(th.accent2)))) } else { (pad, Span::raw("")) };
+                    let marked = self.marks.contains(&a.id);
+                    let (pad, mark) = if on {
+                        (pad[..pad.len().saturating_sub(2)].to_string(), Span::styled(format!("{} ", self.play_icon()), Style::new().fg(c(th.accent2))))
+                    } else if marked {
+                        (pad[..pad.len().saturating_sub(2)].to_string(), Span::styled("+ ", Style::new().fg(accent).add_modifier(Modifier::BOLD)))
+                    } else {
+                        (pad, Span::raw(""))
+                    };
                     let title = if on { Span::styled(a.title.clone(), Style::new().fg(c(th.accent2))) } else { Span::raw(a.title.clone()) };
                     ListItem::new(Line::from(vec![Span::raw(pad), mark, title, Span::styled(format!("  {}", a.shown_artist()), Style::new().fg(muted))]))
                 }
@@ -1839,11 +2013,45 @@ mod folder_tests {
     use serde_json::json;
 
     fn app() -> Option<App> {
+        app_at("http://127.0.0.1:1", json!([]))
+    }
+
+    /// A server that answers the two write calls (a folder is made with id 9 and the name "Blues"; a move is accepted), for `n` requests.
+    fn mock_server(n: usize) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for _ in 0..n {
+                let Ok((mut s, _)) = listener.accept() else { return };
+                // read the whole request (head and body), or the client sees a reset instead of the answer
+                let mut got = vec![];
+                let mut chunk = [0u8; 4096];
+                loop {
+                    let len = s.read(&mut chunk).unwrap_or(0);
+                    got.extend_from_slice(&chunk[..len]);
+                    let text = String::from_utf8_lossy(&got).to_string();
+                    let Some(end) = text.find("\r\n\r\n") else { if len == 0 { break } else { continue } };
+                    let want = text.lines().find_map(|l| l.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+                    if got.len() >= end + 4 + want || len == 0 {
+                        break;
+                    }
+                }
+                let head = String::from_utf8_lossy(&got).to_string();
+                let body = if head.starts_with("POST /api/v1/folders") { r#"{"folder":{"id":9,"parent_id":null,"name":"Blues"}}"# } else { r#"{"album":{"id":1,"folder_id":1}}"# };
+                let status = if head.starts_with("POST") { "201 Created" } else { "200 OK" };
+                let _ = write!(s, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            }
+        });
+        url
+    }
+
+    fn app_at(server: &str, open: serde_json::Value) -> Option<App> {
         let player = Player::new().ok()?; // no sound output on this machine: nothing to test with
-        let cfg: config::Config = serde_json::from_value(json!({"server": "http://127.0.0.1:1", "token": "x", "username": "u", "meters": ["spectrum"]})).ok()?;
+        let cfg: config::Config = serde_json::from_value(json!({"server": server, "token": "x", "username": "u", "meters": ["spectrum"], "open_folders": open})).ok()?;
         let album = |id: u64, title: &str, folder: Option<u64>| -> Album { serde_json::from_value(json!({"id": id, "title": title, "artist": "X", "folder_id": folder})).unwrap() };
         let albums = vec![album(1, "Kind of Blue", Some(1)), album(2, "Loose", None), album(3, "At Newport", Some(2))];
-        let mut app = App::new(Api::new("http://127.0.0.1:1", "x"), albums, player, cfg);
+        let mut app = App::new(Api::new(server, "x"), albums, player, cfg);
         app.set_folders(vec![tree::Folder { id: 1, parent_id: None, name: "Jazz".into(), album_count: 1 }, tree::Folder { id: 2, parent_id: Some(1), name: "Live".into(), album_count: 1 }]);
         Some(app)
     }
@@ -1893,5 +2101,91 @@ mod folder_tests {
         assert_eq!(rows[0], "Jazz");
         assert_eq!(rows.len(), app.rows.len());
         assert_eq!(app.rows[at], tree::Row::Album { index: 2, depth: 2 });
+    }
+
+    #[test]
+    fn the_open_folders_come_back_at_the_next_start_and_unknown_ids_are_dropped() {
+        let Some(restored) = app_at("http://127.0.0.1:1", json!([1, 77])) else { return };
+        assert_eq!(lines(&restored), ["▾ Jazz", "  ▸ Live", "    Kind of Blue", "  Loose"]);
+        assert_eq!(restored.open_folders.iter().copied().collect::<Vec<_>>(), [1]);
+
+        let Some(mut app) = app() else { return };
+        app.key(KeyCode::Enter, KeyModifiers::NONE); // opening one is remembered in the config
+        assert_eq!(app.cfg.open_folders, [1]);
+        app.key(KeyCode::Char('h'), KeyModifiers::NONE);
+        assert!(app.cfg.open_folders.is_empty());
+    }
+
+    #[test]
+    fn n_makes_a_folder_beside_the_selected_album_and_selects_it() {
+        let Some(mut app) = app_at(&mock_server(1), json!([])) else { return };
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // the loose album: no folder, so the top level
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE);
+        assert!(app.prompt.is_some() && app.status.contains("the top level"), "{}", app.status);
+        for ch in "Blues".chars() {
+            app.key(KeyCode::Char(ch), KeyModifiers::NONE);
+        }
+        assert!(app.status.contains("Blues▏"));
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.prompt.is_none(), "{}", app.status);
+        assert_eq!(lines(&app), ["▸ Blues", "▸ Jazz", "  Loose"]);
+        assert_eq!(app.album_sel.selected(), Some(0));
+    }
+
+    #[test]
+    fn n_on_a_folder_makes_the_new_one_inside_it() {
+        let Some(mut app) = app_at(&mock_server(1), json!([])) else { return };
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE); // Jazz is selected
+        assert!(app.status.contains("\"Jazz\""), "{}", app.status);
+        app.key(KeyCode::Char('b'), KeyModifiers::NONE);
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        // the mock answers a top-level folder; what matters here is that the parent was opened for the new one
+        assert!(app.open_folders.contains(&1) && app.cfg.open_folders.contains(&1));
+    }
+
+    #[test]
+    fn n_then_esc_or_an_empty_name_makes_nothing() {
+        let Some(mut app) = app() else { return };
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('a'), KeyModifiers::NONE);
+        app.key(KeyCode::Esc, KeyModifiers::NONE);
+        assert!(app.prompt.is_none() && app.status.is_empty() && app.folders.len() == 2);
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE);
+        app.key(KeyCode::Char(' '), KeyModifiers::NONE);
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.prompt.is_none() && app.folders.len() == 2);
+    }
+
+    #[test]
+    fn x_marks_v_chooses_a_folder_and_the_albums_move() {
+        let Some(mut app) = app_at(&mock_server(1), json!([])) else { return };
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // Loose
+        app.key(KeyCode::Char('x'), KeyModifiers::NONE);
+        assert_eq!(app.marks.len(), 1);
+        assert!(app.status.contains("1 marked"));
+        app.key(KeyCode::Char('v'), KeyModifiers::NONE);
+        let m = app.mover.as_ref().unwrap();
+        assert_eq!(m.targets.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [None, Some(1), Some(2)]);
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // Jazz
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+
+        assert!(app.mover.is_none() && app.marks.is_empty(), "{}", app.status);
+        assert_eq!(app.albums[1].folder_id, Some(1));
+        assert_eq!(app.status, "moved 1 album to Jazz");
+        assert_eq!(lines(&app), ["▾ Jazz", "  ▸ Live", "    Kind of Blue", "    Loose"]);
+        assert_eq!(app.selected_album(), Some(1)); // the moved album stays selected, its folder opened
+        assert_eq!(app.cfg.open_folders, [1]);
+    }
+
+    #[test]
+    fn v_moves_the_selected_album_when_none_is_marked_and_esc_cancels() {
+        let Some(mut app) = app() else { return };
+        app.key(KeyCode::Char('v'), KeyModifiers::NONE);
+        assert!(app.mover.is_none() && app.status.contains("select an album")); // a folder line
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('v'), KeyModifiers::NONE);
+        assert_eq!(app.mover.as_ref().unwrap().albums, [2]);
+        app.key(KeyCode::Esc, KeyModifiers::NONE);
+        assert!(app.mover.is_none() && app.albums[1].folder_id.is_none());
     }
 }

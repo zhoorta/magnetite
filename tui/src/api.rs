@@ -180,6 +180,18 @@ impl Api {
         self.all_pages("/albums")
     }
 
+    /// Make a folder (inside `parent`, or at the top level).
+    pub fn create_folder(&self, name: &str, parent: Option<u64>) -> Result<crate::tree::Folder> {
+        let v: Value = self.send("POST", "/folders").send_json(json!({ "name": name, "parent_id": parent })).json_body()?;
+        serde_json::from_value(v["folder"].clone()).map_err(|e| e.to_string())
+    }
+
+    /// Put an album in a folder, or back at the top level (`None`).
+    pub fn move_album(&self, album: u64, folder: Option<u64>) -> Result<()> {
+        let _: Value = self.send("PUT", &format!("/albums/{album}/folder")).send_json(json!({ "folder_id": folder })).json_body()?;
+        Ok(())
+    }
+
     /// The user's folders, flat, with `parent_id`. A server without the endpoint (or any failure) gives no folders: a flat list.
     pub fn folders(&self) -> Vec<crate::tree::Folder> {
         self.get("/folders").call().ok().and_then(|r| r.into_json::<Value>().ok()).and_then(|v| serde_json::from_value(v["data"].clone()).ok()).unwrap_or_default()

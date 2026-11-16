@@ -24,6 +24,9 @@ pub struct Config {
     /// Loudness matching: "off", "album" or "track" (absent: off).
     #[serde(default)]
     pub loudness: Option<String>,
+    /// The folders that were open in the album list (ids), so the list looks the same at the next start.
+    #[serde(default)]
+    pub open_folders: Vec<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -51,6 +54,9 @@ pub fn load() -> Option<Config> {
 }
 
 pub fn save(c: &Config) -> std::io::Result<()> {
+    if cfg!(test) {
+        return Ok(()); // tests must never overwrite the real token file
+    }
     let p = path();
     std::fs::create_dir_all(p.parent().unwrap())?;
     std::fs::write(&p, serde_json::to_vec_pretty(c).unwrap())?;
