@@ -72,6 +72,7 @@ impl Media {
         Media { controls, rx, shown: None, since: 0.0 }
     }
 
+    #[cfg(test)] // only the live check prints it
     pub fn active(&self) -> bool {
         self.controls.is_some()
     }

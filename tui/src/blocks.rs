@@ -40,6 +40,7 @@ pub struct Cell {
 }
 
 /// How much of a pixel's colour error reaches its neighbours (1 is full Floyd-Steinberg), and the most that one pixel passes on.
+#[cfg(test)] // only `Tuning::strong()`, for the tests, uses it
 const SPREAD: f32 = 0.6;
 const MAX_ERROR: f32 = 28.0;
 /// Of the colour part of the error (what is left after the brightness) a grey pixel passes on `MIN_CHROMA`, a saturated one
