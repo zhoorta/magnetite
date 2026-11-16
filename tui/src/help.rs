@@ -24,7 +24,7 @@ const PLAYBACK: Section = ("Playback", &[
     ("space", "pause / play"),
     ("n / p", "next / previous (p restarts after 3 s)"),
     (", / .", "seek -10 s / +10 s"),
-    ("Z / R", "shuffle (off, tracks, albums: each album whole) / repeat (off, all, one)"),
+    ("Z / R", "shuffle on or off / repeat (off, all, one): in the album or playlist being played"),
     ("L", "loudness matching: off, album, track"),
     ("I", "how much to show about a file (track rows, the player): all, DR only, off; kept on your account"),
 ]);

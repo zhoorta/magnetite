@@ -1477,22 +1477,17 @@ impl App {
         }
     }
 
-    /// The album of each queued track (none for a track without one), for the shuffle by albums.
-    fn album_ids(&self) -> Vec<Option<u64>> {
-        (0..self.queue.len()).map(|i| self.queue_albums.get(i).copied().filter(|a| *a != 0).or(self.queue[i].album_id)).collect()
-    }
-
     /// Make the play order again when the queue is not the one it was made for; `first` plays first (so a shuffle never jumps away
     /// from the track that is starting).
     fn ensure_order(&mut self, first: usize) {
         let ids: Vec<u64> = self.queue.iter().map(|t| t.id).collect();
         if self.order_ids != ids || self.order.len() != ids.len() {
-            self.order = order::make_order(&self.album_ids(), self.shuffle, Some(first), &mut || self.rng.next_f32());
+            self.order = order::make_order(ids.len(), self.shuffle, Some(first), &mut || self.rng.next_f32());
             self.order_ids = ids;
         }
     }
 
-    /// `Z`: shuffle off, tracks, albums. The order is made again from the playing track, so nothing jumps.
+    /// `Z`: shuffle on or off. The order is made again from the playing track, so nothing jumps.
     fn cycle_shuffle(&mut self) {
         self.shuffle = self.shuffle.cycle();
         self.order_ids.clear();
@@ -1518,7 +1513,6 @@ impl App {
         match self.shuffle {
             order::Shuffle::Off => {}
             order::Shuffle::Tracks => s.push_str(" · shuffle"),
-            order::Shuffle::Albums => s.push_str(" · shuffle albums"),
         }
         match self.repeat {
             order::Repeat::Off => {}
@@ -1536,12 +1530,12 @@ impl App {
             return self.start(now);
         }
         self.ensure_order(now);
-        let albums = self.album_ids();
+        let len = self.queue.len();
         let mut at = now;
         for _ in 0..self.queue.len().max(1) {
             let next = if d > 0 {
                 let order = self.order.clone();
-                order::advance(&albums, &order, at, self.shuffle, self.repeat, &mut || self.rng.next_f32()).map(|(i, o)| {
+                order::advance(len, &order, at, self.shuffle, self.repeat, &mut || self.rng.next_f32()).map(|(i, o)| {
                     self.order = o;
                     i
                 })
@@ -2566,10 +2560,11 @@ mod folder_tests {
         let Some(mut app) = app() else { return };
         assert_eq!(app.modes_label(), "");
         app.key(KeyCode::Char('Z'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('R'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('R'), KeyModifiers::NONE);
+        assert_eq!(app.modes_label(), " · shuffle · repeat one");
+        assert_eq!((app.cfg.shuffle.as_deref(), app.cfg.repeat.as_deref()), (Some("tracks"), Some("one")));
         app.key(KeyCode::Char('Z'), KeyModifiers::NONE);
-        app.key(KeyCode::Char('R'), KeyModifiers::NONE);
-        app.key(KeyCode::Char('R'), KeyModifiers::NONE);
-        assert_eq!(app.modes_label(), " · shuffle albums · repeat one");
-        assert_eq!((app.cfg.shuffle.as_deref(), app.cfg.repeat.as_deref()), (Some("albums"), Some("one")));
+        assert_eq!(app.modes_label(), " · repeat one");
     }
 }
