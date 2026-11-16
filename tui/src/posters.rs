@@ -741,6 +741,18 @@ fn words(track: Option<&Track>) -> (String, String, String) {
 /// Flat colours need no help: every cell takes its best two, nothing is spread to the neighbours.
 const FLAT: Tuning = Tuning { spread: 0.0, split_gain: 1.0, split_min: 0.0, split_from_source: false };
 
+/// In the dock a poster is a thumbnail: an upright 3:4 box as tall as its cell and centred, not stretched across a wide cell
+/// (full screen lets it fill its cell). `cell_aspect` is how many times taller than wide a terminal cell is. A cell that is
+/// already upright, or one too small for a readable picture, is left as it is.
+pub fn portrait_box(area: Rect, cell_aspect: f32) -> Rect {
+    let width = (0.75 * area.height as f32 * cell_aspect).round() as u16;
+    if width < 8 || width + 2 > area.width {
+        return area;
+    }
+
+    Rect::new(area.x + (area.width - width) / 2, area.y, width, area.height)
+}
+
 pub fn draw(f: &mut Frame, area: Rect, poster: Poster, cx: &Ctx) {
     if area.width < 4 || area.height < 1 {
         return;
@@ -811,6 +823,17 @@ pub fn draw(f: &mut Frame, area: Rect, poster: Poster, cx: &Ctx) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_wide_cell_gets_an_upright_box_in_the_middle_and_a_small_or_upright_one_is_left_alone() {
+        let wide = portrait_box(Rect::new(10, 2, 60, 8), 2.0); // 8 rows x 2 x 0.75 = 12 columns
+        assert_eq!((wide.width, wide.height, wide.y), (12, 8, 2));
+        assert_eq!(wide.x, 10 + (60 - 12) / 2);
+        let upright = Rect::new(0, 0, 14, 20); // already narrower than the box would be
+        assert_eq!(portrait_box(upright, 2.0), upright);
+        let tiny = Rect::new(0, 0, 40, 3); // 3 rows: a 4 column picture says nothing
+        assert_eq!(portrait_box(tiny, 2.0), tiny);
+    }
 
     fn bands(loud: std::ops::Range<usize>, level: f32) -> [f32; THIRD] {
         let mut b = [0.0; THIRD];

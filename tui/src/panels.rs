@@ -131,6 +131,20 @@ impl Kind {
     }
 }
 
+/// What a poster reads best at, width over height (the web's `POSTER_ASPECT`: a 3:4 sheet), and what the plain meters do.
+pub const POSTER_ASPECT: f32 = 0.75;
+pub const METER_ASPECT: f32 = 1.6;
+
+/// The shape the cells should have for these panels: the geometric mean of what each kind reads best at (the web's `aspectOf`),
+/// so posters sit side by side where meters would stack.
+pub fn aspect_of(kinds: &[Kind]) -> f32 {
+    if kinds.is_empty() {
+        return METER_ASPECT;
+    }
+    let sum: f32 = kinds.iter().map(|k| if k.is_poster() { POSTER_ASPECT } else { METER_ASPECT }.ln()).sum();
+    (sum / kinds.len() as f32).exp()
+}
+
 pub struct Ctx<'a> {
     pub m: &'a Meters,
     pub tap: &'a [f32], // interleaved stereo, newest last
@@ -595,6 +609,20 @@ fn loudness(cx: &Ctx, area: Rect) -> Vec<Line<'static>> {
 
 #[allow(dead_code)]
 const _: usize = BANDS; // kept public for the spectrum bars
+
+#[cfg(test)]
+mod aspect_tests {
+    use super::*;
+
+    #[test]
+    fn the_cell_shape_follows_the_kinds() {
+        assert_eq!(aspect_of(&[]), METER_ASPECT);
+        assert!((aspect_of(&[Kind::Spectrum]) - 1.6).abs() < 1e-4);
+        assert!((aspect_of(&[Kind::PosterPillars, Kind::PosterArches]) - 0.75).abs() < 1e-4);
+        let mixed = aspect_of(&[Kind::Spectrum, Kind::PosterPillars]);
+        assert!(mixed > 0.75 && mixed < 1.6);
+    }
+}
 
 #[cfg(test)]
 mod tests {

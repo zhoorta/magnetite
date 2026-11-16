@@ -137,7 +137,7 @@ pub fn draw(f: &mut Frame, area: Rect, ab: &Ab, a: Side, b: Side, rate: u32, th:
         );
         let ctx = Ctx { m: side.meters, tap: side.tap, rate, th, track: Some(track) };
         let shown: Vec<Kind> = panels.iter().take(2).copied().collect();
-        for (kind, cell) in shown.iter().zip(crate::cells(shown.len(), body)) {
+        for (kind, cell) in shown.iter().zip(crate::cells(shown.len(), body, panels::aspect_of(&shown))) {
             panels::draw(f, Rect::new(cell.x, cell.y, cell.width.saturating_sub(1).max(1), cell.height), *kind, &ctx);
         }
     }

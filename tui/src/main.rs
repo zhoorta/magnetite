@@ -1519,7 +1519,7 @@ impl App {
         // no meters: like the web, the cover big in the middle above the title
         // with meters or posters: no cover, they fill the screen
         let pad = Rect::new(meters.x + 1, meters.y + 1, meters.width.saturating_sub(2), meters.height.saturating_sub(1));
-        for (kind, cell) in self.panels.iter().zip(cells(self.panels.len(), pad)) {
+        for (kind, cell) in self.panels.iter().zip(cells(self.panels.len(), pad, panels::aspect_of(&self.panels))) {
             // a one-cell gutter between meters, like the web's cells
             panels::draw(f, Rect::new(cell.x, cell.y, cell.width.saturating_sub(2).max(1), cell.height.saturating_sub(1).max(1)), *kind, &ctx);
         }
@@ -1697,7 +1697,7 @@ impl App {
         let ctx = Ctx { m: &self.meters, tap: &self.tap, rate: self.player.rate(), th: &mt, track: self.now.and_then(|i| self.queue.get(i)) };
         let (cover_area, mid) = self.split_cover(mid);
         self.cover.draw(f, cover_area);
-        for (i, (kind, cell)) in self.panels.iter().zip(cells(self.panels.len(), mid)).enumerate() {
+        for (i, (kind, cell)) in self.panels.iter().zip(cells(self.panels.len(), mid, panels::aspect_of(&self.panels))).enumerate() {
             let on = self.panels.len() > 1 && i == self.active;
             let block = Block::new()
                 .borders(Borders::TOP)
@@ -1705,6 +1705,8 @@ impl App {
                 .title(Span::styled(format!(" {}{} ", if on { "▸ " } else { "" }, kind.label()), Style::new().fg(if on { accent } else { c(th.text) })));
             let inner = block.inner(cell);
             f.render_widget(block, cell);
+            // in the dock a poster keeps its portrait shape (a thumbnail in the middle of its cell); full screen fills the cell
+            let inner = if kind.is_poster() { posters::portrait_box(inner, cover::cell_aspect()) } else { inner };
             panels::draw(f, inner, *kind, &ctx);
         }
 
@@ -1715,7 +1717,7 @@ impl App {
 /// Cells for `n` panels, the web's `layout()`: the column count that makes the cells closest to 1.6 : 1 (a terminal cell
 /// is about twice as tall as wide, so a cell of w x h is w / (2h) on screen); a wide area puts meters side by side, a tall one
 /// stacks them, an uneven last row stretches its cells (2 x 2 beats 3 + 1).
-fn cells(n: usize, area: Rect) -> Vec<Rect> {
+fn cells(n: usize, area: Rect, aspect: f32) -> Vec<Rect> {
     if n == 0 {
         return vec![];
     }
@@ -1724,7 +1726,7 @@ fn cells(n: usize, area: Rect) -> Vec<Rect> {
     for cols in 1..=n {
         let rows = n.div_ceil(cols);
         let ragged = if n % cols == 0 { 0.0 } else { 0.4 };
-        let sc = (w / cols as f32 / (h / rows as f32) / 1.6).ln().abs() + ragged;
+        let sc = (w / cols as f32 / (h / rows as f32) / aspect).ln().abs() + ragged;
         if sc < score {
             (best, score) = (cols, sc);
         }
@@ -1804,17 +1806,26 @@ mod layout_tests {
 
     #[test]
     fn wide_areas_put_meters_side_by_side_tall_ones_stack_them_and_cells_tile_exactly() {
-        let wide = cells(2, Rect::new(0, 0, 120, 14));
+        let wide = cells(2, Rect::new(0, 0, 120, 14), 1.6);
         assert_eq!((wide[0].y, wide[1].y), (0, 0));
-        let tall = cells(2, Rect::new(0, 0, 40, 40));
+        let tall = cells(2, Rect::new(0, 0, 40, 40), 1.6);
         assert_eq!((tall[0].x, tall[1].x), (0, 0));
         for n in 1..=4 {
             let area = Rect::new(3, 2, 101, 37);
-            let cs = cells(n, area);
+            let cs = cells(n, area, 1.6);
             assert_eq!(cs.len(), n);
             let covered: u32 = cs.iter().map(|r| r.width as u32 * r.height as u32).sum();
             assert_eq!(covered, 101 * 37, "{n} cells leave gaps or overlap");
         }
+    }
+
+    #[test]
+    fn posters_sit_side_by_side_where_meters_would_stack() {
+        let area = Rect::new(0, 0, 40, 24);
+        let meters = cells(2, area, panels::aspect_of(&[panels::Kind::Spectrum, panels::Kind::VuWide]));
+        assert_eq!((meters[0].x, meters[1].x), (0, 0)); // stacked
+        let posters = cells(2, area, panels::aspect_of(&[panels::Kind::PosterPillars, panels::Kind::PosterArches]));
+        assert_eq!(posters[0].y, posters[1].y); // side by side: a poster is upright
     }
 }
 
