@@ -7,7 +7,7 @@
         <h1 class="mb-2 text-2xl font-semibold">Users</h1>
         <p class="mb-6 max-w-prose text-muted">
             The accounts on this server and the disk space each library uses (the size of the audio files;
-            covers and converted files are not counted). What a user has in their library is not shown here. A limit stops uploads and copies that would go over it; empty means no limit. Users are added with <code>php artisan magnetite:user</code>.
+            covers and converted files are not counted). What a user has in their library is not shown here. A limit stops uploads and copies that would go over it; empty means no limit. New people join with an invitation (below) or with <code>php artisan magnetite:user</code>.
         </p>
 
         @if (session('status'))
@@ -57,5 +57,56 @@
                 </tr>
             </tfoot>
         </table>
+
+        <h2 class="mb-2 mt-10 text-lg font-semibold">Invitations</h2>
+        <p class="mb-4 max-w-prose text-muted">
+            An invitation is a link that works once and lets one person choose their own username and password.
+            Send it to them yourself; Magnetite sends no mail.
+        </p>
+
+        @if (session('invite_link'))
+            <div class="mb-4 rounded-theme border border-accent/40 bg-surface p-3" x-data="{ done: false }">
+                <p class="mb-2 text-xs text-muted">The link, shown only now. Copy it and send it:</p>
+                <div class="flex items-center gap-2">
+                    <input type="text" readonly value="{{ session('invite_link') }}" aria-label="Invitation link" @focus="$el.select()"
+                           class="min-w-0 flex-1 rounded-theme border border-white/10 bg-bg px-2 py-1 text-xs">
+                    <button type="button" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent"
+                            @click="navigator.clipboard?.writeText(@js(session('invite_link'))).then(() => done = true)" x-text="done ? 'Copied' : 'Copy'"></button>
+                </div>
+            </div>
+        @endif
+
+        <form method="POST" action="{{ route('admin.invitations.store') }}" class="mb-4 flex flex-wrap items-center gap-2">
+            @csrf
+            <input type="text" name="label" maxlength="100" placeholder="Who is it for? (optional)" aria-label="Who the invitation is for"
+                   class="w-56 rounded-theme border border-white/10 bg-surface px-2 py-1 text-sm placeholder:text-muted focus:border-accent focus:outline-none">
+            <select name="days" aria-label="Valid for" class="rounded-theme border border-white/10 bg-surface px-2 py-1 text-sm">
+                <option value="1">1 day</option>
+                <option value="7" selected>7 days</option>
+                <option value="30">30 days</option>
+            </select>
+            <button type="submit" class="rounded-theme bg-accent px-3 py-1 text-sm font-medium text-bg">Make an invitation</button>
+        </form>
+
+        @error('days')
+            <p class="mb-2 text-xs text-accent2" role="alert">{{ $message }}</p>
+        @enderror
+
+        @if ($invitations->isNotEmpty())
+            <ul class="max-w-xl">
+                @foreach ($invitations as $i)
+                    <li class="flex items-center justify-between gap-3 border-b border-white/5 py-2">
+                        <span>{{ $i->label ?? 'No name' }} <span class="text-xs text-muted">valid until {{ $i->expires_at->toDateString() }}</span></span>
+                        <form method="POST" action="{{ route('admin.invitations.destroy', $i) }}">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="text-xs text-muted hover:text-accent">Withdraw</button>
+                        </form>
+                    </li>
+                @endforeach
+            </ul>
+        @else
+            <p class="text-xs text-muted">No open invitations.</p>
+        @endif
     </div>
 </x-layouts.app>

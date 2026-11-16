@@ -12,6 +12,7 @@ use App\Http\Controllers\DemoController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\FolderController;
 use App\Http\Controllers\IdentifyController;
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\LibraryEditController;
 use App\Http\Controllers\LibraryRemoveController;
@@ -50,6 +51,8 @@ Route::get('/setup', [SetupController::class, 'create'])->name('setup');
 Route::post('/setup', [SetupController::class, 'store'])->middleware('throttle:5,1')->name('setup.store');
 
 Route::middleware('guest')->group(function () {
+    Route::get('/invite/{token}', [InvitationController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->name('invite.show');
+    Route::post('/invite/{token}', [InvitationController::class, 'accept'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:10,1')->name('invite.accept');
     Route::get('/login', [LoginController::class, 'create'])->name('login');
     Route::post('/login', [LoginController::class, 'store'])->name('login.store');
 });
@@ -120,6 +123,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/identify/{suggestion}', [IdentifyController::class, 'dismiss'])->whereNumber('suggestion')->name('identify.dismiss');
 
     Route::get('/admin/users', [AdminUsersController::class, 'index'])->middleware('admin')->name('admin.users');
+    Route::post('/admin/invitations', [InvitationController::class, 'store'])->middleware('admin')->name('admin.invitations.store');
+    Route::delete('/admin/invitations/{invitation}', [InvitationController::class, 'destroy'])->whereNumber('invitation')->middleware('admin')->name('admin.invitations.destroy');
     Route::patch('/admin/users/{user}/quota', [AdminUsersController::class, 'quota'])->whereNumber('user')->middleware('admin')->name('admin.users.quota');
     Route::get('/storage', [StorageController::class, 'show'])->name('storage');
     Route::post('/storage/test', [StorageController::class, 'test'])->name('storage.test');

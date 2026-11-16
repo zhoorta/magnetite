@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Invitation;
 use App\Models\Track;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -30,6 +31,7 @@ class AdminUsersController extends Controller
 
         return view('pages.admin-users', [
             'users' => $users,
+            'invitations' => Invitation::usable()->latest()->get(),
             'totalBytes' => (int) $users->sum('tracks_sum_size'),
             'totalTracks' => Track::count(),
         ]);

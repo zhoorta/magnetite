@@ -55,7 +55,7 @@ Two things to check on the proxy: its limit on the size of a request body (nginx
 
     docker compose exec app php artisan magnetite:user ana
 
-It asks for a password; `--generate` makes one and prints it. There is no registration page.
+It asks for a password; `--generate` makes one and prints it. The easier way: an administrator opens **Users** in the top bar, makes an invitation and sends the link. It works once, for 1, 7 or 30 days, and the person chooses their own username and password. There is no open registration page.
 
 ### Updating
 
