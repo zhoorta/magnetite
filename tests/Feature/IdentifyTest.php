@@ -235,7 +235,7 @@ it('uses fingerprints for the releases when names and titles found nothing', fun
     $identifier = app(AlbumIdentifier::class);
     $s = $identifier->suggest($this->alice, 'Rip 7', $identifier->pending($this->alice)->first());
 
-    expect($s->candidates[0]['via'])->toBe('fingerprint')->and($s->candidates[0]['matched'])->toBe(3);
+    expect($s->candidates[0]['via'])->toBe('fingerprint')->and($s->candidates[0]['matched'])->toBe(3)->and($s->candidates[0]['votes'])->toBe(3);
 });
 
 it('reads the AcoustID answer and ignores weak matches', function () {
