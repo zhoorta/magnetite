@@ -20,25 +20,23 @@ pub fn clamp(level: u64) -> u8 {
     if level <= 2 { level as u8 } else { DEFAULT }
 }
 
-/// The line under the player's title: the format, the dynamic range, the loudness, and (level 2) how many findings. Empty at 0.
+/// The line under the player's title: the format only, `OPUS · 32-bit / 48 kHz` (the numbers and the findings are in the details,
+/// `d` on a track row). The stored depth when it is known (what the file says it is), else what was measured. Empty at level 0.
 pub fn meta_line(t: &Track, level: u8) -> String {
     if level == 0 {
         return String::new();
     }
     let truth = t.truth.clone().unwrap_or_default();
     let mut meta = vec![t.codec.clone().unwrap_or_default().to_uppercase()];
-    if let (Some(b), Some(sr)) = (truth.bits, truth.sample_rate) {
-        meta.push(format!("{}/{}", b as u32, sr / 1000.0));
+    let bits = truth.declared_bits.or(truth.bits).filter(|b| *b > 0.0);
+    let khz = truth.sample_rate.filter(|r| *r > 0.0).map(|r| format!("{} kHz", format!("{:.1}", r / 1000.0).trim_end_matches(".0")));
+    match (bits, khz) {
+        (Some(b), Some(k)) => meta.push(format!("{}-bit / {k}", b as u32)),
+        (None, Some(k)) => meta.push(k),
+        (Some(b), None) => meta.push(format!("{}-bit", b as u32)),
+        _ => {}
     }
-    if let Some(dr) = truth.dr {
-        meta.push(format!("DR{}", dr as i32));
-    }
-    if let Some(l) = truth.lufs {
-        meta.push(format!("{l:.1} LUFS"));
-    }
-    if level >= 2 && truth.analyzed && !truth.flags.is_empty() {
-        meta.push(format!("{} finding(s) !", truth.flags.len()));
-    }
+    meta.retain(|m| !m.is_empty());
     meta.join(" · ")
 }
 
@@ -74,11 +72,19 @@ mod tests {
     }
 
     #[test]
-    fn the_player_line_has_findings_only_at_level_two_and_nothing_at_zero() {
+    fn the_player_line_is_the_format_only_and_nothing_at_zero() {
         let t = track(json!([{"level": "problem", "label": "Clipped"}]));
-        assert_eq!(meta_line(&t, 2), "FLAC · 16/44.1 · DR9 · -10.2 LUFS · 1 finding(s) !");
-        assert_eq!(meta_line(&t, 1), "FLAC · 16/44.1 · DR9 · -10.2 LUFS");
+        assert_eq!(meta_line(&t, 2), "FLAC · 16-bit / 44.1 kHz");
+        assert_eq!(meta_line(&t, 1), "FLAC · 16-bit / 44.1 kHz");
         assert_eq!(meta_line(&t, 0), "");
+        let mut opus = track(json!([]));
+        opus.codec = Some("opus".into());
+        opus.truth.as_mut().unwrap().bits = Some(32.0);
+        opus.truth.as_mut().unwrap().sample_rate = Some(48000.0);
+        assert_eq!(meta_line(&opus, 2), "OPUS · 32-bit / 48 kHz");
+        let mut stored = track(json!([]));
+        stored.truth.as_mut().unwrap().declared_bits = Some(24.0); // the file says 24, the audio uses 16
+        assert_eq!(meta_line(&stored, 2), "FLAC · 24-bit / 44.1 kHz");
     }
 
     #[test]

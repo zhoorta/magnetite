@@ -5,6 +5,7 @@ mod audio;
 mod blocks;
 mod config;
 mod cover;
+mod details;
 mod help;
 mod info;
 mod loudness;
@@ -215,6 +216,7 @@ struct App {
     albums: Vec<Album>,
     folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
     open_folders: BTreeSet<u64>,
+    details: Option<details::Details>, // d: the measurements and the spectrum of one track
     info: u8, // I: how much the track rows and the player say about a file (the account's setting)
     flat: bool, // z: every album in one list, no folders
     marks: BTreeSet<u64>, // ids of the albums marked with x, to be moved together
@@ -279,7 +281,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -363,6 +365,10 @@ impl App {
             self.confirm_key(code);
             return;
         }
+        if self.details.is_some() {
+            self.details_key(code);
+            return;
+        }
         if self.ab.is_some() && mods != KeyModifiers::CONTROL && self.ab_key(code) {
             return;
         }
@@ -427,6 +433,7 @@ impl App {
                 Some(p) => self.resume = Some((p - 10.0).max(0.0)),
                 None => self.player.seek_by(-10.0),
             },
+            (KeyCode::Char('d'), _) if self.view == View::Library && self.focus == Focus::Tracks && !self.full && self.ab.is_none() => self.open_details(),
             (KeyCode::Char('x'), _) if self.in_album_list() => self.toggle_mark(),
             (KeyCode::Char('v'), _) if self.in_album_list() => self.open_mover(),
             (KeyCode::Char('N'), _) if self.in_album_list() => self.start_new_folder(),
@@ -461,6 +468,34 @@ impl App {
         std::thread::spawn(move || {
             let _ = api.set_ui_info(level);
         });
+    }
+
+    /// `d` on a track row: its measurements and the spectrum graph. The curve is fetched now (it is long, so the lists do not carry it).
+    fn open_details(&mut self) {
+        let Some(t) = self.track_sel.selected().and_then(|i| self.open.as_ref().and_then(|a| a.tracks.get(i))).cloned() else { return };
+        let mut d = details::Details { track: t.clone(), error: None };
+        if t.truth.as_ref().is_some_and(|x| x.analyzed) {
+            match self.api.track_with_spectrum(t.id) {
+                Ok(full) => d.track = full,
+                Err(e) => d.error = Some(e),
+            }
+        }
+        self.details = Some(d);
+    }
+
+    fn details_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc | KeyCode::Char('d' | 'q') | KeyCode::Enter => self.details = None,
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.mv(1);
+                self.open_details();
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.mv(-1);
+                self.open_details();
+            }
+            _ => {}
+        }
     }
 
     fn in_album_list(&self) -> bool {
@@ -846,7 +881,6 @@ impl App {
         let Some(t) = self.now.and_then(|i| self.queue.get(i)) else { return vec![] };
         let album = self.playing_album().and_then(|id| self.albums.iter().find(|a| a.id == id));
         let dim = Style::new().fg(muted);
-        let n = |v: Option<f64>, d: usize| v.map(|v| format!("{v:.d$}"));
         let state = if self.player.loading() { "  loading…" } else if self.player.paused() || self.resume.is_some() { "  paused" } else { "" };
         let mut lines = vec![
             Line::from(vec![Span::styled(t.title.clone(), Style::new().fg(text).add_modifier(Modifier::BOLD)), Span::styled(state, dim)]),
@@ -870,71 +904,7 @@ impl App {
             return lines; // info off: the title, the artist and the album line only
         }
         lines.push(Line::raw(""));
-        let tr = t.truth.clone().unwrap_or_default();
-        let mut q = vec![t.codec.clone().unwrap_or_default().to_uppercase()];
-        match (n(tr.bits, 0), n(tr.sample_rate.map(|s| s / 1000.0), 1)) {
-            (Some(b), Some(r)) => q.push(format!("{b}-bit / {} kHz", r.trim_end_matches(".0"))),
-            (None, Some(r)) => q.push(format!("{} kHz", r.trim_end_matches(".0"))),
-            _ => {}
-        }
-        if let (Some(d), Some(b)) = (tr.declared_bits, tr.bits) {
-            if d > b {
-                q.push(format!("stored as {d:.0}-bit"));
-            }
-        }
-        lines.push(Line::from(q.join(" · ")).style(Style::new().fg(text)));
-        if !tr.analyzed {
-            lines.push(Line::from("not analysed (or not your file)").style(dim));
-        } else {
-            let mut l = vec![];
-            if let Some(dr) = tr.dr {
-                l.push(format!("DR{}{}", dr as i32, tr.dr_class.as_deref().map_or(String::new(), |c| format!(" ({c})"))));
-            }
-            if let Some(v) = n(tr.lufs, 1) {
-                l.push(format!("{v} LUFS"));
-            }
-            if let Some(v) = n(tr.lra, 1) {
-                l.push(format!("LRA {v} LU"));
-            }
-            lines.push(Line::from(l.join(" · ")).style(Style::new().fg(text)));
-            let mut l = vec![];
-            if let Some(v) = n(tr.true_peak, 1) {
-                l.push(format!("true peak {v} dBTP"));
-            }
-            if let Some(v) = n(tr.sample_peak, 1) {
-                l.push(format!("sample peak {v} dB"));
-            }
-            if tr.clipped_runs.unwrap_or(0) > 0 {
-                l.push(format!("{} clipped runs", tr.clipped_runs.unwrap_or(0)));
-            }
-            if !l.is_empty() {
-                lines.push(Line::from(l.join(" · ")).style(dim));
-            }
-            let khz = |hz: f64| format!("{} kHz", format!("{:.1}", hz / 1000.0).trim_end_matches(".0"));
-            let mut l = vec![];
-            if let Some(h) = tr.content_hz {
-                l.push(format!("content up to {}", khz(h)));
-            }
-            if let Some(h) = tr.cutoff_hz {
-                l.push(format!("cut-off at {}", khz(h)));
-            }
-            if !l.is_empty() {
-                lines.push(Line::from(l.join(" · ")).style(dim));
-            }
-            if !tr.flags.is_empty() && self.info >= 2 {
-                lines.push(Line::raw(""));
-            }
-            for fl in tr.flags.iter().filter(|_| self.info >= 2) {
-                let (level, label, detail) = (fl["level"].as_str().unwrap_or(""), fl["label"].as_str().unwrap_or(""), fl["detail"].as_str().unwrap_or(""));
-                let col = match level {
-                    "problem" => c((0xff, 0x4d, 0x4d)),
-                    "warn" => c(th.accent2),
-                    _ => muted,
-                };
-                lines.push(Line::from(vec![Span::styled(if level == "problem" { "✗ " } else { "! " }, Style::new().fg(col)), Span::styled(label.to_string(), Style::new().fg(col).add_modifier(Modifier::BOLD))]));
-                lines.push(Line::from(format!("  {detail}")).style(dim));
-            }
-        }
+        lines.extend(details::truth_lines(t, th, self.info));
         lines
     }
 
@@ -1532,12 +1502,12 @@ impl App {
         }
     }
 
-    /// 2 info lines, the meter panels (7 rows for one or two, 13 for a 2 x 2 grid), the progress line and the border.
+    /// 2 info lines (the track, and its format), the meter panels (6 rows for one or two, 11 for a 2 x 2 grid), the progress line and the border.
     fn now_height(&self, total: u16) -> u16 {
         let panels = match self.panels.len() {
             0 => 12,
-            1 | 2 => 7,
-            _ => 13,
+            1 | 2 => 6,
+            _ => 11,
         };
         (2 + panels + 1 + 2).min(total.saturating_sub(8)).max(6)
     }
@@ -1596,6 +1566,9 @@ impl App {
         }
         if let Some(m) = &self.mover {
             organize::draw_mover(f, m, &self.themes[self.theme].clone());
+        }
+        if let Some(d) = &self.details {
+            details::draw(f, d, &self.themes[self.theme].clone(), self.info);
         }
     }
 
@@ -2401,5 +2374,24 @@ mod folder_tests {
         assert_eq!((app.info, app.status.as_str()), (0, "info: off"));
         app.key(KeyCode::Char('I'), KeyModifiers::NONE);
         assert_eq!((app.info, app.status.as_str()), (2, "info: all"));
+    }
+
+    #[test]
+    fn d_opens_the_details_of_the_selected_track_j_k_change_track_and_esc_closes() {
+        let Some(mut app) = app() else { return };
+        let t = |id: u64, analysed: bool| json!({"id": id, "title": format!("T{id}"), "open": true, "truth": {"analyzed": analysed, "dr": 8.0}});
+        app.open = Some(serde_json::from_value(json!({"id": 1, "title": "Alb", "tracks": [t(1, false), t(2, true)]})).unwrap());
+        app.track_sel.select(Some(0));
+        app.key(KeyCode::Char('d'), KeyModifiers::NONE); // in the album list `d` is for folders (it asks before deleting), not here
+        assert!(app.details.is_none() && app.confirm.is_some());
+        app.key(KeyCode::Char('n'), KeyModifiers::NONE);
+        app.focus = Focus::Tracks;
+        app.key(KeyCode::Char('d'), KeyModifiers::NONE);
+        assert_eq!(app.details.as_ref().map(|d| d.track.id), Some(1));
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE);
+        assert_eq!(app.details.as_ref().map(|d| d.track.id), Some(2));
+        assert!(app.details.as_ref().unwrap().error.is_some()); // no server here: the numbers show, the graph says why not
+        app.key(KeyCode::Char('q'), KeyModifiers::NONE);
+        assert!(app.details.is_none() && !app.quit); // q closes the panel, not the program
     }
 }

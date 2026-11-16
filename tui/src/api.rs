@@ -72,6 +72,10 @@ pub struct Truth {
     pub content_hz: Option<f64>,
     #[serde(default)]
     pub flags: Vec<Value>,
+    /// The average spectrum in dB, one value per `step_hz` (sent only when asked for: `?spectrum=1`).
+    #[serde(default)]
+    pub spectrum: Vec<f32>,
+    pub step_hz: Option<f64>,
 }
 
 #[derive(Deserialize, Default, Clone, Debug)]
@@ -265,6 +269,12 @@ impl Api {
 
     pub fn track(&self, id: u64) -> Result<Track> {
         let d: Data<Track> = self.get(&format!("/tracks/{id}")).call().json_body()?;
+        Ok(d.data)
+    }
+
+    /// One track with its spectrum curve (the details panel).
+    pub fn track_with_spectrum(&self, id: u64) -> Result<Track> {
+        let d: Data<Track> = self.get(&format!("/tracks/{id}?spectrum=1")).call().json_body()?;
         Ok(d.data)
     }
 

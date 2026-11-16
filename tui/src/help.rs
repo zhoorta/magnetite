@@ -49,6 +49,7 @@ const LIBRARY: Section = ("Library", &[
     ("d", "delete the selected folder (asks; its albums move up, no music is deleted)"),
     ("N", "new folder (inside the selected folder, beside the selected album)"),
     ("/", "search: albums, tracks and folders (year: dr: codec: artist: album: filters)"),
+    ("d", "details of the selected track: the numbers, the findings and the spectrum graph"),
     ("A", "analyse the selected album / track (server side)"),
     ("i", "file-truth table"),
     ("f", "full screen"),
