@@ -12,6 +12,9 @@ pub struct Album {
     pub year: Option<i64>,
     pub track_count: Option<u64>,
     pub dr: Option<f64>,
+    /// The folder the album is in (the owner's own albums only; none when it is loose or the server is older).
+    #[serde(default)]
+    pub folder_id: Option<u64>,
     #[serde(default)]
     pub tracks: Vec<Track>,
 }
@@ -175,6 +178,11 @@ impl Api {
 
     pub fn albums(&self) -> Result<Vec<Album>> {
         self.all_pages("/albums")
+    }
+
+    /// The user's folders, flat, with `parent_id`. A server without the endpoint (or any failure) gives no folders: a flat list.
+    pub fn folders(&self) -> Vec<crate::tree::Folder> {
+        self.get("/folders").call().ok().and_then(|r| r.into_json::<Value>().ok()).and_then(|v| serde_json::from_value(v["data"].clone()).ok()).unwrap_or_default()
     }
 
     /// One page of the library's tracks with their truth (`/tracks?truth=1`, only the analysed ones) and the last page number.
@@ -359,7 +367,7 @@ mod artist_tests {
 
     fn album(artist: Option<&str>, display: Option<&str>, tracks: &[&str]) -> Album {
         let t = |a: &str| serde_json::from_value::<Track>(serde_json::json!({"id": 1, "title": "x", "artist": a, "open": true})).unwrap();
-        Album { id: 1, title: "A".into(), artist: artist.map(Into::into), display_artist: display.map(Into::into), year: None, track_count: None, dr: None, tracks: tracks.iter().map(|a| t(a)).collect() }
+        Album { id: 1, title: "A".into(), artist: artist.map(Into::into), display_artist: display.map(Into::into), year: None, folder_id: None, track_count: None, dr: None, tracks: tracks.iter().map(|a| t(a)).collect() }
     }
 
     #[test]

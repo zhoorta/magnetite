@@ -15,6 +15,7 @@ mod posters;
 mod search;
 mod stream;
 mod theme;
+mod tree;
 mod upload;
 mod truth;
 
@@ -31,6 +32,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     DefaultTerminal, Frame,
 };
+use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
 
 fn main() {
@@ -163,7 +165,9 @@ fn run() {
         Ok(p) => p,
         Err(e) => return eprintln!("audio: {e}"),
     };
+    let folders = api.folders();
     let mut app = App::new(api, albums, player, cfg);
+    app.set_folders(folders);
     app.restore();
     let mut term = ratatui::init();
     let res = app.run(&mut term);
@@ -193,6 +197,9 @@ struct App {
     theme: usize,
     user: String,
     albums: Vec<Album>,
+    folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
+    open_folders: BTreeSet<u64>,
+    rows: Vec<tree::Row>, // the lines of the album list; `album_sel` is a line, not an album
     album_sel: ListState,
     open: Option<Album>, // the album whose tracks are shown
     track_sel: ListState,
@@ -245,11 +252,12 @@ impl App {
         let tint = cfg.tint.unwrap_or(true);
         let loud = loudness::Mode::from_id(cfg.loudness.as_deref().unwrap_or("off"));
         let tint_cur = { let t = &themes[theme]; [t.accent.0 as f32, t.accent.1 as f32, t.accent.2 as f32, t.accent2.0 as f32, t.accent2.1 as f32, t.accent2.2 as f32] };
+        let rows = tree::rows(&[], &albums, &BTreeSet::new());
         let mut album_sel = ListState::default();
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, find: None, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, find: None, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -391,6 +399,7 @@ impl App {
             },
             (KeyCode::Down | KeyCode::Char('j'), _) => self.mv(1),
             (KeyCode::Up | KeyCode::Char('k'), _) => self.mv(-1),
+            (KeyCode::Left | KeyCode::Char('h'), _) if self.focus == Focus::Albums => self.fold_left(),
             (KeyCode::Left | KeyCode::Char('h') | KeyCode::Esc, _) => self.focus = Focus::Albums,
             (KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter, _) => self.enter(),
             _ => {}
@@ -408,13 +417,66 @@ impl App {
         let _ = config::save(&self.cfg);
     }
 
+    /// The user's folders: the list becomes a tree (all closed). Without any it stays flat.
+    fn set_folders(&mut self, folders: Vec<tree::Folder>) {
+        self.folders = folders;
+        self.rebuild_rows();
+    }
+
+    /// The album list lines again after a folder opened or closed; the selection stays on the same folder or album when it still shows.
+    fn rebuild_rows(&mut self) {
+        let was = self.album_sel.selected().and_then(|i| self.rows.get(i)).cloned();
+        self.rows = tree::rows(&self.folders, &self.albums, &self.open_folders);
+        let at = was.and_then(|w| self.rows.iter().position(|r| match (&w, r) {
+            (tree::Row::Folder { id: a, .. }, tree::Row::Folder { id: b, .. }) => a == b,
+            (tree::Row::Album { index: a, .. }, tree::Row::Album { index: b, .. }) => a == b,
+            _ => false,
+        }));
+        self.album_sel.select(at.or(if self.rows.is_empty() { None } else { Some(0) }));
+    }
+
+    /// The album under the selection (an index into `albums`); none on a folder line.
+    fn selected_album(&self) -> Option<usize> {
+        match self.album_sel.selected().and_then(|i| self.rows.get(i)) {
+            Some(tree::Row::Album { index, .. }) => Some(*index),
+            _ => None,
+        }
+    }
+
+    /// Select an album in the list, opening the folders above it.
+    fn reveal(&mut self, album_index: usize) {
+        if let Some(f) = self.albums.get(album_index).and_then(|a| a.folder_id) {
+            self.open_folders.insert(f);
+            self.open_folders.extend(tree::ancestors(&self.folders, f));
+        }
+        self.rows = tree::rows(&self.folders, &self.albums, &self.open_folders);
+        let at = self.rows.iter().position(|r| matches!(r, tree::Row::Album { index, .. } if *index == album_index));
+        self.album_sel.select(at);
+    }
+
+    /// Left in the album list: close the open folder under the selection, else go to the folder above it.
+    fn fold_left(&mut self) {
+        let Some(i) = self.album_sel.selected() else { return };
+        let Some(row) = self.rows.get(i).cloned() else { return };
+        if let tree::Row::Folder { id, open: true, .. } = row {
+            self.open_folders.remove(&id);
+            return self.rebuild_rows();
+        }
+        let depth = row.depth();
+        if depth > 0 {
+            if let Some(up) = (0..i).rev().find(|j| matches!(self.rows[*j], tree::Row::Folder { .. }) && self.rows[*j].depth() == depth - 1) {
+                self.album_sel.select(Some(up));
+            }
+        }
+    }
+
     /// Open the album that was playing last time with its track selected and ready (paused): space starts it where it stopped.
     fn restore(&mut self) {
         let Some(last) = self.cfg.last.clone() else { return };
         let Some(ai) = self.albums.iter().position(|a| a.id == last.album) else { return };
         let Ok(full) = self.api.album(last.album) else { return };
         let Some(ti) = full.tracks.iter().position(|t| t.id == last.track && t.stream_url.is_some()) else { return };
-        self.album_sel.select(Some(ai));
+        self.reveal(ai);
         self.track_sel.select(Some(ti));
         self.queue = full.tracks.clone();
         self.queue_albums = vec![full.id; self.queue.len()];
@@ -865,7 +927,7 @@ impl App {
         match self.api.album(id) {
             Ok(full) => {
                 if let Some(i) = self.albums.iter().position(|x| x.id == id) {
-                    self.album_sel.select(Some(i));
+                    self.reveal(i);
                 }
                 self.track_sel.select(if full.tracks.is_empty() { None } else { Some(0) });
                 self.open = Some(full);
@@ -882,7 +944,10 @@ impl App {
     fn find_target(&self) -> Option<(Vec<String>, usize)> {
         match (self.view, &self.focus) {
             (View::Truth, _) => Some((self.truth.find_rows(), self.truth.table.selected().unwrap_or(0))),
-            (View::Library, Focus::Albums) => Some((self.albums.iter().map(|a| format!("{} {} {}", a.shown_artist(), a.title, a.year.map_or(String::new(), |y| y.to_string()))).collect(), self.album_sel.selected().unwrap_or(0))),
+            (View::Library, Focus::Albums) => Some((self.rows.iter().map(|r| match r {
+                tree::Row::Folder { name, .. } => name.clone(),
+                tree::Row::Album { index, .. } => self.albums.get(*index).map_or(String::new(), |a| format!("{} {} {}", a.shown_artist(), a.title, a.year.map_or(String::new(), |y| y.to_string()))),
+            }).collect(), self.album_sel.selected().unwrap_or(0))),
             (View::Library, Focus::Tracks) => self.open.as_ref().map(|o| (o.tracks.iter().map(|t| format!("{} {}", t.title, t.artist.clone().unwrap_or_default())).collect(), self.track_sel.selected().unwrap_or(0))),
             _ => None,
         }
@@ -968,7 +1033,7 @@ impl App {
         }
         let (album, track, owner, what) = match self.focus {
             Focus::Albums => {
-                let Some(a) = self.album_sel.selected().and_then(|i| self.albums.get(i)) else { return };
+                let Some(a) = self.selected_album().and_then(|i| self.albums.get(i)) else { return self.status = "select an album (a folder line is not one)".into() };
                 (Some(a.id), None, Some(a.id), a.title.clone())
             }
             Focus::Tracks => {
@@ -1094,7 +1159,7 @@ impl App {
 
     fn mv(&mut self, d: i32) {
         let (state, len) = match self.focus {
-            Focus::Albums => (&mut self.album_sel, self.albums.len()),
+            Focus::Albums => (&mut self.album_sel, self.rows.len()),
             Focus::Tracks => (&mut self.track_sel, self.open.as_ref().map_or(0, |a| a.tracks.len())),
         };
         if len > 0 {
@@ -1106,14 +1171,22 @@ impl App {
     fn enter(&mut self) {
         match self.focus {
             Focus::Albums => {
-                let Some(a) = self.album_sel.selected().and_then(|i| self.albums.get(i)) else { return };
+                // a folder line opens or closes; an album line opens its tracks
+                if let Some(tree::Row::Folder { id, open, .. }) = self.album_sel.selected().and_then(|i| self.rows.get(i)).cloned() {
+                    if open {
+                        self.open_folders.remove(&id);
+                    } else {
+                        self.open_folders.insert(id);
+                    }
+                    return self.rebuild_rows();
+                }
+                let Some(ai) = self.selected_album() else { return };
+                let a = &self.albums[ai];
                 match self.api.album(a.id) {
                     Ok(full) => {
                         self.track_sel.select(if full.tracks.is_empty() { None } else { Some(0) });
-                        if let Some(i) = self.album_sel.selected() {
-                            if self.albums[i].display_artist.is_none() && self.albums[i].artist.is_none() {
-                                self.albums[i].display_artist = Some(full.shown_artist()).filter(|a| !a.is_empty());
-                            }
+                        if self.albums[ai].display_artist.is_none() && self.albums[ai].artist.is_none() {
+                            self.albums[ai].display_artist = Some(full.shown_artist()).filter(|a| !a.is_empty());
                         }
                         self.open = Some(full);
                         self.focus = Focus::Tracks;
@@ -1281,16 +1354,26 @@ impl App {
         let pane = |on: bool, title: String| Block::new().borders(Borders::ALL).border_style(Style::new().fg(if on { accent } else { muted })).title(title).style(Style::new().bg(c(th.surface)).fg(text));
         let sel = Style::new().fg(c(th.bg)).bg(accent);
         let items: Vec<ListItem> = self
-            .albums
+            .rows
             .iter()
-            .map(|a| {
-                let on = self.playing_album() == Some(a.id);
-                let mark = if on { Span::styled(format!("{} ", self.play_icon()), Style::new().fg(c(th.accent2))) } else { Span::raw("  ") };
-                let title = if on { Span::styled(a.title.clone(), Style::new().fg(c(th.accent2))) } else { Span::raw(a.title.clone()) };
-                ListItem::new(Line::from(vec![mark, title, Span::styled(format!("  {}", a.shown_artist()), Style::new().fg(muted))]))
+            .map(|row| match row {
+                tree::Row::Folder { name, albums, .. } => ListItem::new(Line::from(vec![
+                    Span::styled(tree::prefix(row), Style::new().fg(accent)),
+                    Span::styled(name.clone(), Style::new().fg(accent).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("  {albums}"), Style::new().fg(muted)),
+                ])),
+                tree::Row::Album { index, .. } => {
+                    let a = &self.albums[*index];
+                    let on = self.playing_album() == Some(a.id);
+                    // the playing mark replaces the two spaces before the title, so the indentation stays
+                    let pad = tree::prefix(row);
+                    let (pad, mark) = if on { (pad[..pad.len().saturating_sub(2)].to_string(), Span::styled(format!("{} ", self.play_icon()), Style::new().fg(c(th.accent2)))) } else { (pad, Span::raw("")) };
+                    let title = if on { Span::styled(a.title.clone(), Style::new().fg(c(th.accent2))) } else { Span::raw(a.title.clone()) };
+                    ListItem::new(Line::from(vec![Span::raw(pad), mark, title, Span::styled(format!("  {}", a.shown_artist()), Style::new().fg(muted))]))
+                }
             })
             .collect();
-        f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, " Albums ".into())).highlight_style(sel), left, &mut self.album_sel);
+        f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, if self.folders.is_empty() { " Albums ".into() } else { " Folders and albums ".into() })).highlight_style(sel), left, &mut self.album_sel);
 
         let playing = self.now.and_then(|i| self.queue.get(i)).map(|t| t.id);
         let mt = self.meter_theme(&th);
@@ -1747,5 +1830,68 @@ mod find_tests {
         app.key(KeyCode::Char('/'), KeyModifiers::NONE);
         app.key(KeyCode::Char('\\'), KeyModifiers::NONE);
         assert!(app.find.is_none() && app.search.query == "\\");
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn app() -> Option<App> {
+        let player = Player::new().ok()?; // no sound output on this machine: nothing to test with
+        let cfg: config::Config = serde_json::from_value(json!({"server": "http://127.0.0.1:1", "token": "x", "username": "u", "meters": ["spectrum"]})).ok()?;
+        let album = |id: u64, title: &str, folder: Option<u64>| -> Album { serde_json::from_value(json!({"id": id, "title": title, "artist": "X", "folder_id": folder})).unwrap() };
+        let albums = vec![album(1, "Kind of Blue", Some(1)), album(2, "Loose", None), album(3, "At Newport", Some(2))];
+        let mut app = App::new(Api::new("http://127.0.0.1:1", "x"), albums, player, cfg);
+        app.set_folders(vec![tree::Folder { id: 1, parent_id: None, name: "Jazz".into(), album_count: 1 }, tree::Folder { id: 2, parent_id: Some(1), name: "Live".into(), album_count: 1 }]);
+        Some(app)
+    }
+
+    fn lines(app: &App) -> Vec<String> {
+        app.rows.iter().map(|r| match r {
+            tree::Row::Folder { name, .. } => format!("{}{name}", tree::prefix(r)),
+            tree::Row::Album { index, .. } => format!("{}{}", tree::prefix(r), app.albums[*index].title),
+        }).collect()
+    }
+
+    #[test]
+    fn folders_open_and_close_with_enter_l_and_h_and_the_selection_stays_put() {
+        let Some(mut app) = app() else { return };
+        assert_eq!(lines(&app), ["▸ Jazz", "  Loose"]); // closed at the start
+        assert_eq!(app.selected_album(), None); // a folder line is not an album
+
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!(lines(&app), ["▾ Jazz", "  ▸ Live", "    Kind of Blue", "  Loose"]);
+        assert!(app.focus == Focus::Albums);
+
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('l'), KeyModifiers::NONE); // opens Live
+        assert_eq!(lines(&app)[2], "      At Newport");
+        assert_eq!(app.album_sel.selected(), Some(1)); // still on Live
+
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // At Newport
+        assert_eq!(app.selected_album(), Some(2));
+        app.key(KeyCode::Char('h'), KeyModifiers::NONE); // from an album: up to its folder
+        assert_eq!(app.album_sel.selected(), Some(1));
+        app.key(KeyCode::Char('h'), KeyModifiers::NONE); // closes Live
+        assert_eq!(lines(&app), ["▾ Jazz", "  ▸ Live", "    Kind of Blue", "  Loose"]);
+        app.key(KeyCode::Char('h'), KeyModifiers::NONE); // Live is closed: up to Jazz
+        assert_eq!(app.album_sel.selected(), Some(0));
+        app.key(KeyCode::Char('h'), KeyModifiers::NONE); // closes Jazz
+        assert_eq!(lines(&app), ["▸ Jazz", "  Loose"]);
+    }
+
+    #[test]
+    fn revealing_an_album_opens_the_folders_above_it_and_find_lists_folder_names() {
+        let Some(mut app) = app() else { return };
+        app.reveal(2); // At Newport, in Live, in Jazz
+        assert_eq!(app.selected_album(), Some(2));
+        assert_eq!(lines(&app).len(), 5);
+
+        let (rows, at) = app.find_target().unwrap();
+        assert_eq!(rows[0], "Jazz");
+        assert_eq!(rows.len(), app.rows.len());
+        assert_eq!(app.rows[at], tree::Row::Album { index: 2, depth: 2 });
     }
 }

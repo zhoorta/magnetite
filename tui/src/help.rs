@@ -39,7 +39,8 @@ const METERS: Section = ("Meters", &[
 const LIBRARY: Section = ("Library", &[
     ("j / k", "move"),
     ("enter", "open an album / play from a track"),
-    ("h", "back to the albums"),
+    ("l / enter", "open or close a folder, open an album"),
+    ("h", "close a folder or go to the one above; from the tracks, back to the albums"),
     ("/", "search"),
     ("\\", "find in the list in front of you: type words, the selection jumps"),
     ("A", "analyse the selected album / track (server side)"),

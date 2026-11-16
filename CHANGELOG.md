@@ -13,6 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions follow [semver
 - File truth: loudness, true peak, dynamic range, clipping, lossy-source and upsampling findings per file.
 - Multi-user libraries with sharing, playlists, Ferrite storage, and a read-only demo library.
 - Themes as JSON, with the theme studio and 16 bundled open fonts.
+- The terminal client shows the library's folders as a tree.
 
 ### Changed
 - The whole repository is licensed AGPL-3.0-or-later.
