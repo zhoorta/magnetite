@@ -23,8 +23,17 @@ use std::{
 const PAUSE: Duration = Duration::from_millis(250);
 const MIN_CHARS: usize = 2; // the server refuses fewer
 
+/// A folder as the search sees it: id, the path shown (`Jazz / Live`) and the albums in it and below.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FolderInfo {
+    pub id: u64,
+    pub path: String,
+    pub albums: usize,
+}
+
 /// One line of the result list.
 pub enum Hit {
+    Folder(FolderInfo),
     Album(Album),
     Track(Track),
 }
@@ -41,14 +50,30 @@ pub struct Search {
     waiting: bool,
     page: u32,          // the last page loaded
     more: bool,         // the server has further pages
-    n_albums: usize,    // the hits start with this many albums, then the tracks
+    n_folders: usize,   // the hits start with this many folders, then the albums, then the tracks
+    n_albums: usize,
+    pub folders: Vec<FolderInfo>, // every folder of the account, to match by name and to show where an album is
     loading_more: bool,
     rx: Option<mpsc::Receiver<(String, u32, Result<SearchResult, String>)>>,
 }
 
 impl Search {
     pub fn new() -> Self {
-        Search { query: String::new(), typing: true, hits: vec![], sel: ListState::default(), error: None, changed_at: Instant::now(), sent: String::new(), waiting: false, page: 0, more: false, n_albums: 0, loading_more: false, rx: None }
+        Search { query: String::new(), typing: true, hits: vec![], sel: ListState::default(), error: None, changed_at: Instant::now(), sent: String::new(), waiting: false, page: 0, more: false, n_folders: 0, n_albums: 0, folders: vec![], loading_more: false, rx: None }
+    }
+
+    /// The account's folders (call again when they change).
+    pub fn set_folders(&mut self, folders: Vec<FolderInfo>) {
+        self.folders = folders;
+    }
+
+    /// The folders whose path has every word of the search. A query with a filter (`year:1977`) is about files, not folders.
+    fn folder_hits(&self, query: &str) -> Vec<Hit> {
+        if query.split_whitespace().any(|w| w.contains(':')) {
+            return vec![];
+        }
+
+        self.folders.iter().filter(|f| contains_all(&f.path, query)).cloned().map(Hit::Folder).collect()
     }
 
     pub fn push(&mut self, ch: char) {
@@ -68,6 +93,7 @@ impl Search {
         self.sent.clear();
         self.page = 0;
         self.more = false;
+        self.n_folders = 0;
         self.n_albums = 0;
         self.changed_at = Instant::now();
     }
@@ -125,11 +151,13 @@ impl Search {
         self.more = r.more.albums || r.more.tracks;
         let (albums, tracks) = (r.albums.into_iter().map(Hit::Album), r.tracks.into_iter().map(Hit::Track));
         if page <= 1 {
-            self.hits = albums.chain(tracks).collect();
+            let folders = self.folder_hits(&self.sent.clone());
+            self.n_folders = folders.len();
+            self.hits = folders.into_iter().chain(albums).chain(tracks).collect();
             self.n_albums = self.hits.iter().filter(|h| matches!(h, Hit::Album(_))).count();
             self.sel.select(if self.hits.is_empty() { None } else { Some(0) });
         } else {
-            let at = self.n_albums;
+            let at = self.n_folders + self.n_albums;
             let added: Vec<Hit> = albums.collect();
             self.n_albums += added.len();
             self.hits.splice(at..at, added);
@@ -240,12 +268,21 @@ pub fn draw(f: &mut Frame, area: Rect, s: &mut Search, playing: Option<u64>, ico
         .hits
         .iter()
         .map(|h| match h {
+            Hit::Folder(f) => {
+                let mut spans = vec![Span::styled("folder ", Style::new().fg(c(th.accent2)))];
+                spans.extend(highlighted(&f.path, &words, Style::new().add_modifier(Modifier::BOLD)));
+                spans.push(Span::styled(format!("  {} album{}", f.albums, if f.albums == 1 { "" } else { "s" }), Style::new().fg(muted)));
+                ListItem::new(Line::from(spans))
+            }
             Hit::Album(a) => {
                 let mut spans = vec![Span::styled("album  ", Style::new().fg(c(th.accent2)))];
                 spans.extend(highlighted(&a.title, &words, Style::new()));
                 spans.push(Span::styled("  ", Style::new().fg(muted)));
                 spans.extend(highlighted(&a.shown_artist(), &words, Style::new().fg(muted)));
                 spans.push(Span::styled(format!("{}{}", a.year.map_or(String::new(), |y| format!(" · {y}")), a.track_count.map_or(String::new(), |n| format!(" · {n} tracks"))), Style::new().fg(muted)));
+                if let Some(f) = a.folder_id.and_then(|id| s.folders.iter().find(|f| f.id == id)) {
+                    spans.push(Span::styled(format!("  in {}", f.path), Style::new().fg(muted)));
+                }
                 ListItem::new(Line::from(spans))
             }
             Hit::Track(t) => {
@@ -339,13 +376,48 @@ mod tests {
         assert!(s.more && s.page == 1);
 
         s.apply(2, page(&[3], &[12, 13], false));
-        let ids: Vec<String> = s.hits.iter().map(|h| match h { Hit::Album(a) => format!("a{}", a.id), Hit::Track(t) => format!("t{}", t.id) }).collect();
+        let ids: Vec<String> = s.hits.iter().map(|h| match h { Hit::Folder(f) => format!("f{}", f.id), Hit::Album(a) => format!("a{}", a.id), Hit::Track(t) => format!("t{}", t.id) }).collect();
         assert_eq!(ids, ["a1", "a2", "a3", "t10", "t11", "t12", "t13"]);
         assert!(!s.more && s.page == 2 && s.sel.selected() == Some(3)); // the selection stays where it was
 
         s.apply(1, page(&[], &[20], false)); // a new search starts the list over
         assert_eq!(s.hits.len(), 1);
         assert_eq!(s.n_albums, 0);
+    }
+
+    fn info(id: u64, path: &str, albums: usize) -> FolderInfo {
+        FolderInfo { id, path: path.into(), albums }
+    }
+
+    #[test]
+    fn folders_whose_path_has_the_words_come_first_unless_the_query_has_a_filter() {
+        let mut s = Search::new();
+        s.set_folders(vec![info(1, "Jazz", 4), info(2, "Jazz / Live", 1), info(3, "Rock", 2)]);
+        s.sent = "jazz".into();
+        s.apply(1, SearchResult { albums: vec![album(7)], tracks: vec![track(10, "t")], more: crate::api::More { albums: false, tracks: false } });
+        let kinds: Vec<String> = s.hits.iter().map(|h| match h { Hit::Folder(f) => format!("f{}", f.id), Hit::Album(a) => format!("a{}", a.id), Hit::Track(t) => format!("t{}", t.id) }).collect();
+        assert_eq!(kinds, ["f1", "f2", "a7", "t10"]);
+        assert_eq!((s.n_folders, s.n_albums), (2, 1));
+
+        s.sent = "jazz live".into(); // every word, in the path
+        s.apply(1, SearchResult { albums: vec![], tracks: vec![], more: crate::api::More { albums: false, tracks: false } });
+        assert_eq!(s.hits.len(), 1);
+
+        s.sent = "jazz year:1977".into();
+        s.apply(1, SearchResult { albums: vec![], tracks: vec![], more: crate::api::More { albums: false, tracks: false } });
+        assert!(s.hits.is_empty());
+    }
+
+    #[test]
+    fn a_later_page_still_goes_after_the_folders_and_albums() {
+        let mut s = Search::new();
+        s.set_folders(vec![info(1, "Jazz", 1)]);
+        s.sent = "jazz".into();
+        let page = |albums: &[u64], tracks: &[u64]| SearchResult { albums: albums.iter().map(|&i| album(i)).collect(), tracks: tracks.iter().map(|&i| track(i, "t")).collect(), more: crate::api::More { albums: true, tracks: true } };
+        s.apply(1, page(&[1], &[10]));
+        s.apply(2, page(&[2], &[11]));
+        let kinds: Vec<String> = s.hits.iter().map(|h| match h { Hit::Folder(f) => format!("f{}", f.id), Hit::Album(a) => format!("a{}", a.id), Hit::Track(t) => format!("t{}", t.id) }).collect();
+        assert_eq!(kinds, ["f1", "a1", "a2", "t10", "t11"]);
     }
 
     #[test]
@@ -355,7 +427,7 @@ mod tests {
         for (w, h) in [(100u16, 20u16), (30, 6), (10, 4)] {
             let mut s = Search::new();
             s.query = "he".into();
-            s.hits = vec![Hit::Album(album(1)), Hit::Track(track(10, "Heroes"))];
+            s.hits = vec![Hit::Folder(info(1, "Jazz / Live", 2)), Hit::Album(album(1)), Hit::Track(track(10, "Heroes"))];
             s.sel.select(Some(1));
             let mut t = Terminal::new(TestBackend::new(w, h)).unwrap();
             t.draw(|f| draw(f, Rect::new(0, 0, w, h), &mut s, Some(10), "▶", &th)).unwrap();

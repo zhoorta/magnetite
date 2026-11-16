@@ -66,6 +66,15 @@ pub fn ancestors(folders: &[Folder], id: u64) -> Vec<u64> {
     out
 }
 
+/// A folder's place as one line: `Jazz / Live`.
+pub fn path(folders: &[Folder], id: u64) -> String {
+    let mut names: Vec<&str> = ancestors(folders, id).iter().rev().filter_map(|a| folders.iter().find(|f| f.id == *a)).map(|f| f.name.as_str()).collect();
+    if let Some(f) = folders.iter().find(|f| f.id == id) {
+        names.push(&f.name);
+    }
+    names.join(" / ")
+}
+
 /// The lines of the list. With no folders it is just the albums, as before. `albums` keeps its own order (already sorted);
 /// folders are in name order. An album whose folder is unknown shows with the loose ones.
 pub fn rows(folders: &[Folder], albums: &[Album], open: &BTreeSet<u64>) -> Vec<Row> {
@@ -162,6 +171,14 @@ mod tests {
         assert!(ancestors(&folders, 1).is_empty());
         let looped = vec![folder(1, Some(2), "a"), folder(2, Some(1), "b")];
         assert!(ancestors(&looped, 1).len() <= 2);
+    }
+
+    #[test]
+    fn a_path_is_the_names_from_the_top() {
+        let folders = vec![folder(1, None, "Jazz"), folder(2, Some(1), "Live")];
+        assert_eq!(path(&folders, 2), "Jazz / Live");
+        assert_eq!(path(&folders, 1), "Jazz");
+        assert_eq!(path(&folders, 9), "");
     }
 
     #[test]

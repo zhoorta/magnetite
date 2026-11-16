@@ -44,8 +44,7 @@ const LIBRARY: Section = ("Library", &[
     ("x", "mark the album for a move (and go down)"),
     ("v", "move the marked albums, or the selected one, to a folder"),
     ("N", "new folder (inside the selected folder, beside the selected album)"),
-    ("/", "search"),
-    ("\\", "find in the list in front of you: type words, the selection jumps"),
+    ("/", "search: albums, tracks and folders (year: dr: codec: artist: album: filters)"),
     ("A", "analyse the selected album / track (server side)"),
     ("i", "file-truth table"),
     ("f", "full screen"),
@@ -60,7 +59,6 @@ const TRUTH: Section = ("File-truth table", &[
     ("d", "only tracks with copies, copies side by side"),
     ("a", "A/B compare with another copy"),
     ("/", "search"),
-    ("\\", "find in the table: type words, ↓/↑ next/previous, enter stays, esc back"),
     ("i / esc", "back"),
 ]);
 

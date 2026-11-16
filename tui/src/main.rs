@@ -5,7 +5,6 @@ mod audio;
 mod blocks;
 mod config;
 mod cover;
-mod find;
 mod help;
 mod loudness;
 mod media;
@@ -232,7 +231,6 @@ struct App {
     resume: Option<f64>, // a track opened from the last session, not started: space plays it from here
     saved_at: Instant,
     help: bool,    // the ? overlay
-    find: Option<find::Find>, // the \ prompt: jump to the row that has the words
     analysing: Option<analyze::Job>, // an analysis started with A, followed in the background
     full: bool,    // meters fill the terminal, like the web's full screen
     status: String,
@@ -261,7 +259,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), marks: BTreeSet::new(), prompt: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, find: None, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), marks: BTreeSet::new(), prompt: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -341,10 +339,6 @@ impl App {
             self.mover_key(code);
             return;
         }
-        if self.find.is_some() {
-            self.find_key(code);
-            return;
-        }
         if self.ab.is_some() && mods != KeyModifiers::CONTROL && self.ab_key(code) {
             return;
         }
@@ -360,7 +354,6 @@ impl App {
                 self.view = View::Search;
                 self.search.typing = true;
             }
-            (KeyCode::Char('\\'), _) if !self.full && self.ab.is_none() && self.view != View::Search => self.start_find(),
             (KeyCode::Char('A'), _) if !self.full && self.ab.is_none() && self.view == View::Library => self.analyse_selected(),
             (KeyCode::Char('i'), _) if !self.full => {
                 self.view = View::Truth;
@@ -585,8 +578,19 @@ impl App {
         }
     }
 
+    /// Tell the search which folders there are and how many albums each holds.
+    fn sync_search_folders(&mut self) {
+        let all: BTreeSet<u64> = self.folders.iter().map(|f| f.id).collect();
+        let infos = tree::rows(&self.folders, &self.albums, &all).into_iter().filter_map(|r| match r {
+            tree::Row::Folder { id, albums, .. } => Some(search::FolderInfo { id, path: tree::path(&self.folders, id), albums }),
+            _ => None,
+        }).collect();
+        self.search.set_folders(infos);
+    }
+
     /// The album list lines again after a folder opened or closed; the selection stays on the same folder or album when it still shows.
     fn rebuild_rows(&mut self) {
+        self.sync_search_folders();
         let was = self.album_sel.selected().and_then(|i| self.rows.get(i)).cloned();
         self.rows = tree::rows(&self.folders, &self.albums, &self.open_folders);
         let at = was.and_then(|w| self.rows.iter().position(|r| match (&w, r) {
@@ -1086,6 +1090,20 @@ impl App {
             self.start(at);
             return;
         }
+        if let Some(search::Hit::Folder(f)) = self.search.selected() {
+            // a folder: back to the list with it open and selected
+            let id = f.id;
+            self.open_folders.insert(id);
+            self.open_folders.extend(tree::ancestors(&self.folders, id));
+            self.rebuild_rows();
+            if let Some(at) = self.rows.iter().position(|r| matches!(r, tree::Row::Folder { id: i, .. } if *i == id)) {
+                self.album_sel.select(Some(at));
+            }
+            self.focus = Focus::Albums;
+            self.view = View::Library;
+            self.status.clear();
+            return;
+        }
         let Some(search::Hit::Album(a)) = self.search.selected() else { return };
         let id = a.id;
         match self.api.album(id) {
@@ -1101,92 +1119,6 @@ impl App {
             }
             Err(e) => self.status = e,
         }
-    }
-
-    /// What `\` looks in: (the text of every row of the list in front of you, the selected row). Albums when the album list has
-    /// the focus, the open album's tracks when the track list has, the rows of the file-truth table in that view.
-    fn find_target(&self) -> Option<(Vec<String>, usize)> {
-        match (self.view, &self.focus) {
-            (View::Truth, _) => Some((self.truth.find_rows(), self.truth.table.selected().unwrap_or(0))),
-            (View::Library, Focus::Albums) => Some((self.rows.iter().map(|r| match r {
-                tree::Row::Folder { name, .. } => name.clone(),
-                tree::Row::Album { index, .. } => self.albums.get(*index).map_or(String::new(), |a| format!("{} {} {}", a.shown_artist(), a.title, a.year.map_or(String::new(), |y| y.to_string()))),
-            }).collect(), self.album_sel.selected().unwrap_or(0))),
-            (View::Library, Focus::Tracks) => self.open.as_ref().map(|o| (o.tracks.iter().map(|t| format!("{} {}", t.title, t.artist.clone().unwrap_or_default())).collect(), self.track_sel.selected().unwrap_or(0))),
-            _ => None,
-        }
-    }
-
-    fn start_find(&mut self) {
-        let Some((rows, at)) = self.find_target() else { return };
-        if rows.is_empty() {
-            return;
-        }
-        self.find = Some(find::Find::new(at));
-        self.show_find(&rows);
-    }
-
-    /// Selects `i` in the list that has the find.
-    fn select_found(&mut self, i: usize) {
-        match (self.view, &self.focus) {
-            (View::Truth, _) => self.truth.select_index(i),
-            (View::Library, Focus::Albums) => self.album_sel.select(Some(i)),
-            (View::Library, Focus::Tracks) => self.track_sel.select(Some(i)),
-            _ => {}
-        }
-    }
-
-    /// The prompt in the footer: the words, how many rows match and the keys.
-    fn show_find(&mut self, rows: &[String]) {
-        let Some(f) = &self.find else { return };
-        let n = find::matches(rows, &f.text).len();
-        self.status = format!("find: {}▏  {}  ·  ↓/↑ next/previous · enter stay · esc back", f.text, if f.text.trim().is_empty() { "type some words".to_string() } else if n == 0 { "no match".to_string() } else { format!("{n} match{}", if n == 1 { "" } else { "es" }) });
-    }
-
-    fn find_key(&mut self, code: KeyCode) {
-        let Some((rows, at)) = self.find_target() else {
-            self.find = None;
-            return;
-        };
-        let Some(f) = self.find.as_mut() else { return };
-        let mut jump_from_start = false;
-        match code {
-            KeyCode::Esc => {
-                let back = f.from;
-                self.find = None;
-                self.status.clear();
-                self.select_found(back);
-                return;
-            }
-            KeyCode::Enter => {
-                self.find = None;
-                self.status.clear();
-                return;
-            }
-            KeyCode::Down | KeyCode::Up => {
-                let found = find::matches(&rows, &f.text);
-                if let Some(i) = find::step(&found, at, if code == KeyCode::Down { 1 } else { -1 }) {
-                    self.select_found(i);
-                }
-            }
-            KeyCode::Backspace => {
-                f.text.pop();
-                jump_from_start = true;
-            }
-            KeyCode::Char(ch) => {
-                f.text.push(ch);
-                jump_from_start = true;
-            }
-            _ => {}
-        }
-        if jump_from_start {
-            // as the words change the selection goes to the first match from where the find began
-            let (found, from) = (find::matches(&rows, &self.find.as_ref().unwrap().text), self.find.as_ref().unwrap().from);
-            if let Some(i) = find::first_from(&found, from) {
-                self.select_found(i);
-            }
-        }
-        self.show_find(&rows);
     }
 
     /// `A`: the server measures the selected album (album list) or track (track list); progress shows in the footer.
@@ -1942,72 +1874,6 @@ mod live_sort {
 }
 
 #[cfg(test)]
-mod find_tests {
-    use super::*;
-    use serde_json::json;
-
-    fn app() -> Option<App> {
-        let player = Player::new().ok()?; // no sound output on this machine: nothing to test with
-        let cfg: config::Config = serde_json::from_value(json!({"server": "http://127.0.0.1:1", "token": "x", "username": "u", "meters": ["spectrum"]})).ok()?;
-        let album = |id: u64, artist: &str, title: &str, year: i64| -> Album { serde_json::from_value(json!({"id": id, "title": title, "artist": artist, "year": year})).unwrap() };
-        let albums = vec![album(1, "David Bowie", "Heroes", 1977), album(2, "Jáfumega", "Recados", 1983), album(3, "Bowie", "Low", 1977), album(4, "Wallflowers", "Heroes", 1996)];
-        Some(App::new(Api::new("http://127.0.0.1:1", "x"), albums, player, cfg))
-    }
-
-    fn type_text(app: &mut App, text: &str) {
-        for ch in text.chars() {
-            app.key(KeyCode::Char(ch), KeyModifiers::NONE);
-        }
-    }
-
-    #[test]
-    fn backslash_jumps_to_the_first_album_with_the_words_and_esc_goes_back() {
-        let Some(mut app) = app() else { return };
-        app.album_sel.select(Some(1));
-
-        app.key(KeyCode::Char('\\'), KeyModifiers::NONE);
-        assert!(app.find.is_some() && app.status.starts_with("find: "));
-        type_text(&mut app, "bowie"); // every key is text: `q`, `n`, `p` would not fire either
-        assert_eq!(app.album_sel.selected(), Some(2)); // from row 1 on, the first Bowie is "Low"
-        app.key(KeyCode::Down, KeyModifiers::NONE);
-        assert_eq!(app.album_sel.selected(), Some(0)); // round to the start
-        type_text(&mut app, " heroes");
-        assert_eq!(app.album_sel.selected(), Some(0));
-        assert!(app.status.contains("1 match"), "{}", app.status);
-
-        app.key(KeyCode::Esc, KeyModifiers::NONE);
-        assert!(app.find.is_none() && app.album_sel.selected() == Some(1) && app.status.is_empty());
-    }
-
-    #[test]
-    fn enter_stays_where_the_find_went_and_no_match_leaves_the_selection() {
-        let Some(mut app) = app() else { return };
-        app.key(KeyCode::Char('\\'), KeyModifiers::NONE);
-        type_text(&mut app, "jafumega");
-        assert_eq!(app.album_sel.selected(), Some(1));
-        app.key(KeyCode::Enter, KeyModifiers::NONE);
-        assert!(app.find.is_none() && app.album_sel.selected() == Some(1) && !app.quit);
-
-        app.key(KeyCode::Char('\\'), KeyModifiers::NONE);
-        type_text(&mut app, "zzz");
-        assert_eq!(app.album_sel.selected(), Some(1));
-        assert!(app.status.contains("no match"));
-        app.key(KeyCode::Backspace, KeyModifiers::NONE);
-        app.key(KeyCode::Backspace, KeyModifiers::NONE);
-        app.key(KeyCode::Backspace, KeyModifiers::NONE);
-        assert!(app.status.contains("type some words"));
-    }
-
-    #[test]
-    fn backslash_does_nothing_in_the_search_box_where_it_is_just_a_letter() {
-        let Some(mut app) = app() else { return };
-        app.key(KeyCode::Char('/'), KeyModifiers::NONE);
-        app.key(KeyCode::Char('\\'), KeyModifiers::NONE);
-        assert!(app.find.is_none() && app.search.query == "\\");
-    }
-}
-
-#[cfg(test)]
 mod folder_tests {
     use super::*;
     use serde_json::json;
@@ -2091,16 +1957,11 @@ mod folder_tests {
     }
 
     #[test]
-    fn revealing_an_album_opens_the_folders_above_it_and_find_lists_folder_names() {
+    fn revealing_an_album_opens_the_folders_above_it() {
         let Some(mut app) = app() else { return };
         app.reveal(2); // At Newport, in Live, in Jazz
         assert_eq!(app.selected_album(), Some(2));
         assert_eq!(lines(&app).len(), 5);
-
-        let (rows, at) = app.find_target().unwrap();
-        assert_eq!(rows[0], "Jazz");
-        assert_eq!(rows.len(), app.rows.len());
-        assert_eq!(app.rows[at], tree::Row::Album { index: 2, depth: 2 });
     }
 
     #[test]
@@ -2187,5 +2048,24 @@ mod folder_tests {
         assert_eq!(app.mover.as_ref().unwrap().albums, [2]);
         app.key(KeyCode::Esc, KeyModifiers::NONE);
         assert!(app.mover.is_none() && app.albums[1].folder_id.is_none());
+    }
+
+    #[test]
+    fn a_folder_hit_opens_the_folder_in_the_list_and_selects_it() {
+        let Some(mut app) = app() else { return };
+        app.view = View::Search;
+        app.search.hits = vec![search::Hit::Folder(search::FolderInfo { id: 2, path: "Jazz / Live".into(), albums: 1 })];
+        app.search.sel.select(Some(0));
+        app.search_activate();
+        assert!(app.view == View::Library && app.focus == Focus::Albums);
+        assert_eq!(lines(&app), ["▾ Jazz", "  ▾ Live", "      At Newport", "    Kind of Blue", "  Loose"]);
+        assert_eq!(app.album_sel.selected(), Some(1)); // on Live
+    }
+
+    #[test]
+    fn the_search_knows_the_folders_and_their_counts() {
+        let Some(app) = app() else { return };
+        let infos = &app.search.folders;
+        assert_eq!(infos.iter().map(|f| (f.id, f.path.as_str(), f.albums)).collect::<Vec<_>>(), [(1, "Jazz", 2), (2, "Jazz / Live", 1)]);
     }
 }
