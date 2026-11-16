@@ -38,6 +38,7 @@
                 @endauth
                 <div class="sm:ml-auto"><x-themes-menu /></div>
                 @auth
+                    <a href="{{ route('password') }}" wire:navigate class="{{ $link('password') }}">Password</a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="text-muted hover:text-accent">Sign out</button>

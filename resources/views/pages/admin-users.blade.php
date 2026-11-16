@@ -10,6 +10,18 @@
             covers and converted files are not counted). What a user has in their library is not shown here. A limit stops uploads and copies that would go over it; empty means no limit. New people join with an invitation (below) or with <code>php artisan magnetite:user</code>.
         </p>
 
+        @if (session('reset_link'))
+            <div class="mb-4 rounded-theme border border-accent/40 bg-surface p-3" x-data="{ done: false }">
+                <p class="mb-2 text-xs text-muted">Password reset link for <strong class="text-text">{{ session('reset_link')['user'] }}</strong>, shown only now. It works once and for 24 hours; opening it signs that person out everywhere. Send it to them:</p>
+                <div class="flex items-center gap-2">
+                    <input type="text" readonly value="{{ session('reset_link')['url'] }}" aria-label="Password reset link" @focus="$el.select()"
+                           class="min-w-0 flex-1 rounded-theme border border-white/10 bg-bg px-2 py-1 text-xs">
+                    <button type="button" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent"
+                            @click="navigator.clipboard?.writeText(@js(session('reset_link')['url'])).then(() => done = true)" x-text="done ? 'Copied' : 'Copy'"></button>
+                </div>
+            </div>
+        @endif
+
         @if (session('status'))
             <p class="mb-4 text-xs text-accent" role="status">{{ session('status') }}</p>
         @endif
@@ -20,7 +32,8 @@
                     <th class="py-2 pr-4 font-normal">User</th>
                     <th class="py-2 pr-4 text-right font-normal">Disk space</th>
                     <th class="py-2 pr-4 text-right font-normal">Limit</th>
-                    <th class="py-2 font-normal">Since</th>
+                    <th class="py-2 pr-4 font-normal">Since</th>
+                    <th class="py-2"></th>
                 </tr>
             </thead>
             <tbody>
@@ -45,7 +58,13 @@
                                 <button type="submit" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent">Save</button>
                             </form>
                         </td>
-                        <td class="py-2 text-muted">{{ $u->created_at?->toDateString() }}</td>
+                        <td class="py-2 pr-4 text-muted">{{ $u->created_at?->toDateString() }}</td>
+                        <td class="py-1 text-right">
+                            <form method="POST" action="{{ route('admin.users.reset', $u) }}">
+                                @csrf
+                                <button type="submit" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent" title="Make a one-time link for a new password">Reset password</button>
+                            </form>
+                        </td>
                     </tr>
                 @endforeach
             </tbody>
@@ -53,7 +72,7 @@
                 <tr>
                     <td class="py-2 pr-4 text-muted">{{ $users->count() }} {{ $users->count() === 1 ? 'user' : 'users' }}, {{ number_format($totalTracks, 0, '.', ' ') }} {{ $totalTracks === 1 ? 'track' : 'tracks' }} in all</td>
                     <td class="py-2 pr-4 text-right">{{ $size($totalBytes) }}</td>
-                    <td colspan="2"></td>
+                    <td colspan="3"></td>
                 </tr>
             </tfoot>
         </table>
@@ -107,6 +126,22 @@
             </ul>
         @else
             <p class="text-xs text-muted">No open invitations.</p>
+        @endif
+
+        @if ($resets->isNotEmpty())
+            <h2 class="mb-2 mt-10 text-lg font-semibold">Password resets waiting</h2>
+            <ul class="max-w-xl">
+                @foreach ($resets as $r)
+                    <li class="flex items-center justify-between gap-3 border-b border-white/5 py-2">
+                        <span>{{ $r->user->username }} <span class="text-xs text-muted">valid until {{ $r->expires_at->format('Y-m-d H:i') }}</span></span>
+                        <form method="POST" action="{{ route('admin.invitations.destroy', $r) }}">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="text-xs text-muted hover:text-accent">Withdraw</button>
+                        </form>
+                    </li>
+                @endforeach
+            </ul>
         @endif
     </div>
 </x-layouts.app>

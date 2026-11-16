@@ -55,7 +55,7 @@ class InvitationController extends Controller
 
         // One invitation, one account, even when the link is opened twice at the same moment.
         $user = Cache::lock('magnetite-invite', 10)->block(5, fn () => DB::transaction(function () use ($token, $data) {
-            $invitation = Invitation::usable()->where('token_hash', Invitation::hash($token))->first();
+            $invitation = Invitation::usable()->kind(false)->where('token_hash', Invitation::hash($token))->first();
 
             if (! $invitation) {
                 return null;

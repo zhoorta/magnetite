@@ -31,14 +31,41 @@ class Invitation extends Model
         return [$invitation, $token];
     }
 
+    /** A password reset link for an existing user (shown once, short-lived). */
+    public static function issueReset(User $by, User $target, int $hours = 24): array
+    {
+        $token = Str::random(40);
+
+        $reset = static::create([
+            'token_hash' => static::hash($token),
+            'label' => null,
+            'user_id' => $target->id,
+            'created_by' => $by->id,
+            'expires_at' => now()->addHours($hours),
+        ]);
+
+        return [$reset, $token];
+    }
+
     public static function hash(string $token): string
     {
         return hash('sha256', $token);
     }
 
-    public static function findUsable(string $token): ?self
+    /** The usable invitation (or, with $reset, password reset) behind a token. The two kinds never answer each other's links. */
+    public static function findUsable(string $token, bool $reset = false): ?self
     {
-        return static::usable()->where('token_hash', static::hash($token))->first();
+        return static::usable()->kind($reset)->where('token_hash', static::hash($token))->first();
+    }
+
+    public function scopeKind(Builder $query, bool $reset): void
+    {
+        $reset ? $query->whereNotNull('user_id') : $query->whereNull('user_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 
     public function scopeUsable(Builder $query): void

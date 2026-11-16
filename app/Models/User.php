@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'username', 'email', 'password'])]
@@ -50,6 +51,19 @@ class User extends Authenticatable
                 $user->quota_mb = (int) round($default * 1024);
             }
         });
+    }
+
+    /** Sign every device out: API tokens (the apps) and, with the database driver, browser sessions (except one to keep). */
+    public function revokeAccess(?string $keepSession = null): void
+    {
+        $this->tokens()->delete();
+
+        if (config('session.driver') === 'database') {
+            DB::table(config('session.table', 'sessions'))
+                ->where('user_id', $this->id)
+                ->when($keepSession, fn ($q) => $q->where('id', '!=', $keepSession))
+                ->delete();
+        }
     }
 
     public function tracks(): HasMany

@@ -57,6 +57,10 @@ Two things to check on the proxy: its limit on the size of a request body (nginx
 
 It asks for a password; `--generate` makes one and prints it. The easier way: an administrator opens **Users** in the top bar, makes an invitation and sends the link. It works once, for 1, 7 or 30 days, and the person chooses their own username and password. There is no open registration page.
 
+### Passwords
+
+Everyone can change their own on the **Password** page in the top bar; that signs their other devices out, apps included. A forgotten password: an administrator opens **Users**, presses **Reset password** next to the name and sends the one-time link (valid 24 hours); the person chooses a new password and every device is signed out. The administrator never sees it. An administrator who is locked out uses the shell: `php artisan magnetite:user NAME --reset`.
+
 ### Updating
 
     git pull

@@ -31,7 +31,8 @@ class AdminUsersController extends Controller
 
         return view('pages.admin-users', [
             'users' => $users,
-            'invitations' => Invitation::usable()->latest()->get(),
+            'invitations' => Invitation::usable()->kind(false)->latest()->get(),
+            'resets' => Invitation::usable()->kind(true)->with('user')->latest()->get(),
             'totalBytes' => (int) $users->sum('tracks_sum_size'),
             'totalTracks' => Track::count(),
         ]);
