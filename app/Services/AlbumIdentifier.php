@@ -38,6 +38,8 @@ class AlbumIdentifier
     /** When the last MusicBrainz request went out; they allow one a second. */
     private float $last = 0;
 
+    private ?Throwable $failure = null;
+
     public function __construct(private Fingerprinter $fingerprints, private CoverStore $covers) {}
 
     /**
@@ -161,13 +163,11 @@ class AlbumIdentifier
         ];
         $local = $tracks->pluck('duration')->all();
 
-        $out = [];
-        foreach (array_slice($this->releasesByAlbum($guess, count($local)), 0, self::MAX_CANDIDATES + 2) as $id) {
-            if (($candidate = $this->score($id, 'album', $guess, $local)) !== null) {
-                $out[] = $candidate;
-            }
+        // The same search as for a folder (album name, then fingerprints when set up): the titles may be "1", "2", ...
+        $out = $this->fromMusicBrainz($album->user, $guess, $tracks->keyBy('id'));
+        if ($out === [] && $this->failure !== null) {
+            throw $this->failure; // nothing found and something broke: say so instead of "no release fits"
         }
-        usort($out, fn ($a, $b) => $b['score'] <=> $a['score']);
 
         return array_map(function (array $c) use ($tracks) {
             // What the track is called now, to show next to the proposal.
@@ -267,6 +267,7 @@ class AlbumIdentifier
         $local = array_map(fn ($t) => $byId[$t['id']]->duration, $guess['tracks']);
         $out = [];
         $seen = [];
+        $this->failure = null;
 
         $steps = [
             'album' => fn () => $guess['album'] !== '' ? $this->releasesByAlbum($guess, count($local)) : [],
@@ -286,6 +287,7 @@ class AlbumIdentifier
             try {
                 $ids = array_values(array_diff($find(), $seen));
             } catch (Throwable $e) {
+                $this->failure = $e;
                 Log::info('Release search failed', ['step' => $via, 'error' => $e->getMessage()]);
 
                 continue;
@@ -296,6 +298,7 @@ class AlbumIdentifier
                 try {
                     $candidate = $this->score($id, $via, $guess, $local);
                 } catch (Throwable $e) {
+                    $this->failure = $e;
                     Log::info('Release details failed', ['step' => $via, 'release' => $id, 'error' => $e->getMessage()]);
 
                     continue;
