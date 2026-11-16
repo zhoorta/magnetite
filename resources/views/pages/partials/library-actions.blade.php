@@ -5,6 +5,7 @@
         <x-menu.item x-show="ctx === 'album'" @click="findCover(); focusRoot()">Find cover <span class="ml-auto text-xs opacity-60">C</span></x-menu.item>
         <x-menu.item x-show="ctx === 'album' || ctx === 'folder' || ctx === 'track'" @click="analyseSelected(); focusRoot()">Analyse <span class="ml-auto text-xs opacity-60">A</span></x-menu.item>
         <x-menu.item x-show="ctx === 'album' || ctx === 'track'" @click="shareSelected(); focusRoot()"><span x-text="(ctx === 'track' ? tracks[tsel] && isShared('tracks', tracks[tsel].id) : row?.kind === 'album' && isShared('albums', row.id)) ? 'Stop sharing' : 'Share'"></span> <span class="ml-auto text-xs opacity-60">S</span></x-menu.item>
+        <x-menu.item x-show="ctx === 'album' || ctx === 'folder'" @click="openMover()">Move to a folder… <span class="ml-auto text-xs opacity-60">v</span></x-menu.item>
         <x-menu.item x-show="ctx === 'loose'" @click="openGroup()">Name an album… <span class="ml-auto text-xs opacity-60">:group</span></x-menu.item>
         {{-- Shared and Playlists: what can be done there (docs/dense-library.md, "Sources") --}}
         <x-menu.item x-show="ctx === 'sh-other' || (source === 'shared' && ctx === 'ro-track')" @click="copyToLibrary(); focusRoot()">Copy to my library <span class="ml-auto text-xs opacity-60">y</span></x-menu.item>

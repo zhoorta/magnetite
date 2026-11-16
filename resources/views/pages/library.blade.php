@@ -32,10 +32,9 @@
                     @click="$store.player.playing || playHere ? $store.player.toggle() : (pane === 'tracks' ? playTrack(tsel) : playTrack(0, false)); focusRoot()">
                 <x-icon name="play" x-show="! $store.player.playing" /><x-icon name="pause" x-show="$store.player.playing" x-cloak />
             </button>
-            <button type="button" x-show="mode === 'tree' && source === 'library' && ! demo" class=""{{ $btn }} inline-flex items-center gap-1.5 max-md:hidden" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x), again to finish" aria-label="Select" @click="toggleSelectMode()">
+            <button type="button" x-show="mode === 'tree' && source === 'library' && ! demo" class="{{ $btn }} inline-flex items-center gap-1.5 max-md:hidden" :class="selectMode && '!border-accent !text-accent'" :aria-pressed="selectMode" title="Mark several albums (x), again to finish" aria-label="Select" @click="toggleSelectMode()">
                 <x-icon name="select" /><span x-show="marks.length" x-cloak x-text="marks.length"></span>
             </button>
-            <button type="button" x-show="mode === 'tree' && (ctx === 'album' || ctx === 'folder')" x-cloak class="{{ $btn }} inline-flex items-center gap-1.5" title="Move to a folder (v)" aria-label="Move" @click="openMover()"><x-icon name="move" /></button>
             @auth
             <div x-show="mode === 'tree' && playlistItem" x-cloak class="flex items-center rounded-theme border border-white/15 px-1 pointer-coarse:min-h-11"><x-playlist-menu item="playlistItem" label="Add to a playlist" /></div>
             @endauth
