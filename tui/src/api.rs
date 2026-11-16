@@ -249,6 +249,45 @@ impl Api {
         Ok((v["data"]["name"].as_str().unwrap_or("").to_string(), tracks))
     }
 
+    /// A new playlist, optionally with a first track or a whole album in it.
+    pub fn create_playlist(&self, name: &str, track: Option<u64>, album: Option<u64>) -> Result<u64> {
+        let v: Value = self.send("POST", "/playlists").send_json(json!({ "name": name, "track_id": track, "album_id": album })).json_body()?;
+        v["id"].as_u64().ok_or_else(|| "the server did not say which playlist it made".to_string())
+    }
+
+    pub fn rename_playlist(&self, id: u64, name: &str) -> Result<()> {
+        let _: Value = self.send("PATCH", &format!("/playlists/{id}")).send_json(json!({ "name": name })).json_body()?;
+        Ok(())
+    }
+
+    /// Delete a playlist (its tracks stay in the library); needs the token's delete ability.
+    pub fn delete_playlist(&self, id: u64) -> Result<()> {
+        let _: Value = self.send("DELETE", &format!("/playlists/{id}")).call().json_body()?;
+        Ok(())
+    }
+
+    /// Add a track, or every playable track of an album, to a playlist; how many were new.
+    pub fn add_to_playlist(&self, id: u64, track: Option<u64>, album: Option<u64>) -> Result<u64> {
+        let body = match (track, album) {
+            (Some(t), _) => json!({ "track_id": t }),
+            (None, Some(a)) => json!({ "album_id": a }),
+            _ => return Err("nothing to add".into()),
+        };
+        let v: Value = self.send("POST", &format!("/playlists/{id}/tracks")).send_json(body).json_body()?;
+        Ok(v["added"].as_u64().or_else(|| v["added"].as_bool().map(u64::from)).unwrap_or(0))
+    }
+
+    pub fn remove_from_playlist(&self, id: u64, track: u64) -> Result<()> {
+        let _: Value = self.send("DELETE", &format!("/playlists/{id}/tracks/{track}")).call().json_body()?;
+        Ok(())
+    }
+
+    /// The new order of a playlist, as the list of its track ids.
+    pub fn reorder_playlist(&self, id: u64, ids: &[u64]) -> Result<()> {
+        let _: Value = self.send("PUT", &format!("/playlists/{id}/order")).send_json(json!({ "ids": ids })).json_body()?;
+        Ok(())
+    }
+
     /// The user's folders, flat, with `parent_id`. A server without the endpoint (or any failure) gives no folders: a flat list.
     pub fn folders(&self) -> Vec<crate::tree::Folder> {
         self.get("/folders").call().ok().and_then(|r| r.into_json::<Value>().ok()).and_then(|v| serde_json::from_value(v["data"].clone()).ok()).unwrap_or_default()

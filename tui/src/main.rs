@@ -238,6 +238,7 @@ struct App {
     flat: bool, // z: every album in one list, no folders
     marks: BTreeSet<u64>, // ids of the albums marked with x, to be moved together
     prompt: Option<organize::Prompt>, // N: typing the name of a new folder
+    adder: Option<organize::AddTo>, // a: choosing a playlist for a track or an album
     confirm: Option<organize::Confirm>, // d: asking before a folder is deleted
     mover: Option<organize::Mover>, // v: choosing the folder to move albums to
     rows: Vec<tree::Row>, // the lines of the album list; `album_sel` is a line, not an album
@@ -299,7 +300,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), source: Source::Library, playlists: vec![], playlist_sel: ListState::default(), open_playlist: None, shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), source: Source::Library, playlists: vec![], playlist_sel: ListState::default(), open_playlist: None, shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, adder: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -379,6 +380,10 @@ impl App {
             self.mover_key(code);
             return;
         }
+        if self.adder.is_some() {
+            self.adder_key(code);
+            return;
+        }
         if self.confirm.is_some() {
             self.confirm_key(code);
             return;
@@ -455,6 +460,13 @@ impl App {
             },
             (KeyCode::Char('d'), _) if self.view == View::Library && self.focus == Focus::Tracks && !self.full && self.ab.is_none() => self.open_details(),
             (KeyCode::Char('P'), _) if self.in_left_list() => self.toggle_source(),
+            (KeyCode::Char('N'), _) if self.in_playlist_list() => self.start_new_playlist(),
+            (KeyCode::Char('r'), _) if self.in_playlist_list() => self.start_rename_playlist(),
+            (KeyCode::Char('d'), _) if self.in_playlist_list() => self.start_delete_playlist(),
+            (KeyCode::Char('J'), _) if self.in_playlist_tracks() => self.move_playlist_track(1),
+            (KeyCode::Char('K'), _) if self.in_playlist_tracks() => self.move_playlist_track(-1),
+            (KeyCode::Char('x'), _) if self.in_playlist_tracks() => self.remove_playlist_track(),
+            (KeyCode::Char('a'), _) if self.in_track_list() || self.in_album_list() => self.open_add_to(),
             (KeyCode::Char('x'), _) if self.in_album_list() => self.toggle_mark(),
             (KeyCode::Char('v'), _) if self.in_album_list() => self.open_mover(),
             (KeyCode::Char('N'), _) if self.in_album_list() => self.start_new_folder(),
@@ -528,6 +540,222 @@ impl App {
         self.view == View::Library && self.focus == Focus::Albums && !self.full && self.ab.is_none()
     }
 
+    fn in_playlist_list(&self) -> bool {
+        self.in_left_list() && self.source == Source::Playlists
+    }
+
+    /// A track list is in front of you (an album's or a playlist's).
+    fn in_track_list(&self) -> bool {
+        self.view == View::Library && self.focus == Focus::Tracks && !self.full && self.ab.is_none()
+    }
+
+    /// The tracks of one of your playlists are in front of you (reordering and removing apply).
+    fn in_playlist_tracks(&self) -> bool {
+        self.in_track_list() && self.open_playlist.is_some()
+    }
+
+    /// Read the playlists again (counts change) and keep the selection on the same one.
+    fn reload_playlists(&mut self) {
+        let was = self.playlist_sel.selected().and_then(|i| self.playlists.get(i)).map(|p| p.id);
+        if let Ok(list) = self.api.playlists() {
+            self.playlists = list;
+            let at = was.and_then(|id| self.playlists.iter().position(|p| p.id == id));
+            self.playlist_sel.select(at.or(if self.playlists.is_empty() { None } else { Some(0) }));
+        }
+    }
+
+    /// Read the open playlist's tracks again (after something was added to it).
+    fn reload_open_playlist(&mut self) {
+        let Some(id) = self.open_playlist else { return };
+        if let Ok((_, tracks)) = self.api.playlist(id) {
+            if let Some(o) = self.open.as_mut() {
+                o.tracks = tracks;
+                let n = o.tracks.len();
+                let sel = self.track_sel.selected().unwrap_or(0).min(n.saturating_sub(1));
+                self.track_sel.select(if n == 0 { None } else { Some(sel) });
+            }
+        }
+    }
+
+    fn start_new_playlist(&mut self) {
+        self.prompt = Some(organize::Prompt { text: String::new(), parent: None, rename: None, kind: organize::Kind::Playlist });
+        self.show_prompt();
+    }
+
+    fn start_rename_playlist(&mut self) {
+        let Some(p) = self.playlist_sel.selected().and_then(|i| self.playlists.get(i)).cloned() else { return };
+        self.prompt = Some(organize::Prompt { text: p.name, parent: None, rename: Some(p.id), kind: organize::Kind::Playlist });
+        self.show_prompt();
+    }
+
+    fn start_delete_playlist(&mut self) {
+        let Some(p) = self.playlist_sel.selected().and_then(|i| self.playlists.get(i)).cloned() else { return };
+        self.status = organize::delete_playlist_note(&p.name, p.track_count);
+        self.confirm = Some(organize::Confirm { id: p.id, name: p.name, playlist: true });
+    }
+
+    /// The prompt's Enter for a playlist: a new one, or the new name of one.
+    fn finish_playlist_prompt(&mut self, name: String, rename: Option<u64>) {
+        match rename {
+            Some(id) => match self.api.rename_playlist(id, &name) {
+                Ok(()) => {
+                    self.prompt = None;
+                    if let Some(p) = self.playlists.iter_mut().find(|p| p.id == id) {
+                        p.name = name.clone();
+                    }
+                    if self.open_playlist == Some(id) {
+                        if let Some(o) = self.open.as_mut() {
+                            o.title = name.clone();
+                        }
+                    }
+                    self.status = format!("renamed to \"{name}\"");
+                }
+                Err(e) => self.status = e, // the prompt stays: change the name and try again
+            },
+            None => match self.api.create_playlist(&name, None, None) {
+                Ok(id) => {
+                    self.prompt = None;
+                    self.reload_playlists();
+                    if let Some(at) = self.playlists.iter().position(|p| p.id == id) {
+                        self.playlist_sel.select(Some(at));
+                    }
+                    self.status = format!("created playlist \"{name}\" · a on a track or an album adds to it");
+                }
+                Err(e) => self.status = e,
+            },
+        }
+    }
+
+    /// A new playlist that starts with the track or album the add chooser was opened for.
+    fn finish_playlist_with(&mut self, name: String, track: Option<u64>, album: Option<u64>) {
+        match self.api.create_playlist(&name, track, album) {
+            Ok(_) => {
+                self.prompt = None;
+                if self.source == Source::Playlists {
+                    self.reload_playlists();
+                }
+                self.status = format!("created playlist \"{name}\" with it");
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    fn delete_playlist_now(&mut self, id: u64, name: &str) {
+        match self.api.delete_playlist(id) {
+            Ok(()) => {
+                self.playlists.retain(|p| p.id != id);
+                let n = self.playlists.len();
+                let sel = self.playlist_sel.selected().unwrap_or(0).min(n.saturating_sub(1));
+                self.playlist_sel.select(if n == 0 { None } else { Some(sel) });
+                if self.open_playlist == Some(id) {
+                    self.open = None;
+                    self.open_playlist = None;
+                }
+                self.status = format!("deleted playlist \"{name}\"");
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    /// `a`: choose a playlist for the selected track, or for the selected album (every track you can play).
+    fn open_add_to(&mut self) {
+        let (track, album, label) = if self.focus == Focus::Tracks {
+            match self.track_sel.selected().and_then(|i| self.open.as_ref().and_then(|a| a.tracks.get(i))) {
+                Some(t) => (Some(t.id), None, format!("\"{}\"", t.title)),
+                None => return,
+            }
+        } else {
+            match self.selected_album().and_then(|i| self.albums.get(i)) {
+                Some(a) => (None, Some(a.id), format!("the album \"{}\"", a.title)),
+                None => return self.status = "a adds a track or an album to a playlist: select one".into(),
+            }
+        };
+        match self.api.playlists() {
+            Ok(list) => {
+                self.playlists = list;
+                let targets = organize::playlist_targets(&self.playlists);
+                self.adder = Some(organize::AddTo { targets, sel: if self.playlists.is_empty() { 0 } else { 1 }, track, album, label });
+                self.status.clear();
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    fn adder_key(&mut self, code: KeyCode) {
+        let Some(a) = self.adder.as_mut() else { return };
+        match code {
+            KeyCode::Esc | KeyCode::Char('q' | 'a') => self.adder = None,
+            KeyCode::Down | KeyCode::Char('j') => a.sel = (a.sel + 1).min(a.targets.len() - 1),
+            KeyCode::Up | KeyCode::Char('k') => a.sel = a.sel.saturating_sub(1),
+            KeyCode::Home | KeyCode::Char('g') => a.sel = 0,
+            KeyCode::End | KeyCode::Char('G') => a.sel = a.targets.len() - 1,
+            KeyCode::Enter => {
+                let Some(a) = self.adder.take() else { return };
+                match a.targets[a.sel].0 {
+                    None => {
+                        self.prompt = Some(organize::Prompt { text: String::new(), parent: None, rename: None, kind: organize::Kind::PlaylistWith { track: a.track, album: a.album } });
+                        self.show_prompt();
+                    }
+                    Some(id) => match self.api.add_to_playlist(id, a.track, a.album) {
+                        Ok(n) => {
+                            let to = self.playlists.iter().find(|p| p.id == id).map_or(String::new(), |p| p.name.clone());
+                            self.status = if n == 0 { format!("already in \"{to}\"") } else { format!("added {n} track{} to \"{to}\"", if n == 1 { "" } else { "s" }) };
+                            if self.source == Source::Playlists {
+                                self.reload_playlists();
+                            }
+                            if self.open_playlist == Some(id) {
+                                self.reload_open_playlist();
+                            }
+                        }
+                        Err(e) => self.status = e,
+                    },
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `J` / `K` in a playlist: move the selected track down or up, and tell the server the new order.
+    fn move_playlist_track(&mut self, d: i32) {
+        let (Some(pid), Some(i)) = (self.open_playlist, self.track_sel.selected()) else { return };
+        let Some(open) = self.open.as_mut() else { return };
+        let j = i as i32 + d;
+        if j < 0 || j as usize >= open.tracks.len() {
+            return;
+        }
+        open.tracks.swap(i, j as usize);
+        let ids: Vec<u64> = open.tracks.iter().map(|t| t.id).collect();
+        match self.api.reorder_playlist(pid, &ids) {
+            Ok(()) => self.track_sel.select(Some(j as usize)),
+            Err(e) => {
+                if let Some(o) = self.open.as_mut() {
+                    o.tracks.swap(i, j as usize); // the server refused: put it back
+                }
+                self.status = e;
+            }
+        }
+    }
+
+    /// `x` in a playlist: take the selected track out of it (it stays in the library).
+    fn remove_playlist_track(&mut self) {
+        let (Some(pid), Some(i)) = (self.open_playlist, self.track_sel.selected()) else { return };
+        let Some(t) = self.open.as_ref().and_then(|o| o.tracks.get(i)).cloned() else { return };
+        match self.api.remove_from_playlist(pid, t.id) {
+            Ok(()) => {
+                if let Some(o) = self.open.as_mut() {
+                    o.tracks.remove(i);
+                    let n = o.tracks.len();
+                    self.track_sel.select(if n == 0 { None } else { Some(i.min(n - 1)) });
+                }
+                if let Some(p) = self.playlists.iter_mut().find(|p| p.id == pid) {
+                    p.track_count = p.track_count.saturating_sub(1);
+                }
+                self.status = format!("removed \"{}\" from the playlist", t.title);
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// `P`: the playlists in the left list, or back to the folders and albums.
     fn toggle_source(&mut self) {
         if self.source == Source::Playlists {
@@ -582,12 +810,26 @@ impl App {
             Some(tree::Row::Album { index, .. }) => self.albums.get(*index).and_then(|a| a.folder_id).filter(|id| self.folders.iter().any(|f| f.id == *id)),
             None => None,
         };
-        self.prompt = Some(organize::Prompt { text: String::new(), parent, rename: None });
+        self.prompt = Some(organize::Prompt { text: String::new(), parent, rename: None, kind: organize::Kind::Folder });
         self.show_prompt();
     }
 
     fn show_prompt(&mut self) {
         let Some(p) = &self.prompt else { return };
+        match p.kind {
+            organize::Kind::Playlist => {
+                self.status = match p.rename {
+                    Some(id) => format!("rename playlist \"{}\" to: {}▏  ·  enter renames · esc cancels", self.playlists.iter().find(|x| x.id == id).map_or("", |x| x.name.as_str()), p.text),
+                    None => format!("new playlist: {}▏  ·  enter creates · esc cancels", p.text),
+                };
+                return;
+            }
+            organize::Kind::PlaylistWith { .. } => {
+                self.status = format!("new playlist with it: {}▏  ·  enter creates · esc cancels", p.text);
+                return;
+            }
+            organize::Kind::Folder => {}
+        }
         let into = p.parent.and_then(|id| self.folders.iter().find(|f| f.id == id)).map_or("the top level".to_string(), |f| format!("\"{}\"", f.name));
         self.status = match p.rename {
             Some(id) => format!("rename \"{}\" to: {}▏  ·  enter renames · esc cancels", self.folders.iter().find(|f| f.id == id).map_or("", |f| f.name.as_str()), p.text),
@@ -608,13 +850,18 @@ impl App {
             }
             KeyCode::Char(ch) if p.text.chars().count() < organize::NAME_MAX => p.text.push(ch),
             KeyCode::Enter => {
-                let (name, parent) = (p.text.trim().to_string(), p.parent);
+                let (name, parent, kind, rename) = (p.text.trim().to_string(), p.parent, p.kind, p.rename);
                 if name.is_empty() {
                     self.prompt = None;
                     self.status.clear();
                     return;
                 }
-                if let Some(id) = p.rename {
+                match kind {
+                    organize::Kind::Playlist => return self.finish_playlist_prompt(name, rename),
+                    organize::Kind::PlaylistWith { track, album } => return self.finish_playlist_with(name, track, album),
+                    organize::Kind::Folder => {}
+                }
+                if let Some(id) = rename {
                     match self.api.rename_folder(id, &name) {
                         Ok(()) => {
                             self.prompt = None;
@@ -666,7 +913,7 @@ impl App {
     /// `r`: rename the selected folder (the prompt starts with its name).
     fn start_rename(&mut self) {
         let Some((id, name)) = self.selected_folder() else { return self.status = "r renames a folder: select one".into() };
-        self.prompt = Some(organize::Prompt { text: name, parent: None, rename: Some(id) });
+        self.prompt = Some(organize::Prompt { text: name, parent: None, rename: Some(id), kind: organize::Kind::Folder });
         self.show_prompt();
     }
 
@@ -676,7 +923,7 @@ impl App {
         let albums = self.albums.iter().filter(|a| a.folder_id == Some(id)).count();
         let subfolders = self.folders.iter().filter(|f| f.parent_id == Some(id)).count();
         self.status = organize::delete_note(&name, albums, subfolders);
-        self.confirm = Some(organize::Confirm { id, name });
+        self.confirm = Some(organize::Confirm { id, name, playlist: false });
     }
 
     fn confirm_key(&mut self, code: KeyCode) {
@@ -684,6 +931,9 @@ impl App {
         if !matches!(code, KeyCode::Char('y' | 'Y')) {
             self.status = "not deleted".into();
             return;
+        }
+        if c.playlist {
+            return self.delete_playlist_now(c.id, &c.name);
         }
         match self.api.delete_folder(c.id) {
             Ok(()) => {
@@ -1709,6 +1959,9 @@ impl App {
         if let Some(m) = &self.mover {
             organize::draw_mover(f, m, &self.themes[self.theme].clone());
         }
+        if let Some(a) = &self.adder {
+            organize::draw_add(f, a, &self.themes[self.theme].clone());
+        }
         if let Some(d) = &self.details {
             details::draw(f, d, &self.themes[self.theme].clone(), self.info);
         }
@@ -2229,6 +2482,10 @@ mod folder_tests {
                 let head = String::from_utf8_lossy(&got).to_string();
                 let body = if head.starts_with("POST /api/v1/folders") {
                     r#"{"folder":{"id":9,"parent_id":null,"name":"Blues"}}"#
+                } else if head.starts_with("POST /api/v1/playlists ") {
+                    r#"{"id":6,"name":"New","url":"u"}"#
+                } else if head.starts_with("POST /api/v1/playlists/4/tracks") {
+                    r#"{"added":true}"#
                 } else if head.starts_with("GET /api/v1/playlists/4") {
                     r#"{"data":{"id":4,"name":"Road","mine":true,"tracks":[{"id":11,"title":"A","album_id":7,"open":true,"stream_url":"http://127.0.0.1:1/a"},{"id":12,"title":"B","album_id":9,"open":true,"stream_url":"http://127.0.0.1:1/b"},{"id":13,"title":"C","album_id":9,"open":false}]}}"#
                 } else if head.starts_with("GET /api/v1/playlists") {
@@ -2658,9 +2915,12 @@ mod folder_tests {
         assert_eq!(app.playlists.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Road", "Mine"]);
         assert_eq!(app.playlist_sel.selected(), Some(0));
 
-        app.key(KeyCode::Char('N'), KeyModifiers::NONE); // the folder keys do nothing here
-        app.key(KeyCode::Char('z'), KeyModifiers::NONE);
-        assert!(app.prompt.is_none() && !app.flat);
+        app.key(KeyCode::Char('z'), KeyModifiers::NONE); // the folder keys do nothing here
+        app.key(KeyCode::Char('x'), KeyModifiers::NONE);
+        assert!(!app.flat && app.marks.is_empty());
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE); // N makes a playlist here, not a folder
+        assert!(matches!(app.prompt.as_ref().map(|p| p.kind), Some(organize::Kind::Playlist)));
+        app.key(KeyCode::Esc, KeyModifiers::NONE);
 
         app.key(KeyCode::Char('j'), KeyModifiers::NONE);
         assert_eq!(app.playlist_sel.selected(), Some(1));
@@ -2680,5 +2940,100 @@ mod folder_tests {
         app.key(KeyCode::Esc, KeyModifiers::NONE);
         app.key(KeyCode::Char('P'), KeyModifiers::NONE);
         assert!(app.source == Source::Library);
+    }
+
+    fn in_road(server: &str) -> Option<App> {
+        let mut app = app_at(server, json!([]))?;
+        app.key(KeyCode::Char('P'), KeyModifiers::NONE);
+        app.key(KeyCode::Enter, KeyModifiers::NONE); // Road
+        Some(app)
+    }
+
+    #[test]
+    fn j_and_k_move_a_playlist_track_and_x_takes_it_out() {
+        // requests: the list, the playlist, a reorder, a second reorder, the removal
+        let Some(mut app) = in_road(&mock_server(5)) else { return };
+        assert_eq!(app.open_playlist, Some(4));
+        let ids = |app: &App| app.open.as_ref().unwrap().tracks.iter().map(|t| t.id).collect::<Vec<_>>();
+        assert_eq!(ids(&app), [11, 12, 13]);
+        app.key(KeyCode::Char('J'), KeyModifiers::NONE); // A down
+        assert_eq!((ids(&app), app.track_sel.selected()), (vec![12, 11, 13], Some(1)));
+        app.key(KeyCode::Char('K'), KeyModifiers::NONE);
+        assert_eq!((ids(&app), app.track_sel.selected()), (vec![11, 12, 13], Some(0)));
+        app.key(KeyCode::Char('K'), KeyModifiers::NONE); // already first: nothing
+        assert_eq!(ids(&app), [11, 12, 13]);
+
+        app.key(KeyCode::Char('x'), KeyModifiers::NONE);
+        assert_eq!((ids(&app), app.track_sel.selected()), (vec![12, 13], Some(0)));
+        assert!(app.status.contains("removed \"A\""), "{}", app.status);
+        assert_eq!(app.playlists[0].track_count, 2);
+    }
+
+    #[test]
+    fn a_adds_a_track_to_a_playlist_or_starts_a_new_one_with_it() {
+        // requests: the list, the playlist, the list for the chooser, the add
+        let Some(mut app) = in_road(&mock_server(4)) else { return };
+        app.key(KeyCode::Char('a'), KeyModifiers::NONE);
+        let a = app.adder.as_ref().unwrap();
+        assert_eq!(a.track, Some(11));
+        assert_eq!(a.targets.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [None, Some(4), Some(5)]);
+        assert_eq!(a.sel, 1); // the first playlist, not "new"
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.adder.is_none() && app.status.contains("added 1 track to \"Road\""), "{}", app.status);
+
+        // "New playlist…": a name, then the playlist is made with the track (list, create, list again)
+        let Some(mut app) = in_road(&mock_server(5)) else { return };
+        app.key(KeyCode::Char('a'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('k'), KeyModifiers::NONE); // up to "New playlist…"
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(matches!(app.prompt.as_ref().map(|p| p.kind), Some(organize::Kind::PlaylistWith { track: Some(11), album: None })));
+        for ch in "Mix".chars() {
+            app.key(KeyCode::Char(ch), KeyModifiers::NONE);
+        }
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.prompt.is_none() && app.status.contains("created playlist \"Mix\" with it"), "{}", app.status);
+    }
+
+    #[test]
+    fn a_on_an_album_row_adds_the_album_and_a_on_a_folder_says_to_select_an_album() {
+        let Some(mut app) = app_at(&mock_server(1), json!([])) else { return };
+        app.key(KeyCode::Char('a'), KeyModifiers::NONE); // Jazz is a folder
+        assert!(app.adder.is_none() && app.status.contains("select one"), "{}", app.status);
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE); // Loose
+        app.key(KeyCode::Char('a'), KeyModifiers::NONE); // asks the server for the playlists (the mock has two)
+        let a = app.adder.as_ref().unwrap();
+        assert_eq!((a.track, a.album), (None, Some(2)));
+        assert!(a.label.contains("Loose"));
+    }
+
+    #[test]
+    fn n_r_d_make_rename_and_delete_playlists_and_deleting_the_open_one_closes_it() {
+        // requests: the list, the playlist, a create, the list again, a rename, a delete
+        let Some(mut app) = in_road(&mock_server(6)) else { return };
+        app.focus = Focus::Albums;
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE);
+        for ch in "Fresh".chars() {
+            app.key(KeyCode::Char(ch), KeyModifiers::NONE);
+        }
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.prompt.is_none() && app.status.contains("created playlist \"Fresh\""), "{}", app.status);
+
+        app.playlist_sel.select(Some(0)); // Road, the open one
+        app.key(KeyCode::Char('r'), KeyModifiers::NONE);
+        assert!(app.status.contains("rename playlist \"Road\" to: Road▏"), "{}", app.status);
+        for _ in 0..4 {
+            app.key(KeyCode::Backspace, KeyModifiers::NONE);
+        }
+        for ch in "Trip".chars() {
+            app.key(KeyCode::Char(ch), KeyModifiers::NONE);
+        }
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert_eq!((app.playlists[0].name.as_str(), app.open.as_ref().unwrap().title.as_str()), ("Trip", "Trip"));
+
+        app.key(KeyCode::Char('d'), KeyModifiers::NONE);
+        assert!(app.confirm.is_some() && app.status.contains("its 3 tracks stay in the library"), "{}", app.status);
+        app.key(KeyCode::Char('y'), KeyModifiers::NONE);
+        assert!(app.confirm.is_none() && app.open.is_none() && app.open_playlist.is_none(), "{}", app.status);
+        assert!(app.playlists.iter().all(|p| p.id != 4));
     }
 }

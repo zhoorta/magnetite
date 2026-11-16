@@ -17,14 +17,44 @@ use std::collections::BTreeSet;
 pub struct Prompt {
     pub text: String,
     pub parent: Option<u64>,
-    /// Some: renaming this folder (the text starts as its name) instead of making one.
+    /// Some: renaming this folder or playlist (the text starts as its name) instead of making one.
     pub rename: Option<u64>,
+    pub kind: Kind,
 }
 
-/// `d` on a folder: waiting for `y`.
+/// What the name being typed is for.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Kind {
+    Folder,
+    Playlist,
+    /// A new playlist that starts with this track or album (the "new playlist" entry of the add chooser).
+    PlaylistWith { track: Option<u64>, album: Option<u64> },
+}
+
+/// `d` on a folder or a playlist: waiting for `y`.
 pub struct Confirm {
     pub id: u64,
     pub name: String,
+    pub playlist: bool,
+}
+
+/// `a`: choose a playlist for a track or an album; the first entry is a new playlist.
+pub struct AddTo {
+    pub targets: Vec<(Option<u64>, String)>,
+    pub sel: usize,
+    pub track: Option<u64>,
+    pub album: Option<u64>,
+    pub label: String,
+}
+
+/// The entries of the chooser: a new playlist, then yours.
+pub fn playlist_targets(playlists: &[crate::api::Playlist]) -> Vec<(Option<u64>, String)> {
+    std::iter::once((None, "New playlist…".to_string())).chain(playlists.iter().map(|p| (Some(p.id), format!("{}  ({} track{})", p.name, p.track_count, if p.track_count == 1 { "" } else { "s" })))).collect()
+}
+
+/// What `d` says before deleting a playlist.
+pub fn delete_playlist_note(name: &str, tracks: u64) -> String {
+    format!("delete playlist \"{name}\"? its {tracks} track{} stay in the library · y deletes, any other key cancels", if tracks == 1 { "" } else { "s" })
 }
 
 /// `v`: the places an album can go, the highlighted one, and the albums that go (ids).
@@ -69,20 +99,31 @@ pub fn moved_note(n: usize, to: &str) -> String {
     format!("moved {n} album{} to {}", if n == 1 { "" } else { "s" }, to.trim())
 }
 
-pub fn draw_mover(f: &mut Frame, m: &Mover, th: &Theme) {
+/// A centred list to choose from: `title`, the entries, the highlighted one.
+pub fn draw_choice(f: &mut Frame, title: String, entries: &[String], sel: usize, hint: &str, th: &Theme) {
     let (text, muted, accent) = (c(th.text), c(th.muted), c(th.accent));
-    let n = m.albums.len();
-    let title = if m.folder.is_some() { " Move the folder to… ".to_string() } else { format!(" Move {n} album{} to… ", if n == 1 { "" } else { "s" }) };
     let width = 60.min(f.area().width);
-    let height = (m.targets.len() as u16 + 4).min(f.area().height);
+    let height = (entries.len() as u16 + 4).min(f.area().height);
     let [row] = Layout::vertical([Constraint::Length(height)]).flex(Flex::Center).areas(f.area());
     let [area]: [Rect; 1] = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center).areas(row);
     f.render_widget(Clear, area);
-    let block = Block::new().borders(Borders::ALL).title(title).title_bottom(Line::from(Span::styled(" j/k choose · enter move · esc cancel ", Style::new().fg(muted)))).border_style(Style::new().fg(accent)).style(Style::new().bg(c(th.bg)).fg(text));
-    let items: Vec<ListItem> = m.targets.iter().map(|(_, name)| ListItem::new(name.clone())).collect();
+    let block = Block::new().borders(Borders::ALL).title(title).title_bottom(Line::from(Span::styled(format!(" {hint} "), Style::new().fg(muted)))).border_style(Style::new().fg(accent)).style(Style::new().bg(c(th.bg)).fg(text));
+    let items: Vec<ListItem> = entries.iter().map(|name| ListItem::new(name.clone())).collect();
     let mut state = ListState::default();
-    state.select(Some(m.sel));
+    state.select(Some(sel));
     f.render_stateful_widget(List::new(items).block(block).highlight_style(Style::new().fg(c(th.bg)).bg(accent).add_modifier(Modifier::BOLD)), area, &mut state);
+}
+
+pub fn draw_mover(f: &mut Frame, m: &Mover, th: &Theme) {
+    let n = m.albums.len();
+    let title = if m.folder.is_some() { " Move the folder to… ".to_string() } else { format!(" Move {n} album{} to… ", if n == 1 { "" } else { "s" }) };
+    let entries: Vec<String> = m.targets.iter().map(|(_, name)| name.clone()).collect();
+    draw_choice(f, title, &entries, m.sel, "j/k choose · enter move · esc cancel", th);
+}
+
+pub fn draw_add(f: &mut Frame, a: &AddTo, th: &Theme) {
+    let entries: Vec<String> = a.targets.iter().map(|(_, name)| name.clone()).collect();
+    draw_choice(f, format!(" Add {} to… ", a.label), &entries, a.sel, "j/k choose · enter add · esc cancel", th);
 }
 
 #[cfg(test)]
@@ -110,6 +151,15 @@ mod tests {
         assert!(delete_note("A", 1, 0).contains("its 1 album move up"));
         assert!(delete_note("A", 3, 2).contains("its 3 albums and 2 subfolders move up one level"));
         assert!(delete_note("A", 3, 2).contains("no music is deleted"));
+    }
+
+    #[test]
+    fn the_playlist_chooser_starts_with_a_new_playlist_and_notes_say_what_stays() {
+        let p = |id: u64, name: &str, n: u64| crate::api::Playlist { id, name: name.into(), track_count: n, shared: false };
+        let t = playlist_targets(&[p(4, "Road", 3), p(5, "Mine", 1)]);
+        assert_eq!(t.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [None, Some(4), Some(5)]);
+        assert_eq!((t[1].1.as_str(), t[2].1.as_str()), ("Road  (3 tracks)", "Mine  (1 track)"));
+        assert!(delete_playlist_note("Road", 3).contains("its 3 tracks stay in the library"));
     }
 
     #[test]
