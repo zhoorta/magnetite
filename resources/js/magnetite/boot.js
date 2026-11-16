@@ -12,6 +12,7 @@ import storage from './storage';
 import { send } from './http';
 import { shouldPrefetch, prefetchUrl } from './prefetch';
 import { loadFont } from './font-load';
+import { metadataFor, positionState, seekTarget } from './media-session';
 import { makeOrder, advance, previous, upcoming, cycle, SHUFFLES, REPEATS } from './order';
 import dense from './dense/component';
 import { uiStore } from './dense/ui';
@@ -147,6 +148,7 @@ Alpine.store('player', {
     time: 0,
     duration: 0,
     expanded: false,
+    mediaKey: undefined, // the track the Media Session was last told about (syncMedia)
     compact: false, // phones: the docked player without the meters and with a small cover (saved; first visit on a phone starts compact)
     idle: false, // full screen only: nothing has moved for a few seconds, so the controls are hidden (see wake)
     pinned: false, // key H: keep the controls showing in full screen
@@ -266,12 +268,20 @@ Alpine.store('player', {
             // The position changes all the time; a few seconds off after a reload does not matter.
             if (performance.now() - this.savedAt > 5000) this.savePlayback();
         });
-        audio.addEventListener('durationchange', () => (this.duration = audio.duration || 0));
-        audio.addEventListener('play', () => (this.playing = true));
+        audio.addEventListener('durationchange', () => {
+            this.duration = audio.duration || 0;
+            this.syncMedia(); // a new track has loaded: tell the lock screen
+        });
+        audio.addEventListener('play', () => {
+            this.playing = true;
+            this.syncMedia();
+        });
         audio.addEventListener('pause', () => {
             this.playing = false;
             this.savePlayback();
+            this.syncMedia();
         });
+        audio.addEventListener('seeked', () => this.syncMedia(false));
         audio.addEventListener('ended', () => this.ended());
         // Chrome/Firefox cannot decode everything (e.g. ALAC in .m4a). Say so and move on.
         audio.addEventListener('error', () => this.fail());
@@ -284,6 +294,7 @@ Alpine.store('player', {
         this.setTheme(themes.find((t) => t.id === saved)?.id ?? this.themeId);
 
         document.addEventListener('keydown', (e) => this.onKey(e));
+        this.mountMediaSession();
 
         // Leaving or reloading the page: remember where we were. Signing out forgets it.
         window.addEventListener('pagehide', () => this.savePlayback());
@@ -708,6 +719,55 @@ Alpine.store('player', {
         else if (key === 't') act(() => this.cycleTheme(1));
         else if (key === 'T') act(() => this.cycleTheme(-1));
         else if (key === '?') act(() => (this.helpOpen = !this.helpOpen));
+    },
+
+    /** Lock screen, headset and media-key buttons (Media Session API); the cards show what `syncMedia` last told them. */
+    mountMediaSession() {
+        const ms = navigator.mediaSession;
+        if (!ms) return;
+
+        const el = () => this.engine.el;
+        const handlers = {
+            play: () => this.current && this.engine.play(),
+            pause: () => this.engine.pause(),
+            previoustrack: () => this.prev(),
+            nexttrack: () => this.next(),
+            stop: () => this.engine.pause(),
+        };
+        for (const type of ['seekto', 'seekbackward', 'seekforward']) {
+            handlers[type] = (d) => {
+                const to = seekTarget(d, { time: el().currentTime, duration: el().duration });
+                if (to !== null) el().currentTime = to;
+            };
+        }
+        for (const [type, fn] of Object.entries(handlers)) {
+            try {
+                ms.setActionHandler(type, fn);
+            } catch {
+                // an action this browser does not know
+            }
+        }
+    },
+
+    /** Tell the Media Session the track (when it changed or `full`), the state and the position. Never throws: it is only a nicety. */
+    syncMedia(full = true) {
+        const ms = navigator.mediaSession;
+        if (!ms || !this.engine) return;
+
+        try {
+            const track = this.current;
+            if (full && (track?.url ?? null) !== this.mediaKey) {
+                this.mediaKey = track?.url ?? null;
+                const m = metadataFor(track, location.href);
+                ms.metadata = m ? new MediaMetadata(m) : null;
+            }
+            ms.playbackState = !track ? 'none' : this.playing ? 'playing' : 'paused';
+
+            const state = positionState({ duration: this.engine.el.duration, time: this.engine.el.currentTime, rate: this.engine.el.playbackRate });
+            if (state) ms.setPositionState(state);
+        } catch {
+            // metadata or position the browser refuses
+        }
     },
 
     seek(fraction) {
