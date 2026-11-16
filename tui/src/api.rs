@@ -37,6 +37,17 @@ impl Album {
     }
 }
 
+/// One of your playlists in the list (`GET /playlists`).
+#[derive(Deserialize, Clone, Debug)]
+pub struct Playlist {
+    pub id: u64,
+    pub name: String,
+    #[serde(default)]
+    pub track_count: u64,
+    #[serde(default)]
+    pub shared: bool,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct Track {
     pub id: u64,
@@ -223,6 +234,19 @@ impl Api {
     pub fn move_album(&self, album: u64, folder: Option<u64>) -> Result<()> {
         let _: Value = self.send("PUT", &format!("/albums/{album}/folder")).send_json(json!({ "folder_id": folder })).json_body()?;
         Ok(())
+    }
+
+    /// Your playlists, by name.
+    pub fn playlists(&self) -> Result<Vec<Playlist>> {
+        let v: Value = self.get("/playlists").call().json_body()?;
+        serde_json::from_value(v["data"].clone()).map_err(|e| e.to_string())
+    }
+
+    /// A playlist's name and tracks in order; tracks you cannot play come with `open: false` and no stream url.
+    pub fn playlist(&self, id: u64) -> Result<(String, Vec<Track>)> {
+        let v: Value = self.get(&format!("/playlists/{id}")).call().json_body()?;
+        let tracks = serde_json::from_value(v["data"]["tracks"].clone()).map_err(|e| e.to_string())?;
+        Ok((v["data"]["name"].as_str().unwrap_or("").to_string(), tracks))
     }
 
     /// The user's folders, flat, with `parent_id`. A server without the endpoint (or any failure) gives no folders: a flat list.

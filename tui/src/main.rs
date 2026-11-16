@@ -22,7 +22,7 @@ mod tree;
 mod upload;
 mod truth;
 
-use api::{Album, Api, Track};
+use api::{Album, Api, Playlist, Track};
 use audio::Player;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use meters::Meters;
@@ -202,6 +202,13 @@ enum View {
     Search,
 }
 
+/// What the left list shows: the library's folders and albums, or your playlists (`P` switches).
+#[derive(Clone, Copy, PartialEq)]
+enum Source {
+    Library,
+    Playlists,
+}
+
 #[derive(PartialEq)]
 enum Focus {
     Albums,
@@ -217,6 +224,10 @@ struct App {
     albums: Vec<Album>,
     folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
     open_folders: BTreeSet<u64>,
+    source: Source,
+    playlists: Vec<Playlist>,
+    playlist_sel: ListState,
+    open_playlist: Option<u64>, // the playlist whose tracks are in the right list (`open` then stands in for an album: id 0)
     shuffle: order::Shuffle, // Z: off, tracks, albums
     repeat: order::Repeat, // R: off, all, one
     order: Vec<usize>, // queue indices in play order (the queue itself is never reordered)
@@ -288,7 +299,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), source: Source::Library, playlists: vec![], playlist_sel: ListState::default(), open_playlist: None, shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -443,6 +454,7 @@ impl App {
                 None => self.player.seek_by(-10.0),
             },
             (KeyCode::Char('d'), _) if self.view == View::Library && self.focus == Focus::Tracks && !self.full && self.ab.is_none() => self.open_details(),
+            (KeyCode::Char('P'), _) if self.in_left_list() => self.toggle_source(),
             (KeyCode::Char('x'), _) if self.in_album_list() => self.toggle_mark(),
             (KeyCode::Char('v'), _) if self.in_album_list() => self.open_mover(),
             (KeyCode::Char('N'), _) if self.in_album_list() => self.start_new_folder(),
@@ -508,7 +520,46 @@ impl App {
     }
 
     fn in_album_list(&self) -> bool {
+        self.in_left_list() && self.source == Source::Library
+    }
+
+    /// The left list has the focus in the library view (folders and albums, or playlists).
+    fn in_left_list(&self) -> bool {
         self.view == View::Library && self.focus == Focus::Albums && !self.full && self.ab.is_none()
+    }
+
+    /// `P`: the playlists in the left list, or back to the folders and albums.
+    fn toggle_source(&mut self) {
+        if self.source == Source::Playlists {
+            self.source = Source::Library;
+            self.status.clear();
+            return;
+        }
+        match self.api.playlists() {
+            Ok(list) => {
+                self.playlists = list;
+                self.playlist_sel.select(if self.playlists.is_empty() { None } else { Some(0) });
+                self.source = Source::Playlists;
+                self.status = if self.playlists.is_empty() { "no playlists yet".into() } else { "playlists · enter opens one · P goes back to the library".into() };
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    /// Open the selected playlist: its tracks fill the right list (as an album would).
+    fn open_playlist_at(&mut self) {
+        let Some(p) = self.playlist_sel.selected().and_then(|i| self.playlists.get(i)).cloned() else { return };
+        match self.api.playlist(p.id) {
+            Ok((name, tracks)) => {
+                let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, tracks };
+                self.track_sel.select(if album.tracks.is_empty() { None } else { Some(0) });
+                self.open = Some(album);
+                self.open_playlist = Some(p.id);
+                self.focus = Focus::Tracks;
+                self.status.clear();
+            }
+            Err(e) => self.status = e,
+        }
     }
 
     /// `x`: mark or unmark the selected album for a move, and go down one line.
@@ -1273,6 +1324,8 @@ impl App {
                 }
                 self.track_sel.select(if full.tracks.is_empty() { None } else { Some(0) });
                 self.open = Some(full);
+                self.open_playlist = None;
+                self.source = Source::Library;
                 self.focus = Focus::Tracks;
                 self.view = View::Library;
                 self.status.clear();
@@ -1288,13 +1341,14 @@ impl App {
             return;
         }
         let (album, track, owner, what) = match self.focus {
+            Focus::Albums if self.source == Source::Playlists => return self.status = "open the playlist and select a track to analyse".into(),
             Focus::Albums => {
                 let Some(a) = self.selected_album().and_then(|i| self.albums.get(i)) else { return self.status = "select an album (a folder line is not one)".into() };
                 (Some(a.id), None, Some(a.id), a.title.clone())
             }
             Focus::Tracks => {
                 let Some(t) = self.track_sel.selected().and_then(|i| self.open.as_ref().and_then(|a| a.tracks.get(i))) else { return };
-                (None, Some(t.id), self.open.as_ref().map(|a| a.id), t.title.clone())
+                (None, Some(t.id), t.album_id.or(self.open.as_ref().map(|a| a.id)).filter(|id| *id != 0), t.title.clone())
             }
         };
         self.status = format!("analysing {what}: asking the server");
@@ -1423,6 +1477,7 @@ impl App {
 
     fn mv(&mut self, d: i32) {
         let (state, len) = match self.focus {
+            Focus::Albums if self.source == Source::Playlists => (&mut self.playlist_sel, self.playlists.len()),
             Focus::Albums => (&mut self.album_sel, self.rows.len()),
             Focus::Tracks => (&mut self.track_sel, self.open.as_ref().map_or(0, |a| a.tracks.len())),
         };
@@ -1434,6 +1489,7 @@ impl App {
 
     fn enter(&mut self) {
         match self.focus {
+            Focus::Albums if self.source == Source::Playlists => self.open_playlist_at(),
             Focus::Albums => {
                 // a folder line opens or closes; an album line opens its tracks
                 if let Some(tree::Row::Folder { id, open, .. }) = self.album_sel.selected().and_then(|i| self.rows.get(i)).cloned() {
@@ -1453,6 +1509,7 @@ impl App {
                             self.albums[ai].display_artist = Some(full.shown_artist()).filter(|a| !a.is_empty());
                         }
                         self.open = Some(full);
+                        self.open_playlist = None;
                         self.focus = Focus::Tracks;
                         self.status.clear();
                     }
@@ -1462,7 +1519,8 @@ impl App {
             Focus::Tracks => {
                 let (Some(album), Some(i)) = (&self.open, self.track_sel.selected()) else { return };
                 self.queue = album.tracks.clone();
-                self.queue_albums = vec![album.id; album.tracks.len()];
+                // a playlist mixes albums: each track keeps its own
+                self.queue_albums = if self.open_playlist.is_some() { album.tracks.iter().map(|t| t.album_id.unwrap_or(0)).collect() } else { vec![album.id; album.tracks.len()] };
                 self.start(i);
             }
         }
@@ -1697,6 +1755,21 @@ impl App {
         let [left, right] = Layout::horizontal([Constraint::Percentage(42), Constraint::Percentage(58)]).areas(body);
         let pane = |on: bool, title: String| Block::new().borders(Borders::ALL).border_style(Style::new().fg(if on { accent } else { muted })).title(title).style(Style::new().bg(c(th.surface)).fg(text));
         let sel = Style::new().fg(c(th.bg)).bg(accent);
+        if self.source == Source::Playlists {
+            let items: Vec<ListItem> = self
+                .playlists
+                .iter()
+                .map(|p| {
+                    let open = self.open_playlist == Some(p.id);
+                    ListItem::new(Line::from(vec![
+                        Span::styled(if open { "▸ " } else { "  " }, Style::new().fg(accent)),
+                        Span::styled(p.name.clone(), Style::new().fg(accent).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("  {} track{}{}", p.track_count, if p.track_count == 1 { "" } else { "s" }, if p.shared { " · shared" } else { "" }), Style::new().fg(muted)),
+                    ]))
+                })
+                .collect();
+            f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, " Playlists ".into())).highlight_style(sel), left, &mut self.playlist_sel);
+        } else {
         let holding = self.folders_holding_playing();
         let items: Vec<ListItem> = self
             .rows
@@ -1729,6 +1802,7 @@ impl App {
             })
             .collect();
         f.render_stateful_widget(List::new(items).block(pane(self.focus == Focus::Albums, if self.folders.is_empty() { " Albums ".into() } else if self.flat { " Albums (flat) ".into() } else { " Folders and albums ".into() })).highlight_style(sel), left, &mut self.album_sel);
+        }
 
         let playing = self.now.and_then(|i| self.queue.get(i)).map(|t| t.id);
         let mt = self.meter_theme(&th);
@@ -2153,7 +2227,15 @@ mod folder_tests {
                     }
                 }
                 let head = String::from_utf8_lossy(&got).to_string();
-                let body = if head.starts_with("POST /api/v1/folders") { r#"{"folder":{"id":9,"parent_id":null,"name":"Blues"}}"# } else { r#"{"album":{"id":1,"folder_id":1}}"# };
+                let body = if head.starts_with("POST /api/v1/folders") {
+                    r#"{"folder":{"id":9,"parent_id":null,"name":"Blues"}}"#
+                } else if head.starts_with("GET /api/v1/playlists/4") {
+                    r#"{"data":{"id":4,"name":"Road","mine":true,"tracks":[{"id":11,"title":"A","album_id":7,"open":true,"stream_url":"http://127.0.0.1:1/a"},{"id":12,"title":"B","album_id":9,"open":true,"stream_url":"http://127.0.0.1:1/b"},{"id":13,"title":"C","album_id":9,"open":false}]}}"#
+                } else if head.starts_with("GET /api/v1/playlists") {
+                    r#"{"data":[{"id":4,"name":"Road","track_count":3,"shared":false},{"id":5,"name":"Mine","track_count":1,"shared":true}]}"#
+                } else {
+                    r#"{"album":{"id":1,"folder_id":1}}"#
+                };
                 let status = if head.starts_with("POST") { "201 Created" } else { "200 OK" };
                 let _ = write!(s, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
             }
@@ -2566,5 +2648,37 @@ mod folder_tests {
         assert_eq!((app.cfg.shuffle.as_deref(), app.cfg.repeat.as_deref()), (Some("tracks"), Some("one")));
         app.key(KeyCode::Char('Z'), KeyModifiers::NONE);
         assert_eq!(app.modes_label(), " · repeat one");
+    }
+
+    #[test]
+    fn p_shows_the_playlists_enter_opens_one_and_enter_on_a_track_plays_it_with_each_tracks_album() {
+        let Some(mut app) = app_at(&mock_server(2), json!([])) else { return };
+        app.key(KeyCode::Char('P'), KeyModifiers::NONE);
+        assert!(app.source == Source::Playlists, "{}", app.status);
+        assert_eq!(app.playlists.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Road", "Mine"]);
+        assert_eq!(app.playlist_sel.selected(), Some(0));
+
+        app.key(KeyCode::Char('N'), KeyModifiers::NONE); // the folder keys do nothing here
+        app.key(KeyCode::Char('z'), KeyModifiers::NONE);
+        assert!(app.prompt.is_none() && !app.flat);
+
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE);
+        assert_eq!(app.playlist_sel.selected(), Some(1));
+        app.key(KeyCode::Char('k'), KeyModifiers::NONE);
+        app.key(KeyCode::Enter, KeyModifiers::NONE);
+        assert!(app.focus == Focus::Tracks && app.open_playlist == Some(4), "{}", app.status);
+        let open = app.open.as_ref().unwrap();
+        assert_eq!((open.title.as_str(), open.tracks.len()), ("Road", 3));
+
+        app.key(KeyCode::Char('j'), KeyModifiers::NONE);
+        app.key(KeyCode::Enter, KeyModifiers::NONE); // play B
+        assert_eq!(app.now, Some(1));
+        assert_eq!(app.queue_albums, [7, 9, 9]); // a playlist mixes albums: each track keeps its own
+        app.step(1, false); // C is not shared with you: nothing to play after B
+        assert_eq!(app.now, Some(1));
+
+        app.key(KeyCode::Esc, KeyModifiers::NONE);
+        app.key(KeyCode::Char('P'), KeyModifiers::NONE);
+        assert!(app.source == Source::Library);
     }
 }
