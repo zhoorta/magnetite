@@ -161,6 +161,17 @@ impl Api {
         self.get("/me").call().ok().and_then(|r| r.into_json::<Value>().ok()).and_then(|v| v["meters"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())).unwrap_or_default()
     }
 
+    /// The account's info level (`ui.info` from `/me`), when the server sends it.
+    pub fn ui_info(&self) -> Option<u8> {
+        self.get("/me").call().ok().and_then(|r| r.into_json::<Value>().ok()).and_then(|v| v["ui"]["info"].as_u64()).map(crate::info::clamp)
+    }
+
+    /// Save the info level on the account (the web library shows the same level).
+    pub fn set_ui_info(&self, level: u8) -> Result<()> {
+        let _: Value = self.send("PUT", "/settings/ui").send_json(json!({ "info": level })).json_body()?;
+        Ok(())
+    }
+
     /// Every page of a list endpoint (`path` may carry a query; `page` is added).
     fn all_pages<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<Vec<T>> {
         let sep = if path.contains('?') { '&' } else { '?' };

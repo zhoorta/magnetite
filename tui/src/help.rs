@@ -25,6 +25,7 @@ const PLAYBACK: Section = ("Playback", &[
     ("n / p", "next / previous (p restarts after 3 s)"),
     (", / .", "seek -10 s / +10 s"),
     ("L", "loudness matching: off, album, track"),
+    ("I", "how much to show about a file (track rows, the player): all, DR only, off; kept on your account"),
 ]);
 
 const METERS: Section = ("Meters", &[

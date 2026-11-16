@@ -6,6 +6,7 @@ mod blocks;
 mod config;
 mod cover;
 mod help;
+mod info;
 mod loudness;
 mod media;
 mod meters;
@@ -180,6 +181,9 @@ fn run() {
     let folders = api.folders();
     let mut app = App::new(api, albums, player, cfg);
     app.set_folders(folders);
+    if let Some(level) = app.api.ui_info() {
+        app.info = level;
+    }
     app.restore();
     let mut term = ratatui::init();
     let res = app.run(&mut term);
@@ -211,6 +215,7 @@ struct App {
     albums: Vec<Album>,
     folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
     open_folders: BTreeSet<u64>,
+    info: u8, // I: how much the track rows and the player say about a file (the account's setting)
     flat: bool, // z: every album in one list, no folders
     marks: BTreeSet<u64>, // ids of the albums marked with x, to be moved together
     prompt: Option<organize::Prompt>, // N: typing the name of a new folder
@@ -274,7 +279,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -413,6 +418,7 @@ impl App {
             }
             (KeyCode::Char('t'), _) => self.cycle_theme(1),
             (KeyCode::Char('T'), _) => self.cycle_theme(-1),
+            (KeyCode::Char('I'), _) => self.cycle_info(),
             (KeyCode::Char('.'), _) => match self.resume {
                 Some(p) => self.resume = Some(p + 10.0),
                 None => self.player.seek_by(10.0),
@@ -445,6 +451,16 @@ impl App {
         let (Some(t), Some(album)) = (self.now.and_then(|i| self.queue.get(i)), self.playing_album()) else { return };
         self.cfg.last = Some(config::Last { album, track: t.id, position: self.player.position() });
         let _ = config::save(&self.cfg);
+    }
+
+    /// `I`: all, DR only, off. Kept on the account (a background request that may fail without anyone noticing).
+    fn cycle_info(&mut self) {
+        self.info = info::cycle(self.info);
+        self.status = format!("info: {}", info::label(self.info));
+        let (api, level) = (self.api.clone(), self.info);
+        std::thread::spawn(move || {
+            let _ = api.set_ui_info(level);
+        });
     }
 
     fn in_album_list(&self) -> bool {
@@ -850,6 +866,9 @@ impl App {
             al.push(format!("album DR{}", dr.round() as i32));
         }
         lines.push(Line::from(al.join(" · ")).style(dim));
+        if self.info == 0 {
+            return lines; // info off: the title, the artist and the album line only
+        }
         lines.push(Line::raw(""));
         let tr = t.truth.clone().unwrap_or_default();
         let mut q = vec![t.codec.clone().unwrap_or_default().to_uppercase()];
@@ -902,10 +921,10 @@ impl App {
             if !l.is_empty() {
                 lines.push(Line::from(l.join(" · ")).style(dim));
             }
-            if !tr.flags.is_empty() {
+            if !tr.flags.is_empty() && self.info >= 2 {
                 lines.push(Line::raw(""));
             }
-            for fl in &tr.flags {
+            for fl in tr.flags.iter().filter(|_| self.info >= 2) {
                 let (level, label, detail) = (fl["level"].as_str().unwrap_or(""), fl["label"].as_str().unwrap_or(""), fl["detail"].as_str().unwrap_or(""));
                 let col = match level {
                     "problem" => c((0xff, 0x4d, 0x4d)),
@@ -1668,10 +1687,9 @@ impl App {
                 let n = t.number.map_or(String::new(), |n| n.to_string());
                 let style = if Some(t.id) == playing { Style::new().fg(c(th.accent2)) } else if t.open { Style::new() } else { Style::new().fg(muted) };
                 let mut spans = vec![Span::raw(format!("{mark}{n:>2} {:<30} {:>6}", t.title, mmss(t.duration.unwrap_or(0.0))))];
-                // what the analysis found: a marker (✗ problem, ! warning, · note) and the dynamic range; nothing until it is analysed
-                if let Some(tr) = t.truth.as_ref().filter(|x| x.analyzed) {
-                    let sev = truth::severity(t);
-                    spans.push(Span::styled(format!("  {} DR{}", analyze::mark(t), tr.dr.map_or("–".to_string(), |d| format!("{d:>2.0}"))), Style::new().fg(if sev >= 2 { c(th.accent2) } else { muted })));
+                // what the analysis found, as much as the info level (I) says: DR, and at level 2 a marker (✗ problem, ! warning, · note)
+                if let Some((text, flagged)) = info::row_extra(t, self.info, analyze::mark(t)) {
+                    spans.push(Span::styled(text, Style::new().fg(if flagged { c(th.accent2) } else { muted })));
                 }
                 if Some(t.id) == playing {
                     // a live spectrum peek beside the playing track; on the selected row (accent background) it is drawn in the page colour
@@ -1708,27 +1726,12 @@ impl App {
             f.render_widget(Paragraph::new("Nothing playing. Open an album and press enter.").style(Style::new().fg(muted)), info);
             return;
         };
-        let truth = t.truth.clone().unwrap_or_default();
-        let mut meta = vec![t.codec.clone().unwrap_or_default().to_uppercase()];
-        if let (Some(b), Some(sr)) = (truth.bits, truth.sample_rate) {
-            meta.push(format!("{}/{}", b as u32, sr / 1000.0));
-        }
-        if let Some(dr) = truth.dr {
-            meta.push(format!("DR{}", dr as i32));
-        }
-        if let Some(l) = truth.lufs {
-            meta.push(format!("{l:.1} LUFS"));
-        }
-        if truth.analyzed {
-            if !truth.flags.is_empty() {
-                meta.push(format!("{} finding(s) !", truth.flags.len()));
-            }
-        }
+        let meta = info::meta_line(t, self.info);
         let state = if self.player.loading() { "  loading…" } else if self.player.paused() || self.resume.is_some() { "  paused" } else { "" };
         f.render_widget(
             Paragraph::new(vec![
                 Line::from(vec![Span::styled(t.artist.clone().unwrap_or_default(), Style::new().add_modifier(Modifier::BOLD)), Span::raw(format!(" — {}{state}", t.title))]),
-                Line::from(meta.join(" · ")).style(Style::new().fg(muted)),
+                Line::from(meta).style(Style::new().fg(muted)),
             ]),
             info,
         );
@@ -2386,5 +2389,17 @@ mod folder_tests {
         assert_eq!(queue[0].truth.as_ref().and_then(|x| x.dr), Some(9.0));
         assert_eq!(queue[1].truth.as_ref().and_then(|x| x.dr), Some(6.0));
         assert!(queue[2].truth.is_none()); // not album 7: untouched
+    }
+
+    #[test]
+    fn shift_i_cycles_the_info_level_and_says_so() {
+        let Some(mut app) = app() else { return };
+        assert_eq!(app.info, 2);
+        app.key(KeyCode::Char('I'), KeyModifiers::NONE);
+        assert_eq!((app.info, app.status.as_str()), (1, "info: DR only"));
+        app.key(KeyCode::Char('I'), KeyModifiers::NONE);
+        assert_eq!((app.info, app.status.as_str()), (0, "info: off"));
+        app.key(KeyCode::Char('I'), KeyModifiers::NONE);
+        assert_eq!((app.info, app.status.as_str()), (2, "info: all"));
     }
 }
