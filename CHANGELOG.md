@@ -13,7 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions follow [semver
 - File truth: loudness, true peak, dynamic range, clipping, lossy-source and upsampling findings per file.
 - Multi-user libraries with sharing, playlists, Ferrite storage, and a read-only demo library.
 - Themes as JSON, with the theme studio and 16 bundled open fonts.
-- The terminal client shows the library's folders as a tree, remembers which are open, makes, renames (`r`), moves and deletes (`d`) folders, moves albums into them (`x` marks, `v` chooses), shows folders in the search has a flat list (`z`) the info level (`I`, shared with the web) and a details panel for a file with the spectrum graph (`d`).
+- The terminal client shows the library's folders as a tree, remembers which are open, makes, renames (`r`), moves and deletes (`d`) folders, moves albums into them (`x` marks, `v` chooses), shows folders in the search has a flat list (`z`) the info level (`I`, shared with the web) a details panel for a file with the spectrum graph (`d`), and shuffle (`Z`) and repeat (`R`).
 
 ### Changed
 - The whole repository is licensed AGPL-3.0-or-later.

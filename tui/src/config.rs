@@ -27,6 +27,11 @@ pub struct Config {
     /// The folders that were open in the album list (ids), so the list looks the same at the next start.
     #[serde(default)]
     pub open_folders: Vec<u64>,
+    /// Shuffle ("off", "tracks", "albums") and repeat ("off", "all", "one"); absent: off.
+    #[serde(default)]
+    pub shuffle: Option<String>,
+    #[serde(default)]
+    pub repeat: Option<String>,
     /// `z`: the album list as one flat list, without folders.
     #[serde(default)]
     pub flat: bool,

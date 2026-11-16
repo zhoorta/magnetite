@@ -11,6 +11,7 @@ mod info;
 mod loudness;
 mod media;
 mod meters;
+mod order;
 mod organize;
 mod panels;
 mod posters;
@@ -87,7 +88,7 @@ fn login(server: Option<&String>) {
     };
     match result {
         Ok((token, username)) => {
-            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint), loudness: config::load().and_then(|c| c.loudness), cell_aspect: config::load().and_then(|c| c.cell_aspect), open_folders: vec![], flat: config::load().is_some_and(|c| c.flat) }).expect("could not save the config");
+            config::save(&config::Config { server: server.trim_end_matches('/').into(), token, username: username.clone(), theme: config::load().and_then(|c| c.theme), meters: None, last: config::load().and_then(|c| c.last), tint: config::load().and_then(|c| c.tint), loudness: config::load().and_then(|c| c.loudness), cell_aspect: config::load().and_then(|c| c.cell_aspect), open_folders: vec![], flat: config::load().is_some_and(|c| c.flat), shuffle: config::load().and_then(|c| c.shuffle), repeat: config::load().and_then(|c| c.repeat) }).expect("could not save the config");
             println!("Signed in as {username}.");
         }
         Err(e) => eprintln!("Sign-in failed: {e}"),
@@ -216,6 +217,11 @@ struct App {
     albums: Vec<Album>,
     folders: Vec<tree::Folder>, // the user's folders (none: a flat list)
     open_folders: BTreeSet<u64>,
+    shuffle: order::Shuffle, // Z: off, tracks, albums
+    repeat: order::Repeat, // R: off, all, one
+    order: Vec<usize>, // queue indices in play order (the queue itself is never reordered)
+    order_ids: Vec<u64>, // the tracks `order` was made for
+    rng: order::Rng,
     details: Option<details::Details>, // d: the measurements and the spectrum of one track
     info: u8, // I: how much the track rows and the player say about a file (the account's setting)
     flat: bool, // z: every album in one list, no folders
@@ -276,12 +282,13 @@ impl App {
         let loud = loudness::Mode::from_id(cfg.loudness.as_deref().unwrap_or("off"));
         let tint_cur = { let t = &themes[theme]; [t.accent.0 as f32, t.accent.1 as f32, t.accent.2 as f32, t.accent2.0 as f32, t.accent2.1 as f32, t.accent2.2 as f32] };
         let flat = cfg.flat;
+        let (shuffle, repeat) = (order::Shuffle::from_id(cfg.shuffle.as_deref().unwrap_or("off")), order::Repeat::from_id(cfg.repeat.as_deref().unwrap_or("off")));
         let rows = tree::rows(&[], &albums, &BTreeSet::new());
         let mut album_sel = ListState::default();
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -425,6 +432,8 @@ impl App {
             (KeyCode::Char('t'), _) => self.cycle_theme(1),
             (KeyCode::Char('T'), _) => self.cycle_theme(-1),
             (KeyCode::Char('I'), _) => self.cycle_info(),
+            (KeyCode::Char('Z'), _) => self.cycle_shuffle(),
+            (KeyCode::Char('R'), _) => self.cycle_repeat(),
             (KeyCode::Char('.'), _) => match self.resume {
                 Some(p) => self.resume = Some(p + 10.0),
                 None => self.player.seek_by(10.0),
@@ -1468,18 +1477,92 @@ impl App {
         }
     }
 
-    /// Next or previous playable track; at the end of the queue playback just stops.
+    /// The album of each queued track (none for a track without one), for the shuffle by albums.
+    fn album_ids(&self) -> Vec<Option<u64>> {
+        (0..self.queue.len()).map(|i| self.queue_albums.get(i).copied().filter(|a| *a != 0).or(self.queue[i].album_id)).collect()
+    }
+
+    /// Make the play order again when the queue is not the one it was made for; `first` plays first (so a shuffle never jumps away
+    /// from the track that is starting).
+    fn ensure_order(&mut self, first: usize) {
+        let ids: Vec<u64> = self.queue.iter().map(|t| t.id).collect();
+        if self.order_ids != ids || self.order.len() != ids.len() {
+            self.order = order::make_order(&self.album_ids(), self.shuffle, Some(first), &mut || self.rng.next_f32());
+            self.order_ids = ids;
+        }
+    }
+
+    /// `Z`: shuffle off, tracks, albums. The order is made again from the playing track, so nothing jumps.
+    fn cycle_shuffle(&mut self) {
+        self.shuffle = self.shuffle.cycle();
+        self.order_ids.clear();
+        if let Some(now) = self.now {
+            self.ensure_order(now);
+        }
+        self.cfg.shuffle = Some(self.shuffle.id().to_string());
+        let _ = config::save(&self.cfg);
+        self.status = format!("shuffle: {}", self.shuffle.id());
+    }
+
+    /// `R`: repeat off, all, one.
+    fn cycle_repeat(&mut self) {
+        self.repeat = self.repeat.cycle();
+        self.cfg.repeat = Some(self.repeat.id().to_string());
+        let _ = config::save(&self.cfg);
+        self.status = format!("repeat: {}", self.repeat.id());
+    }
+
+    /// What is on, for the Now playing title: ` · shuffle albums · repeat one`.
+    fn modes_label(&self) -> String {
+        let mut s = String::new();
+        match self.shuffle {
+            order::Shuffle::Off => {}
+            order::Shuffle::Tracks => s.push_str(" · shuffle"),
+            order::Shuffle::Albums => s.push_str(" · shuffle albums"),
+        }
+        match self.repeat {
+            order::Repeat::Off => {}
+            order::Repeat::All => s.push_str(" · repeat"),
+            order::Repeat::One => s.push_str(" · repeat one"),
+        }
+        s
+    }
+
+    /// Next (`d` > 0) or previous playable track, in the play order. At the end playback stops (`auto`: the track ran out) or, with
+    /// repeat all, goes round; repeat one plays the same track again when it ends by itself.
     fn step(&mut self, d: i32, auto: bool) {
         let Some(now) = self.now else { return };
-        let mut i = now as i32 + d;
-        while i >= 0 && (i as usize) < self.queue.len() && self.queue[i as usize].stream_url.is_none() {
-            i += d;
+        if auto && self.repeat == order::Repeat::One {
+            return self.start(now);
         }
-        if i >= 0 && (i as usize) < self.queue.len() {
-            self.start(i as usize);
-        } else if auto {
+        self.ensure_order(now);
+        let albums = self.album_ids();
+        let mut at = now;
+        for _ in 0..self.queue.len().max(1) {
+            let next = if d > 0 {
+                let order = self.order.clone();
+                order::advance(&albums, &order, at, self.shuffle, self.repeat, &mut || self.rng.next_f32()).map(|(i, o)| {
+                    self.order = o;
+                    i
+                })
+            } else {
+                order::previous(&self.order, at)
+            };
+            match next {
+                Some(i) if self.queue[i].stream_url.is_some() => return self.start(i),
+                Some(i) => at = i, // not shared with you: on to the next one
+                None => break,
+            }
+        }
+        if auto {
             self.player.stop();
             self.now = None;
+        } else if d < 0 {
+            // the first of the order: previous starts it again, as the web does
+            match self.resume {
+                Some(_) => self.resume = Some(0.0),
+                None => self.player.seek_to(0.0),
+            }
         }
     }
 
@@ -1494,9 +1577,15 @@ impl App {
                 self.player.play(&self.api, url);
                 self.apply_gain();
                 self.save_last();
-                // warm the next playable track
-                if let Some(next) = self.queue.iter().skip(i + 1).find_map(|t| t.stream_url.clone()) {
-                    self.player.prefetch(&self.api, next);
+                // warm the next playable track, the one that comes next in the play order
+                self.ensure_order(i);
+                let mut at = i;
+                while let Some(n) = order::upcoming(&self.order, at) {
+                    if let Some(url) = self.queue[n].stream_url.clone() {
+                        self.player.prefetch(&self.api, url);
+                        break;
+                    }
+                    at = n;
                 }
             }
             None => self.status = "this track is not shared with you".into(),
@@ -1684,7 +1773,7 @@ impl App {
 
     fn draw_now(&mut self, f: &mut Frame, area: Rect, th: &Theme) {
         let (muted, accent) = (c(th.muted), c(th.accent));
-        let block = Block::new().borders(Borders::ALL).border_style(Style::new().fg(muted)).title(format!(" Now playing{} ", self.lm_label().map_or(String::new(), |l| format!(" · {l}")))).style(Style::new().bg(c(th.surface)).fg(c(th.text)));
+        let block = Block::new().borders(Borders::ALL).border_style(Style::new().fg(muted)).title(format!(" Now playing{}{} ", self.lm_label().map_or(String::new(), |l| format!(" · {l}")), self.modes_label())).style(Style::new().bg(c(th.surface)).fg(c(th.text)));
         let inner = block.inner(area);
         f.render_widget(block, area);
         let t = self.now.and_then(|i| self.queue.get(i));
@@ -2409,5 +2498,78 @@ mod folder_tests {
             app.info = level;
             assert_eq!(text(&app).contains("album DR9"), has, "info {level}");
         }
+    }
+
+    fn playing_queue(app: &mut App, albums: &[u64]) {
+        app.queue = albums.iter().enumerate().map(|(i, _)| serde_json::from_value(json!({"id": 100 + i as u64, "title": format!("T{i}"), "open": true, "stream_url": "http://127.0.0.1:1/x"})).unwrap()).collect();
+        app.queue_albums = albums.to_vec();
+        app.now = Some(0);
+    }
+
+    #[test]
+    fn next_follows_the_queue_stops_at_the_end_and_repeat_all_goes_round() {
+        let Some(mut app) = app() else { return };
+        playing_queue(&mut app, &[1, 1, 1]);
+        app.step(1, false);
+        assert_eq!(app.now, Some(1));
+        app.step(1, false);
+        app.step(1, true); // the last one ran out
+        assert_eq!(app.now, None); // repeat off: playback stops
+
+        playing_queue(&mut app, &[1, 1, 1]);
+        app.key(KeyCode::Char('R'), KeyModifiers::NONE);
+        assert_eq!((app.repeat, app.status.as_str()), (order::Repeat::All, "repeat: all"));
+        app.now = Some(2);
+        app.step(1, true);
+        assert_eq!(app.now, Some(0)); // round to the start
+    }
+
+    #[test]
+    fn repeat_one_plays_the_same_track_when_it_ends_but_next_still_moves_on() {
+        let Some(mut app) = app() else { return };
+        playing_queue(&mut app, &[1, 1, 1]);
+        app.repeat = order::Repeat::One;
+        app.now = Some(1);
+        app.step(1, true);
+        assert_eq!(app.now, Some(1));
+        app.step(1, false); // the n key
+        assert_eq!(app.now, Some(2));
+    }
+
+    #[test]
+    fn shuffle_plays_every_track_once_starting_with_the_chosen_one_and_previous_goes_back_in_that_order() {
+        let Some(mut app) = app() else { return };
+        playing_queue(&mut app, &[1, 1, 2, 2, 3, 3]);
+        app.key(KeyCode::Char('Z'), KeyModifiers::NONE);
+        assert_eq!((app.shuffle, app.status.as_str()), (order::Shuffle::Tracks, "shuffle: tracks"));
+        app.now = Some(3);
+        app.order_ids.clear(); // a new queue is made around the chosen track
+        let mut seen = vec![3];
+        for _ in 0..5 {
+            app.step(1, false);
+            seen.push(app.now.unwrap());
+        }
+        let mut all = seen.clone();
+        all.sort();
+        assert_eq!(all, [0, 1, 2, 3, 4, 5]);
+        assert_eq!(app.order[0], 3);
+        app.step(1, true); // the end, repeat off
+        assert_eq!(app.now, None);
+
+        app.now = Some(seen[2]);
+        app.step(-1, false);
+        assert_eq!(app.now, Some(seen[1])); // previous follows the shuffled order, not the queue's
+    }
+
+    #[test]
+    fn the_title_says_what_is_on_and_the_modes_are_saved_in_the_config_values() {
+        let Some(mut app) = app() else { return };
+        assert_eq!(app.modes_label(), "");
+        app.key(KeyCode::Char('Z'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('Z'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('R'), KeyModifiers::NONE);
+        app.key(KeyCode::Char('R'), KeyModifiers::NONE);
+        assert_eq!(app.modes_label(), " · shuffle albums · repeat one");
+        assert_eq!((app.cfg.shuffle.as_deref(), app.cfg.repeat.as_deref()), (Some("albums"), Some("one")));
     }
 }
