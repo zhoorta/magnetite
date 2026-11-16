@@ -4,7 +4,7 @@
 
 `/` (start page), `/themes` and `/login` are public. `/library`, `/stream/{track}`, `/cover/{album}` and `/upload` need a signed-in user; guests are sent to `/login` and back afterwards. There are no roles: any user may upload.
 
-Users sign in with a username and password (the e-mail column is optional, Magnetite sends no mail). There is no registration page:
+Users sign in with a username and password (the e-mail column is optional, Magnetite sends no mail). The first user is made on `/setup` (only while there are no users; optional `MAGNETITE_SETUP_TOKEN`), then there is no registration page:
 
     php artisan magnetite:user jose              # asks for the password twice
     php artisan magnetite:user jose --reset      # change the password of an existing user

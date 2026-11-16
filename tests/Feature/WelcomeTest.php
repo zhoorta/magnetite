@@ -1,5 +1,9 @@
 <?php
 
+use App\Models\User;
+
+beforeEach(fn () => User::factory()->create()); // with no user at all, visitors go to /setup
+
 it('shows the landing page', function () {
     $this->get(route('welcome'))
         ->assertOk()

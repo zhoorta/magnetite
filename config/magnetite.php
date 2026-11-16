@@ -1,6 +1,10 @@
 <?php
 
 return [
+    // Optional. When set, the first-run form at /setup also asks for it. Left empty, whoever opens /setup first
+    // while there is no user becomes the administrator.
+    'setup_token' => env('MAGNETITE_SETUP_TOKEN'),
+
     // Where the start page's demo tracks are (FLAC files named in resources/demo/tracks.json). Not in git:
     // `bin/prepare-demo.sh` makes them and they are copied to the server.
     'demo_path' => env('MAGNETITE_DEMO_PATH', storage_path('app/demo')),

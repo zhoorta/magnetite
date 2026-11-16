@@ -239,10 +239,9 @@
         <p class="mt-2 max-w-prose text-muted">
             Magnetite runs in one Docker container, or directly with PHP 8.3 and Node. With Docker, from a copy of the source:
         </p>
-        <pre class="mt-4 overflow-x-auto rounded-theme border border-white/10 bg-surface p-4 text-xs leading-relaxed text-muted"><code>MAGNETITE_USER=yourname docker compose up -d --build
-docker compose logs app | grep Password</code></pre>
+        <pre class="mt-4 overflow-x-auto rounded-theme border border-white/10 bg-surface p-4 text-xs leading-relaxed text-muted"><code>docker compose up -d --build</code></pre>
         <p class="mt-4 max-w-prose text-sm text-muted">
-            The second line prints the password of the first user. Then open http://localhost:8080.
+            Then open http://localhost:8080 and create your user in the browser.
             The <a href="{{ route('guide', 'install') }}" wire:navigate class="text-accent underline">install page</a> has the details,
             and the <a href="{{ route('guide') }}" wire:navigate class="text-accent underline">documentation</a> covers the library, the meters, the file analysis, themes, sharing and the clients.
         </p>

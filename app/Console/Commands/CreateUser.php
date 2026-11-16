@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Support\UserRules;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -48,7 +49,7 @@ class CreateUser extends Command
 
         $validator = Validator::make(
             ['username' => $username, 'password' => $password],
-            ['username' => ['required', 'string', 'max:64', 'regex:/^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u'], 'password' => ['required', 'string', 'min:8']],
+            ['username' => UserRules::username(), 'password' => UserRules::password()],
         );
 
         if ($validator->fails()) {

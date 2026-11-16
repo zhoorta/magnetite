@@ -8,17 +8,19 @@ Needs Docker with Compose. The image is built from the source, so the first star
 
     git clone <repository address> magnetite
     cd magnetite
-    MAGNETITE_USER=yourname docker compose up -d --build
-    docker compose logs app | grep Password
+    docker compose up -d --build
 
-The last command prints the password of the first user. It is printed once. Then open `http://localhost:8080` and sign in.
+Then open `http://localhost:8080`. While there is no user, you land on a set-up page where you choose a username and a password; that first user is the administrator.
 
-The first start creates everything it needs: the application key, the SQLite database, the first user and the queue worker that scans the library. Nothing has to be configured.
+The first start creates everything it needs: the application key, the SQLite database and the queue worker that scans the library. Nothing has to be configured.
+
+Until that form is finished, anyone who can reach the address can fill it in and become the administrator. On a server that is already public, do it at once, or protect it with `MAGNETITE_SETUP_TOKEN` (below), or create the user from the shell with `MAGNETITE_USER`. The page is gone (404) as soon as a user exists.
 
 | Variable | What it does | Default |
 |---|---|---|
-| `MAGNETITE_USER` | Name of the first user, created on the first start | none |
-| `MAGNETITE_PASSWORD` | Password of the first user | generated and printed once |
+| `MAGNETITE_USER` | Name of the first user, created on the first start from the shell instead of the set-up page | none |
+| `MAGNETITE_PASSWORD` | Password of that user | generated and printed once in `docker compose logs app` |
+| `MAGNETITE_SETUP_TOKEN` | When set, the set-up page asks for it too | none |
 | `MAGNETITE_PORT` | Port on the host | 8080 |
 | `MAGNETITE_MUSIC_DIR` | A folder on the host that holds the music | a Docker volume |
 

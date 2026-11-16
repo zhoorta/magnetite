@@ -4,6 +4,7 @@ use App\Models\User;
 use App\Support\DemoTracks;
 
 beforeEach(function () {
+    User::factory()->create(); // an instance that is set up: with no user at all, visitors go to /setup
     $this->dir = sys_get_temp_dir().'/magnetite-demo-'.uniqid();
     mkdir($this->dir);
     config(['magnetite.demo_path' => $this->dir]);

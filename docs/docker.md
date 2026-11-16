@@ -5,7 +5,8 @@ One image (`Dockerfile`) and one container (`compose.yaml`): FrankenPHP (Caddy w
 ## Quick start
 
     git clone <the repository> magnetite && cd magnetite
-    MAGNETITE_USER=jose docker compose up -d --build
+    docker compose up -d --build   # then open the address: /setup creates the first user (administrator)
+    # or from the shell: MAGNETITE_USER=jose docker compose up -d --build
     docker compose logs app | grep Password        # the password of the first user, printed once
     # open http://localhost:8080 and sign in
 

@@ -4,7 +4,7 @@
 #
 # First start, with nothing configured: makes an application key (kept in the data volume), creates the SQLite
 # file, migrates, creates the first user from MAGNETITE_USER (and MAGNETITE_PASSWORD, or a random one that is
-# printed once) and starts a queue worker next to the web server.
+# printed once) when that is set, otherwise the first visitor creates it at /setup and starts a queue worker next to the web server.
 set -eu
 
 mkdir -p storage/app/private storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs
@@ -44,6 +44,9 @@ case "$*" in
                     else
                         php artisan magnetite:user "$MAGNETITE_USER" --generate --admin --if-missing
                     fi
+                else
+                    # No MAGNETITE_USER: the first user is created in the browser, at /setup.
+                    php artisan magnetite:setup-hint
                 fi
                 ;;
         esac

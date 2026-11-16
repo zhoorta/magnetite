@@ -21,6 +21,7 @@ use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\PrefetchController;
 use App\Http\Controllers\ScanController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\SetupController;
 use App\Http\Controllers\ShareController;
 use App\Http\Controllers\StorageController;
 use App\Http\Controllers\StreamController;
@@ -40,6 +41,10 @@ Route::get('/docs/{page?}', function (?string $page = null) {
     return view('pages.guide', ['page' => $page, 'html' => $html, 'pages' => Guide::PAGES, 'neighbours' => Guide::neighbours($page)]);
 })->where('page', '[a-z-]+')->name('guide');
 Route::get('/demo/{id}', DemoController::class)->where('id', '[a-z0-9-]+')->middleware('throttle:120,1')->name('demo');
+
+// First run only: 404 as soon as a user exists.
+Route::get('/setup', [SetupController::class, 'create'])->name('setup');
+Route::post('/setup', [SetupController::class, 'store'])->middleware('throttle:5,1')->name('setup.store');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');

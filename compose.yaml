@@ -1,8 +1,10 @@
 # Magnetite in one container: the web server (FrankenPHP, which is Caddy with PHP) and a queue worker for library scans.
 #
-#   MAGNETITE_USER=jose docker compose up -d --build
-#   docker compose logs app          # the password of the first user is printed once (or set MAGNETITE_PASSWORD)
-#   then open http://localhost:8080
+#   docker compose up -d --build
+#   then open http://localhost:8080 and create the first user (the administrator) in the browser
+#
+# To create the first user from the shell instead: MAGNETITE_USER=jose docker compose up -d --build (the password
+# is printed once in `docker compose logs app`, or set MAGNETITE_PASSWORD).
 #
 # Nothing else is needed: the application key is made on the first start and kept in the data volume. Settings that
 # differ from the defaults go in a file named .env.docker (see .env.docker.example).
