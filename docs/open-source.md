@@ -37,13 +37,13 @@ Goal: from nothing to playing a track with three commands, on amd64 and arm64.
 - [x] **No manual `APP_KEY`** (done 2026-11-13; checked on a built image: created once, unchanged after a restart, the old session stays valid). On first start the entrypoint creates one and keeps it in `/data` (never regenerate if it exists; document that losing it makes stored Ferrite tokens unreadable, as `docs/docker.md` already says).
 - [x] **One container** (done 2026-11-13): the queue worker runs beside the web server from the entrypoint, in a loop that starts it again if it stops (no s6-overlay). `MAGNETITE_WORKER=0` plus a second service gives the old two-container setup. A scan started from the web ran through it.
 - [x] **First-run user** (done 2026-11-13; `magnetite:user --generate --if-missing`, tested with a generated and a chosen password, and not duplicated after a restart). If there are no users, create one from `MAGNETITE_USER` and `MAGNETITE_PASSWORD` (or print a one-time sign-in link in the logs). Since 2026-11-16 there is also `/setup` (`SetupController`): with no users at all, the first visitor creates the administrator; 404 afterwards; optional `MAGNETITE_SETUP_TOKEN`; the start-up log says where to go. The env route stays for those who expose the server before visiting it.
-- [ ] **The command, in the README:**
+- [x] **The command, in the README** (2026-11-16; it uses `ghcr.io/zhoorta/magnetite`, which works once the package is public):
 
         docker run -d -p 8080:8080 -v magnetite-data:/data -v /path/to/music:/music \
           -e MAGNETITE_USER=me -e MAGNETITE_PASSWORD=change-me ghcr.io/…/magnetite
 
-- [ ] **Healthcheck**, sane defaults for `APP_URL` behind a proxy, and a clear message when `/music` is not writable (the uid problem in `docs/docker.md`).
-- [ ] **Test it like a stranger:** a script that starts the image on an empty machine (CI job, `docker run` plus a request to `/up` and a sign-in), so the quick start cannot rot.
+- [x] **Healthcheck**, sane defaults for `APP_URL` behind a proxy, and a clear message when `/music` is not writable (the uid problem in `docs/docker.md`).
+- [x] **Test it like a stranger** (2026-11-16: `bin/smoke-docker.sh`, run by the `smoke` job in CI; checked locally on a built arm64 image: plain `docker run`, healthy, `/up`, `/setup` closed, a private route refused, sign-in, restart, sign-in again): a script that starts the image on an empty machine (CI job, `docker run` plus a request to `/up` and a sign-in), so the quick start cannot rot.
 - [ ] Smaller image later, once the analysis no longer needs Node (phase 4).
 
 ### 2. First impressions (M)

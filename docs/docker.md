@@ -55,7 +55,7 @@ Nothing in the image changes: the container only needs outbound HTTPS to Ferrite
 - `MAGNETITE_UPLOAD_MAX_MB` (default 2048) sets PHP's `upload_max_filesize` as well as the app's own limit; `post_max_size` is unlimited and the number of files is capped at 20.
 - Caddy caps request bodies at 16 GB for `/upload` (`MAGNETITE_UPLOAD_BODY_MAX`) and 4 MB for everything else, because PHP reads a whole upload to disk before Laravel can check the session. The config was checked in the running container; that the cut-off actually fires was not demonstrated (a 6 MB body to `/login` still ended in a 419, the CSRF answer, not a 413).
 - A proxy in front has its own limits (nginx `client_max_body_size`, Cloudflare 100 MB on the free plan).
-- `TRUSTED_PROXIES` (default: the private address ranges) says whose `X-Forwarded-*` headers Laravel believes, which gives the real client address to the sign-in throttle and `https` URLs. Verified with a forwarded `https` host. If the container's port is reachable directly from the internet, narrow it to the proxy's address.
+- `TRUSTED_PROXIES` (default: the private address ranges, set in the image too, so a plain `docker run` behind a proxy works) says whose `X-Forwarded-*` headers Laravel believes, which gives the real client address to the sign-in throttle and `https` URLs. Verified with a forwarded `https` host. If the container's port is reachable directly from the internet, narrow it to the proxy's address.
 - SQLite runs in WAL mode with a 5 s busy timeout (`DB_JOURNAL_MODE`, `DB_BUSY_TIMEOUT`) because the web server and the queue worker write to the same file. Keep `/data` on a local volume, not NFS.
 
 ## Updating

@@ -46,6 +46,21 @@ jobs:
       - run: vendor/bin/pest
       - run: npm run test:js
 
+  # The quick start as a stranger runs it: the image on empty volumes, health, sign-in, restart (bin/smoke-docker.sh).
+  smoke:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: magnetite:smoke
+          cache-from: type=gha
+      - run: bin/smoke-docker.sh magnetite:smoke
+
   image:
     needs: test
     runs-on: ubuntu-latest

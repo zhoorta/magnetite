@@ -29,7 +29,14 @@ Needs PHP 8.3 or newer with Composer, and Node. ffmpeg is needed for ALAC and fo
 
 Open the address the server prints (`http://127.0.0.1:8000`, or the next free port) and sign in. A queue worker has to be running for scans started from the web; `composer dev` starts one. In a library with no music yet, the Upload page takes zips and has a "Scan now" button for files copied in by hand.
 
-With Docker instead (one container, nothing to configure):
+With Docker, one command and nothing to configure (the image is built for amd64 and arm64):
+
+    docker run -d --name magnetite -p 8080:8080 -v magnetite-data:/data -v /path/to/music:/music \
+      -e MAGNETITE_USER=me -e MAGNETITE_PASSWORD=change-me ghcr.io/zhoorta/magnetite
+
+Open `http://localhost:8080` and sign in. Leave the two `MAGNETITE_` settings out and the first visitor creates the administrator in the browser. The music folder must be writable by uid 33 for uploads (the start-up log warns when it is not).
+
+Or build it yourself with Compose:
 
     MAGNETITE_USER=yourname docker compose up -d --build
     docker compose logs app | grep Password       # the first user's password, printed once

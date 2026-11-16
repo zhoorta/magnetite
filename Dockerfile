@@ -51,6 +51,7 @@ ENV APP_ENV=production \
     MAGNETITE_MUSIC_PATH=/music \
     LOG_CHANNEL=stderr \
     SERVER_NAME=:8080 \
+    TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 \
     XDG_CONFIG_HOME=/tmp/caddy-config \
     XDG_DATA_HOME=/tmp/caddy-data
 
