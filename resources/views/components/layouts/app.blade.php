@@ -38,11 +38,19 @@
                 @endauth
                 <div class="sm:ml-auto"><x-themes-menu /></div>
                 @auth
-                    <a href="{{ route('password') }}" wire:navigate class="{{ $link('password') }}">Password</a>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" class="text-muted hover:text-accent">Sign out</button>
-                    </form>
+                    <x-menu label="Account" width="w-48">
+                        <x-slot:trigger>
+                            <button type="button" x-ref="trigger" @click="toggle()" :aria-expanded="open" aria-haspopup="menu" aria-label="Account" title="{{ auth()->user()->username }}"
+                                    class="inline-flex items-center text-muted hover:text-accent focus-visible:text-accent"><x-icon name="user" /></button>
+                        </x-slot:trigger>
+                        <p class="truncate px-3 py-1.5 text-xs text-muted">{{ auth()->user()->username }}</p>
+                        <hr class="mb-1 border-white/10">
+                        <a href="{{ route('password') }}" wire:navigate role="menuitem" tabindex="-1" class="block px-3! py-1.5! rounded-none! hover:bg-white/5! hover:text-accent focus-visible:bg-white/5 focus-visible:outline-none">Password</a>
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" role="menuitem" tabindex="-1" class="block w-full px-3! py-1.5! rounded-none! text-left hover:bg-white/5! hover:text-accent focus-visible:bg-white/5 focus-visible:outline-none">Sign out</button>
+                        </form>
+                    </x-menu>
                 @endauth
                 @guest
                     <a href="{{ route('login') }}" class="text-muted hover:text-accent">Sign in</a>

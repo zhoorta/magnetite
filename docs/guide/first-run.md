@@ -2,7 +2,7 @@
 
 ## Sign in
 
-Open the address of the server and choose **Sign in** in the top bar. The very first user is made in the browser, on the set-up page that opens while there are no users; more users join by an invitation link that an administrator makes on the **Users** page (or are made on the command line, `php artisan magnetite:user NAME`); there is no open registration page. Change your own password on the **Password** page; a forgotten one is reset by an administrator with a one-time link (see the install page). Administrators have a **Users** page in the top bar with the disk space each user uses and the total number of tracks (not who has what). A password has at least 8 characters, and sign-in is blocked for a while after 5 wrong tries.
+Open the address of the server and choose **Sign in** in the top bar. The very first user is made in the browser, on the set-up page that opens while there are no users; more users join by an invitation link that an administrator makes on the **Users** page (or are made on the command line, `php artisan magnetite:user NAME`); there is no open registration page. Change your own password in the user menu (the person icon in the top bar), on the **Password** page; a forgotten one is reset by an administrator with a one-time link (see the install page). Administrators have a **Users** page in the top bar with the disk space each user uses and the total number of tracks (not who has what). A password has at least 8 characters, and sign-in is blocked for a while after 5 wrong tries.
 
 Without an account, **Library** shows a read-only demo library when the server has demo music; otherwise it shows the sign-in page.
 

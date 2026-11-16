@@ -21,6 +21,7 @@
         @case('meters') <rect x="2" y="8" width="3" height="6" rx=".5"/><rect x="6.5" y="2" width="3" height="12" rx=".5"/><rect x="11" y="5" width="3" height="9" rx=".5"/> @break
         @case('full') <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/> @break
         @case('library') <circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.5"/> @break
+        @case('user') <circle cx="8" cy="5.5" r="2.8"/><path d="M2.5 14c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8"/> @break
         @case('people') <circle cx="6" cy="6" r="2.2"/><path d="M2 13c0-2.3 1.8-3.7 4-3.7s4 1.4 4 3.7"/><path d="M10.5 3.9a2.2 2.2 0 0 1 0 4.2M12 9.6c1.2.5 2 1.6 2 3.4"/> @break
         @case('playlist') <path d="M2.5 4h8M2.5 7.5h8M2.5 11h4"/><path d="M13 4.5v6.2"/><circle cx="11.6" cy="10.8" r="1.4"/> @break
         @case('unshared') <circle cx="6" cy="6" r="2.2"/><path d="M2 13c0-2.3 1.8-3.7 4-3.7s4 1.4 4 3.7"/><path d="M2 2l12 12"/> @break

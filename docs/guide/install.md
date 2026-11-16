@@ -63,7 +63,7 @@ On **Users** an administrator can make another user an administrator (or take it
 
 ### Passwords
 
-Everyone can change their own on the **Password** page in the top bar; that signs their other devices out, apps included. A forgotten password: an administrator opens **Users**, presses **Reset password** next to the name and sends the one-time link (valid 24 hours); the person chooses a new password and every device is signed out. The administrator never sees it. An administrator who is locked out uses the shell: `php artisan magnetite:user NAME --reset`.
+Everyone can change their own on the **Password** page, in the user menu (the person icon) in the top bar; that signs their other devices out, apps included. A forgotten password: an administrator opens **Users**, presses **Reset password** next to the name and sends the one-time link (valid 24 hours); the person chooses a new password and every device is signed out. The administrator never sees it. An administrator who is locked out uses the shell: `php artisan magnetite:user NAME --reset`.
 
 ### Updating
 

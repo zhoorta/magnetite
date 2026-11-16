@@ -3,12 +3,8 @@
         $size = fn (int $bytes) => $bytes >= 1024 ** 3 ? round($bytes / 1024 ** 3, 1).' GB' : ($bytes >= 1024 ** 2 ? round($bytes / 1024 ** 2, 1).' MB' : round($bytes / 1024).' KB');
     @endphp
 
-    <div class="max-w-3xl text-sm">
-        <h1 class="mb-2 text-2xl font-semibold">Users</h1>
-        <p class="mb-6 max-w-prose text-muted">
-            The accounts on this server and the disk space each library uses (the size of the audio files;
-            covers and converted files are not counted). What a user has in their library is not shown here. A limit stops uploads and copies that would go over it; empty means no limit. New people join with an invitation (below) or with <code>php artisan magnetite:user</code>.
-        </p>
+    <div class="text-sm">
+        <h1 class="mb-6 text-2xl font-semibold">Users</h1>
 
         @if (session('reset_link'))
             <div class="mb-4 rounded-theme border border-accent/40 bg-surface p-3" x-data="{ done: false }">
@@ -62,7 +58,7 @@
                                 <button type="submit" class="rounded-theme border border-white/10 px-2 py-1 text-xs text-muted hover:text-accent">Save</button>
                             </form>
                         </td>
-                        <td class="py-2 pr-4 text-muted">{{ $u->created_at?->toDateString() }}</td>
+                        <td class="whitespace-nowrap py-2 pr-4 text-muted">{{ $u->created_at?->toDateString() }}</td>
                         <td class="py-1 text-right">
                             <div class="flex flex-wrap items-center justify-end gap-1">
                                 <form method="POST" action="{{ route('admin.users.reset', $u) }}">
@@ -95,7 +91,7 @@
             </tbody>
             <tfoot>
                 <tr>
-                    <td class="py-2 pr-4 text-muted">{{ $users->count() }} {{ $users->count() === 1 ? 'user' : 'users' }}, {{ number_format($totalTracks, 0, '.', ' ') }} {{ $totalTracks === 1 ? 'track' : 'tracks' }} in all</td>
+                    <td class="whitespace-nowrap py-2 pr-4 text-muted">{{ $users->count() }} {{ $users->count() === 1 ? 'user' : 'users' }}, {{ number_format($totalTracks, 0, '.', ' ') }} {{ $totalTracks === 1 ? 'track' : 'tracks' }} in all</td>
                     <td class="py-2 pr-4 text-right">{{ $size($totalBytes) }}</td>
                     <td colspan="3"></td>
                 </tr>
