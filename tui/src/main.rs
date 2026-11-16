@@ -149,6 +149,18 @@ fn theme_cmd(id: Option<&String>) {
 
 /// Library order: the artist that is shown (the server's `display_artist`, so an album without an album-artist tag sorts under its
 /// tracks' artist and not first), then year, then title. The server sorts the same way once it is updated; this keeps an older one right.
+/// The queue's tracks of album `id` take the fresh numbers (and format) of the same tracks in `fresh`.
+fn merge_truth(queue: &mut [Track], queue_albums: &[u64], id: u64, fresh: &[Track]) {
+    for (i, q) in queue.iter_mut().enumerate() {
+        if queue_albums.get(i) == Some(&id) {
+            if let Some(n) = fresh.iter().find(|t| t.id == q.id) {
+                q.truth = n.truth.clone();
+                q.codec = n.codec.clone().or(q.codec.take());
+            }
+        }
+    }
+}
+
 fn sort_albums(albums: &mut [Album]) {
     albums.sort_by_cached_key(|a| (a.shown_artist().to_lowercase(), a.year.unwrap_or(0), a.title.to_lowercase()));
 }
@@ -1312,13 +1324,21 @@ impl App {
         let album = job.album;
         self.analysing = None;
         self.truth.reset(); // the table reads the library again at the next `i`
-        // the open album shows its tracks' numbers: read it again when it is the one that was measured
-        if let (Some(id), Some(open)) = (album, &self.open) {
-            if open.id == id {
-                if let Ok(full) = self.api.album(id) {
-                    self.open = Some(full);
-                }
-            }
+        if let Some(id) = album {
+            self.refresh_analysed(id);
+        }
+    }
+
+    /// An album was measured: read it again and hand the new numbers to every copy of its tracks the client holds, the open
+    /// album's list and the queue (which is what Now playing reads), so nothing waits for a restart.
+    fn refresh_analysed(&mut self, id: u64) {
+        let Ok(full) = self.api.album(id) else { return };
+        if let Some(a) = self.albums.iter_mut().find(|a| a.id == id) {
+            a.dr = full.dr;
+        }
+        merge_truth(&mut self.queue, &self.queue_albums, id, &full.tracks);
+        if self.open.as_ref().is_some_and(|o| o.id == id) {
+            self.open = Some(full);
         }
     }
 
@@ -1648,6 +1668,11 @@ impl App {
                 let n = t.number.map_or(String::new(), |n| n.to_string());
                 let style = if Some(t.id) == playing { Style::new().fg(c(th.accent2)) } else if t.open { Style::new() } else { Style::new().fg(muted) };
                 let mut spans = vec![Span::raw(format!("{mark}{n:>2} {:<30} {:>6}", t.title, mmss(t.duration.unwrap_or(0.0))))];
+                // what the analysis found: a marker (✗ problem, ! warning, · note) and the dynamic range; nothing until it is analysed
+                if let Some(tr) = t.truth.as_ref().filter(|x| x.analyzed) {
+                    let sev = truth::severity(t);
+                    spans.push(Span::styled(format!("  {} DR{}", analyze::mark(t), tr.dr.map_or("–".to_string(), |d| format!("{d:>2.0}"))), Style::new().fg(if sev >= 2 { c(th.accent2) } else { muted })));
+                }
                 if Some(t.id) == playing {
                     // a live spectrum peek beside the playing track; on the selected row (accent background) it is drawn in the page colour
                     let on_sel = self.track_sel.selected().is_some_and(|i| self.open.as_ref().and_then(|a| a.tracks.get(i)).is_some_and(|x| x.id == t.id));
@@ -2349,5 +2374,17 @@ mod folder_tests {
         assert_eq!(app.folders_holding_playing().into_iter().collect::<Vec<_>>(), [1]);
         app.queue_albums = vec![2]; // a loose album: no folder
         assert!(app.folders_holding_playing().is_empty());
+    }
+
+    #[test]
+    fn a_finished_analysis_reaches_the_queue_tracks_of_that_album_only() {
+        let t = |id: u64, dr: Option<f64>| -> Track { serde_json::from_value(json!({"id": id, "title": "T", "open": true, "truth": dr.map(|d| json!({"analyzed": true, "dr": d}))})).unwrap() };
+        let mut queue = vec![t(1, None), t(2, None), t(3, None)];
+        let albums = vec![7, 7, 8]; // the third track is from another album
+        let fresh = vec![t(1, Some(9.0)), t(2, Some(6.0)), t(3, Some(1.0))];
+        merge_truth(&mut queue, &albums, 7, &fresh);
+        assert_eq!(queue[0].truth.as_ref().and_then(|x| x.dr), Some(9.0));
+        assert_eq!(queue[1].truth.as_ref().and_then(|x| x.dr), Some(6.0));
+        assert!(queue[2].truth.is_none()); // not album 7: untouched
     }
 }

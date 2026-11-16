@@ -177,7 +177,7 @@ pub fn wait(api: &Api, albums: &[u64]) -> Result<(), String> {
     }
 }
 
-fn mark(t: &Track) -> &'static str {
+pub fn mark(t: &Track) -> &'static str {
     match severity(t) {
         3 => "✗",
         2 => "!",
