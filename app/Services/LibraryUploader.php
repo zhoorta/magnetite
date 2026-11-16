@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Support\TrackLibrary;
-use FilesystemIterator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -89,7 +88,7 @@ class LibraryUploader
             }
 
             // Ferrite keeps its own quota; the folder check is only for a local library.
-            $remote || $this->checkQuota($user, $base, $unpacked);
+            $remote || $this->checkQuota($user, $unpacked);
 
             $prefix = $this->needsFolder($entries) ? $this->folderName($originalName).'/' : '';
 
@@ -129,7 +128,7 @@ class LibraryUploader
             }
 
             try {
-                $remote || $this->checkQuota($user, $base, (int) $file->getSize());
+                $remote || $this->checkQuota($user, (int) $file->getSize());
 
                 if ($remote) {
                     $status = $store->put($file->getRealPath(), $name);
@@ -220,7 +219,7 @@ class LibraryUploader
             return 'existing';
         }
 
-        $this->checkQuota($user, $base, (int) filesize($source));
+        $this->checkQuota($user, (int) filesize($source));
 
         $directory = dirname($destination);
         if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
@@ -340,17 +339,18 @@ class LibraryUploader
         return $base;
     }
 
-    /** Refuse an upload that would take the user's folder over their quota (users.quota_mb, none by default). */
-    private function checkQuota(User $user, string $base, int $incoming): void
+    /**
+     * Refuse an upload that would take the user's library over their quota (users.quota_mb, none by default). The
+     * size in use is what the library holds as of the last scan (the same number the Users page shows), not a walk of
+     * the folder: a guard against runaway uploads, not exact accounting.
+     */
+    private function checkQuota(User $user, int $incoming): void
     {
         if ($user->quota_mb === null) {
             return;
         }
 
-        $used = 0;
-        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($base, FilesystemIterator::SKIP_DOTS)) as $file) {
-            $used += $file->isFile() && ! $file->isLink() ? $file->getSize() : 0;
-        }
+        $used = (int) $user->tracks()->sum('size');
 
         if ($used + $incoming > $user->quota_mb * 1024 * 1024) {
             throw new RuntimeException("This would take your library over its limit of {$user->quota_mb} MB.");

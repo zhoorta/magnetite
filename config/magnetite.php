@@ -5,6 +5,10 @@ return [
     // sign-in page (MAGNETITE_PUBLIC_SITE=false).
     'public_site' => (bool) env('MAGNETITE_PUBLIC_SITE', true),
 
+    // Disk limit in GB given to every new (non-administrator) user; empty = no limit. Administrators change it per user
+    // on the Users page.
+    'default_quota_gb' => env('MAGNETITE_DEFAULT_QUOTA_GB') !== null && env('MAGNETITE_DEFAULT_QUOTA_GB') !== '' ? (float) env('MAGNETITE_DEFAULT_QUOTA_GB') : null,
+
     // Optional. When set, the first-run form at /setup also asks for it. Left empty, whoever opens /setup first
     // while there is no user becomes the administrator.
     'setup_token' => env('MAGNETITE_SETUP_TOKEN'),

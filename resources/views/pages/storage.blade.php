@@ -27,7 +27,7 @@
             <dd>{{ $tracks }}</dd>
 
             <dt class="text-muted">Library size</dt>
-            <dd>{{ number_format($libraryBytes / 1024 ** 2, 1, '.', ' ') }} MB</dd>
+            <dd>{{ number_format($libraryBytes / 1024 ** 2, 1, '.', ' ') }} MB{{ auth()->user()->quota_mb !== null && ! $remote ? ' of '.number_format(auth()->user()->quota_mb / 1024, 1, '.', ' ').' GB allowed' : '' }}</dd>
 
             @if ($allUsers)
                 <dt class="text-muted">All users</dt>

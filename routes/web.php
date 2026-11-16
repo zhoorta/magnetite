@@ -120,6 +120,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/identify/{suggestion}', [IdentifyController::class, 'dismiss'])->whereNumber('suggestion')->name('identify.dismiss');
 
     Route::get('/admin/users', [AdminUsersController::class, 'index'])->middleware('admin')->name('admin.users');
+    Route::patch('/admin/users/{user}/quota', [AdminUsersController::class, 'quota'])->whereNumber('user')->middleware('admin')->name('admin.users.quota');
     Route::get('/storage', [StorageController::class, 'show'])->name('storage');
     Route::post('/storage/test', [StorageController::class, 'test'])->name('storage.test');
     Route::delete('/storage/cache', [StorageController::class, 'clearCache'])->name('storage.cache.clear');

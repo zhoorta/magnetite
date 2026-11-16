@@ -46,3 +46,24 @@ it('adds up the size of the tracks per user', function () {
 
     $this->actingAs($admin)->get(route('admin.users'))->assertSee('5 MB')->assertSee('0 KB');
 });
+
+it('lets an administrator set and clear a limit, and stops uploads over it', function () {
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    $this->actingAs($this->user)->patch(route('admin.users.quota', $this->user), ['quota_gb' => 1])->assertNotFound();
+
+    $this->actingAs($admin)->patch(route('admin.users.quota', $this->user), ['quota_gb' => 1.5])->assertRedirect();
+    expect($this->user->fresh()->quota_mb)->toBe(1536);
+
+    $this->actingAs($admin)->patch(route('admin.users.quota', $this->user), ['quota_gb' => ''])->assertRedirect();
+    expect($this->user->fresh()->quota_mb)->toBeNull();
+
+    $this->actingAs($admin)->patch(route('admin.users.quota', $this->user), ['quota_gb' => -1])->assertSessionHasErrors('quota_gb');
+});
+
+it('gives new users the default limit, but not administrators', function () {
+    config(['magnetite.default_quota_gb' => 2.0]);
+
+    expect(User::factory()->create()->quota_mb)->toBe(2048)
+        ->and(User::factory()->create(['is_admin' => true])->quota_mb)->toBeNull();
+});

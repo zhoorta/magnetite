@@ -40,6 +40,18 @@ class User extends Authenticatable
         ];
     }
 
+    protected static function booted(): void
+    {
+        // A default limit for new users (MAGNETITE_DEFAULT_QUOTA_GB); administrators and explicit values are left alone.
+        static::creating(function (User $user) {
+            $default = config('magnetite.default_quota_gb');
+
+            if ($default !== null && $user->quota_mb === null && ! $user->is_admin) {
+                $user->quota_mb = (int) round($default * 1024);
+            }
+        });
+    }
+
     public function tracks(): HasMany
     {
         return $this->hasMany(Track::class);
