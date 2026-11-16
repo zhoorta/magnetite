@@ -40,6 +40,21 @@ class AlbumIdentifier
 
     private ?Throwable $failure = null;
 
+    /** @var list<array{step: string, status: string, note: string}> what each search step did last time */
+    private array $report = [];
+
+    /** @return list<array{step: string, status: string, note: string}> status: ok, skipped, failed */
+    public function report(): array
+    {
+        return $this->report;
+    }
+
+    private function note(string $step, string $status, string $note): void
+    {
+        $this->report[] = ['step' => $step, 'status' => $status, 'note' => $note];
+        Log::info('Release search', ['step' => $step, 'status' => $status, 'note' => $note]);
+    }
+
     public function __construct(private Fingerprinter $fingerprints, private CoverStore $covers) {}
 
     /**
@@ -268,6 +283,7 @@ class AlbumIdentifier
         $out = [];
         $seen = [];
         $this->failure = null;
+        $this->report = [];
 
         $steps = [
             'album' => fn () => $guess['album'] !== '' ? $this->releasesByAlbum($guess, count($local)) : [],
@@ -277,9 +293,24 @@ class AlbumIdentifier
                 : [],
         ];
 
+        $names = ['album' => 'Album name', 'titles' => 'Track titles', 'fingerprint' => 'Fingerprints'];
+
         foreach ($steps as $via => $find) {
+            $name = $names[$via];
             if ($this->good($out)) {
-                break;
+                $this->note($name, 'skipped', 'not needed, a release already fits');
+
+                continue;
+            }
+            if ($via === 'album' && $guess['album'] === '') {
+                $this->note($name, 'skipped', 'the album has no title');
+
+                continue;
+            }
+            if ($via === 'fingerprint' && ! $this->fingerprints->available()) {
+                $this->note($name, 'skipped', $this->fingerprints->unavailableReason() ?? 'not set up');
+
+                continue;
             }
 
             // A step that fails (MusicBrainz busy, say) must not stop the next ones: the fingerprint step talks to
@@ -288,30 +319,55 @@ class AlbumIdentifier
                 $ids = array_values(array_diff($find(), $seen));
             } catch (Throwable $e) {
                 $this->failure = $e;
-                Log::info('Release search failed', ['step' => $via, 'error' => $e->getMessage()]);
+                $this->note($name, 'failed', $this->short($e));
 
                 continue;
             }
 
+            $kept = 0;
+            $failed = 0;
             foreach (array_slice($ids, 0, self::MAX_CANDIDATES + 2) as $id) {
                 $seen[] = $id;
                 try {
                     $candidate = $this->score($id, $via, $guess, $local);
                 } catch (Throwable $e) {
                     $this->failure = $e;
+                    $failed++;
                     Log::info('Release details failed', ['step' => $via, 'release' => $id, 'error' => $e->getMessage()]);
 
                     continue;
                 }
                 if ($candidate !== null) {
                     $out[] = $candidate;
+                    $kept++;
                 }
             }
+
+            $note = match (true) {
+                $ids === [] => 'no release came up',
+                default => count($ids).' release'.(count($ids) === 1 ? '' : 's').' came up, '.($kept === 0 ? 'none' : $kept).' fit'.($kept === 1 ? 's' : '').' the track lengths',
+            };
+            if ($via === 'fingerprint') {
+                $st = $this->fingerprints->stats;
+                $note = "{$st['fingerprinted']} of {$st['sampled']} tracks fingerprinted, {$st['matched']} known to AcoustID"
+                    .($st['failed'] ? ", {$st['failed']} failed" : '').'; '.$note;
+            }
+            if ($failed > 0) {
+                $note .= "; details of {$failed} could not be fetched";
+            }
+            $this->note($name, $failed > 0 && $kept === 0 ? 'failed' : 'ok', $note);
         }
 
         usort($out, fn ($a, $b) => $b['score'] <=> $a['score']);
 
         return array_slice($out, 0, self::MAX_CANDIDATES);
+    }
+
+    private function short(Throwable $e): string
+    {
+        return preg_match('/status code (\d{3})/', $e->getMessage(), $m)
+            ? ($m[1] === '503' ? 'MusicBrainz is busy (503)' : "the service answered {$m[1]}")
+            : 'the service could not be reached';
     }
 
     /** A release that fits nearly every track is good enough to stop looking. */

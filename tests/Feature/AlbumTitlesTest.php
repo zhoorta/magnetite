@@ -108,3 +108,12 @@ it('is the owner\'s alone and needs a signed-in user', function () {
     $this->postJson(route('library.albums.titles.apply', $this->album), ['candidate' => 0, 'parts' => ['titles']])->assertNotFound();
     Http::assertNothingSent();
 });
+
+it('reports what each search step did', function () {
+    Http::fake(discoveryWithLabel([60000, 70000, 80000]));
+
+    $report = $this->actingAs($this->alice)->postJson(route('library.albums.titles.find', $this->album))->assertOk()->json('report');
+
+    expect(collect($report)->pluck('step')->all())->toBe(['Album name', 'Track titles', 'Fingerprints'])
+        ->and(collect($report)->firstWhere('step', 'Fingerprints')['status'])->toBe('skipped');
+});

@@ -39,6 +39,7 @@ class AlbumTitlesController extends Controller
         return response()->json([
             'album' => ['release_date' => $album->released, 'label' => $album->label],
             'candidates' => $candidates,
+            'report' => $identifier->report(),
         ]);
     }
 

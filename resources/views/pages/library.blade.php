@@ -458,6 +458,11 @@
                 <p class="mb-3 text-xs text-muted">Looked up on MusicBrainz by album title and artist, and compared with the number and length of the tracks. Tick what to apply. Changes the library only, not the files or their tags.</p>
                 <p x-show="titles?.loading" class="py-6 text-center text-muted">Searching…</p>
                 <p x-show="titles && ! titles.loading && ! titles.error && titles.candidates.length === 0" class="py-4 text-muted">No release on MusicBrainz fits this album (title, artist, number of tracks and their lengths). Check the title and artist with Edit, then try again.</p>
+                <ul x-show="titles && ! titles.loading && titles.report?.length" class="mb-3 space-y-0.5 text-xs text-muted" aria-label="What the search did">
+                    <template x-for="s in titles?.report || []" :key="s.step">
+                        <li><span class="text-body" x-text="s.step"></span>: <span :class="s.status === 'failed' ? 'text-red-400' : ''" x-text="s.note"></span></li>
+                    </template>
+                </ul>
                 <template x-if="titles && titles.candidates.length">
                     <div class="flex min-h-0 flex-col gap-3">
                         <div x-show="titles.candidates.length > 1" class="flex flex-wrap gap-2">

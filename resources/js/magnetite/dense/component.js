@@ -1448,12 +1448,13 @@ export default function dense(data) {
         },
 
         async findTitles(id, title) {
-            this.titles = { id, title, loading: true, album: {}, candidates: [], pick: 0, parts: { date: false, label: false, titles: false }, error: '', saving: false };
+            this.titles = { id, title, loading: true, album: {}, candidates: [], report: [], pick: 0, parts: { date: false, label: false, titles: false }, error: '', saving: false };
             const t = this.titles;
             const r = await send('POST', `/library/albums/${id}/titles/find`);
             if (r.ok) {
                 t.album = r.data.album;
                 t.candidates = r.data.candidates;
+                t.report = r.data.report || [];
                 this.pickRelease(0);
             } else t.error = r.data?.message || 'Could not search.';
             t.loading = false;

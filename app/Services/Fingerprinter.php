@@ -24,6 +24,19 @@ class Fingerprinter
 
     private string|false|null $binary = null;
 
+    /** What the last `releases()` call did, for the report shown to the owner. @var array{sampled: int, fingerprinted: int, matched: int, failed: int} */
+    public array $stats = ['sampled' => 0, 'fingerprinted' => 0, 'matched' => 0, 'failed' => 0];
+
+    /** Why `available()` is false, in words. */
+    public function unavailableReason(): ?string
+    {
+        if ($this->binary() === null) {
+            return 'fpcalc is not installed';
+        }
+
+        return (string) config('magnetite.acoustid.key') === '' ? 'no AcoustID key set' : null;
+    }
+
     public function binary(): ?string
     {
         $this->binary ??= (config('magnetite.fpcalc') ?: (new ExecutableFinder)->find('fpcalc')) ?? false;
@@ -50,8 +63,10 @@ class Fingerprinter
 
         $store = $user->store();
         $votes = [];
+        $sample = $this->sample($tracks);
+        $this->stats = ['sampled' => count($sample), 'fingerprinted' => 0, 'matched' => 0, 'failed' => 0];
 
-        foreach ($this->sample($tracks) as $track) {
+        foreach ($sample as $track) {
             try {
                 $file = $store->fetch($track->path);
                 $print = $file ? $this->fingerprint($file) : null;
@@ -59,11 +74,16 @@ class Fingerprinter
                     continue;
                 }
 
+                $this->stats['fingerprinted']++;
+
                 Sleep::for(350)->milliseconds(); // AcoustID allows three requests a second
-                foreach ($this->lookup($print['duration'], $print['fingerprint']) as $id) {
+                $ids = $this->lookup($print['duration'], $print['fingerprint']);
+                $this->stats['matched'] += $ids === [] ? 0 : 1;
+                foreach ($ids as $id) {
                     $votes[$id] = ($votes[$id] ?? 0) + 1;
                 }
             } catch (Throwable $e) {
+                $this->stats['failed']++;
                 Log::info('Fingerprint lookup failed', ['track' => $track->id, 'error' => $e->getMessage()]);
             }
         }
