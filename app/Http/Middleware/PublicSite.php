@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * MAGNETITE_PUBLIC_SITE=false turns the start page, the demo and the public documentation off: a visitor who is
+ * Unless MAGNETITE_PUBLIC_SITE=true, the start page, the demo and the public documentation are off: a visitor who is
  * not signed in goes to the sign-in page, and a signed-in user who opens `/` goes to the library.
  */
 class PublicSite
