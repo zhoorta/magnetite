@@ -282,6 +282,10 @@
 
                     {{-- What was measured for the selected track: numbers, the average spectrum and the findings. --}}
                     <p x-show="mode === 'truth' && ! detailTrack" x-cloak class="px-3 py-2 text-xs text-muted">This file has not been measured yet: A analyses it.</p>
+                    <div x-show="unmeasuredTrack" x-cloak class="flex shrink-0 items-center gap-3 border-t border-white/15 px-3 py-2 text-xs text-muted">
+                        <span class="min-w-0 flex-1">This file has not been measured yet.</span>
+                        <button type="button" x-show="! demo" class="shrink-0 rounded-theme border border-white/15 px-2 py-0.5 hover:text-accent" @click="analyseSelected(); focusRoot()">Analyse (A)</button>
+                    </div>
                     <div x-show="detailTrack" x-cloak x-effect="detailTrack && ensureSpectrum(detailTrack)" class="overflow-y-auto px-3 py-2 text-xs" :class="mode === 'truth' ? 'min-h-0 flex-1' : 'max-h-[55%] shrink-0 border-t border-white/15'">
                         <template x-if="detailTrack">
                             <div class="grid gap-4 sm:grid-cols-2">

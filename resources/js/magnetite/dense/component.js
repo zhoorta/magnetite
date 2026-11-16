@@ -317,6 +317,13 @@ export default function dense(data) {
             return t?.truth?.analyzed ? t : null;
         },
 
+        /** The selected track when the panel is open but the file has not been measured. */
+        get unmeasuredTrack() {
+            const t = this.detail && this.mode === 'tree' && this.pane === 'tracks' ? this.tracks[this.tsel] : null;
+
+            return t && !t.truth?.analyzed ? t : null;
+        },
+
         get paneTitle() {
             if (this.mode === 'truth') return this.truth[this.tcur]?.track.title ?? 'Nothing to show';
             if (this.mode === 'search') return this.hit ? (this.hit.kind === 'album' ? this.hit.album.title : this.hit.track.title) : 'Search';
@@ -635,9 +642,8 @@ export default function dense(data) {
         },
 
         toggleDetail() {
-            const t = this.tracks[this.tsel];
-            if (!t?.truth?.analyzed) return this.say('This file has not been measured yet: A analyses it');
-            this.detail = !this.detail;
+            if (!this.tracks[this.tsel]) return;
+            this.detail = !this.detail; // a file that is not measured yet gets a panel that says so, with a way to measure it
         },
 
         /** o and :problems: the Findings view. From anywhere else it opens it; inside the truth view it switches between every file and the ones with findings. */
