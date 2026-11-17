@@ -242,10 +242,10 @@
             Magnetite runs in one Docker container, which is the easiest way to start, or directly with PHP 8.3 and Node. With Docker:
         </p>
         <pre class="mt-4 overflow-x-auto rounded-theme border border-white/10 bg-surface p-4 text-xs leading-relaxed text-muted"><code>docker run -d --name magnetite -p 8080:8080 \
-  -v magnetite-data:/data -v /path/to/music:/music \
+  -v magnetite-data:/data -v magnetite-music:/music \
   ghcr.io/zhoorta/magnetite</code></pre>
         <p class="mt-4 max-w-prose text-sm text-muted">
-            Open http://localhost:8080 and create your user in the browser. The image is built for amd64 and arm64.
+            Open http://localhost:8080 and create your user in the browser. The two volumes keep the database and the music, so an update does not lose them. To use a folder that already has music, replace <code>magnetite-music</code> with its path. The image is built for amd64 and arm64.
             The <a href="{{ route('guide', 'install') }}" wire:navigate class="text-accent underline">install page</a> has the details
             (a chosen password, a reverse proxy, updating), and the
             <a href="{{ route('guide') }}" wire:navigate class="text-accent underline">documentation</a> covers the library, the meters, the file analysis, themes, sharing and the clients.

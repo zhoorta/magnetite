@@ -57,10 +57,10 @@ Binaries of the terminal client and the signed Android APK are attached to each 
 
 With Docker, one command and nothing to configure (the image is built for amd64 and arm64):
 
-    docker run -d --name magnetite -p 8080:8080 -v magnetite-data:/data -v /path/to/music:/music \
+    docker run -d --name magnetite -p 8080:8080 -v magnetite-data:/data -v magnetite-music:/music \
       -e MAGNETITE_USER=me -e MAGNETITE_PASSWORD=change-me ghcr.io/zhoorta/magnetite
 
-Open `http://localhost:8080` and sign in. Leave the two `MAGNETITE_` settings out and the first visitor creates the administrator in the browser. The music folder must be writable by uid 33 for uploads (the start-up log warns when it is not).
+Open `http://localhost:8080` and sign in. The two volumes keep the database and the music; to use a folder that already has music, put its path in place of `magnetite-music`. Leave the two `MAGNETITE_` settings out and the first visitor creates the administrator in the browser. The music folder must be writable by uid 33 for uploads (the start-up log warns when it is not).
 
 Or build it yourself with Compose:
 

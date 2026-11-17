@@ -7,8 +7,10 @@ There are two ways to run Magnetite: in one Docker container, or directly with P
 Needs Docker. The image is published for amd64 and arm64:
 
     docker run -d --name magnetite -p 8080:8080 \
-      -v magnetite-data:/data -v /path/to/music:/music \
+      -v magnetite-data:/data -v magnetite-music:/music \
       ghcr.io/zhoorta/magnetite
+
+The two named volumes keep the database and the music when the container is replaced. To use a folder that already has music, put its path in place of `magnetite-music` (see below).
 
 To build it from the source with Compose instead (the first start takes a few minutes):
 
