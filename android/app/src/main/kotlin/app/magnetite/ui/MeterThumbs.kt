@@ -67,11 +67,34 @@ private fun plainThumb(id: String): Bitmap {
     fun fill(col: Int, a: Float = 1f) { p.style = Paint.Style.FILL; p.color = col; p.alpha = (a * 255).toInt() }
     fun line(col: Int, width: Float, a: Float = 1f) { p.style = Paint.Style.STROKE; p.color = col; p.strokeWidth = width; p.alpha = (a * 255).toInt() }
     when (id) {
-        "vu-wide" -> listOf(0.72f, 0.55f).forEachIndexed { i, v ->
-            val y = h * (0.22f + i * 0.38f)
-            fill(muted, 0.25f); c.drawRect(w * 0.1f, y, w * 0.9f, y + h * 0.2f, p)
-            fill(accent); c.drawRect(w * 0.1f, y, w * (0.1f + 0.8f * v), y + h * 0.2f, p)
-            fill(red); c.drawRect(w * 0.84f, y, w * 0.9f, y + h * 0.2f, p)
+        "vu-wide" -> {
+            // the real meter's look: two shallow windows with a long arc scale, ticks, a red zone and a needle that pivots far below
+            val gap = h * 0.06f
+            val bw = minOf(w - gap * 2, (h - gap * 3) / 2 * 4.2f); val bh = bw / 4.2f
+            val theta = 14 * PI / 180; val r = (bw * 0.43 / sin(theta)).toFloat()
+            listOf(0.62f, 0.5f).forEachIndexed { i, v ->
+                val x = (w - bw) / 2; val y = (h - (bh * 2 + gap)) / 2 + i * (bh + gap)
+                val cx = x + bw / 2; val py = y + bh * 0.42f + r
+                fun ang(d: Float) = -theta + 2 * theta * ((d + 30f) / 33f)
+                c.save(); c.clipRect(x, y, x + bw, y + bh)
+                fill(Palette.Surface.toArgb()); c.drawRoundRect(x, y, x + bw, y + bh, bh * 0.1f, bh * 0.1f, p)
+                line(red, bh * 0.07f); val a0 = ang(-6f) - PI / 2; val a1 = ang(3f) - PI / 2
+                c.drawArc(cx - r, py - r, cx + r, py + r, Math.toDegrees(a0).toFloat(), Math.toDegrees(a1 - a0).toFloat(), false, p)
+                var d = -30f
+                while (d <= 3f) {
+                    val major = d.toInt() % 6 == 0
+                    line(text, if (major) bh * 0.03f else bh * 0.015f)
+                    val s1 = r - bh * 0.05f; val s2 = r - bh * (if (major) 0.16f else 0.11f)
+                    c.drawLine(cx + (sin(ang(d)) * s1).toFloat(), py - (cos(ang(d)) * s1).toFloat(), cx + (sin(ang(d)) * s2).toFloat(), py - (cos(ang(d)) * s2).toFloat(), p)
+                    d += 2f
+                }
+                fill(text); p.textSize = bh * 0.24f; p.textAlign = Paint.Align.LEFT; c.drawText(if (i == 0) "L" else "R", x + bw * 0.035f, y + bh * 0.3f, p)
+                fill(red, 0.18f); c.drawCircle(x + bw * 0.965f, y + bh * 0.2f, bh * 0.05f, p)
+                val a = -theta + 2 * theta * v
+                line(text, maxOf(1.5f, bh * 0.03f))
+                c.drawLine(cx + (sin(a) * (r - bh * 1.3f)).toFloat(), py - (cos(a) * (r - bh * 1.3f)).toFloat(), cx + (sin(a) * (r + bh * 0.06f)).toFloat(), py - (cos(a) * (r + bh * 0.06f)).toFloat(), p)
+                c.restore()
+            }
         }
         "vu-needle" -> listOf(0.3f, 0.42f).forEachIndexed { i, v ->
             val cx = w * (0.27f + i * 0.46f); val cy = h * 0.88f; val r = w * 0.2f
