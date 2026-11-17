@@ -10,6 +10,11 @@ pub struct Album {
     /// The album artist, else its tracks' single artist, else "Various artists" (older servers do not send it).
     pub display_artist: Option<String>,
     pub year: Option<i64>,
+    /// The date as far as it is known (`2001`, `2001-03`, `2001-03-12`).
+    #[serde(default)]
+    pub release_date: Option<String>,
+    #[serde(default)]
+    pub label: Option<String>,
     pub track_count: Option<u64>,
     pub dr: Option<f64>,
     /// The folder the album is in (the owner's own albums only; none when it is loose or the server is older).
@@ -86,6 +91,16 @@ pub struct Track {
     pub stream_url: Option<String>,
     pub cover_url: Option<String>,
     pub truth: Option<Truth>,
+    /// What is stored for the owner's own track (the shown artist falls back to the album's; this does not).
+    #[serde(default)]
+    pub edit: Option<TrackEdit>,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
+pub struct TrackEdit {
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub track_number: Option<i64>,
 }
 
 /// The owner's file-truth measurements (`tracks.analysis`); every field may be missing.
@@ -424,6 +439,12 @@ impl Api {
         self.send("PATCH", &format!("/albums/{id}")).send_json(fields).json_body()
     }
 
+    /// Save an album's details and its tracks' titles, artists and numbers in one request (all or nothing).
+    pub fn save_details(&self, album: u64, body: Value) -> Result<()> {
+        let _: Value = self.send("PATCH", &format!("/albums/{album}/details")).send_json(body).json_body()?;
+        Ok(())
+    }
+
     pub fn album(&self, id: u64) -> Result<Album> {
         let d: Data<Album> = self.get(&format!("/albums/{id}")).call().json_body()?;
         Ok(d.data)
@@ -528,7 +549,7 @@ mod artist_tests {
 
     fn album(artist: Option<&str>, display: Option<&str>, tracks: &[&str]) -> Album {
         let t = |a: &str| serde_json::from_value::<Track>(serde_json::json!({"id": 1, "title": "x", "artist": a, "open": true})).unwrap();
-        Album { id: 1, title: "A".into(), artist: artist.map(Into::into), display_artist: display.map(Into::into), year: None, folder_id: None, shared: false, shared_by: None, track_count: None, dr: None, tracks: tracks.iter().map(|a| t(a)).collect() }
+        Album { id: 1, title: "A".into(), artist: artist.map(Into::into), display_artist: display.map(Into::into), year: None, release_date: None, label: None, folder_id: None, shared: false, shared_by: None, track_count: None, dr: None, tracks: tracks.iter().map(|a| t(a)).collect() }
     }
 
     #[test]

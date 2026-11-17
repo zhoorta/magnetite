@@ -52,6 +52,7 @@ const LIBRARY: Section = ("Library", &[
     ("d", "delete the selected folder (asks; its albums move up, no music is deleted)"),
     ("N", "new folder (inside the selected folder, beside the selected album)"),
     ("/", "search: albums, tracks and folders (year: dr: codec: artist: album: filters)"),
+    ("e", "edit the album's details and its tracks' titles, artists and numbers (ctrl-s saves, esc cancels; tags are not changed)"),
     ("d", "details of the selected track: the numbers, the findings and the spectrum graph"),
     ("a", "add the selected track or album to a playlist (a chooser; the first entry makes a new one)"),
     ("N r d (playlists)", "new, rename, delete a playlist (asks first)"),

@@ -6,6 +6,7 @@ mod blocks;
 mod config;
 mod cover;
 mod details;
+mod edit;
 mod help;
 mod info;
 mod loudness;
@@ -260,6 +261,7 @@ struct App {
     order: Vec<usize>, // queue indices in play order (the queue itself is never reordered)
     order_ids: Vec<u64>, // the tracks `order` was made for
     rng: order::Rng,
+    editing: Option<edit::Edit>, // e: the album's details as a table
     details: Option<details::Details>, // d: the measurements and the spectrum of one track
     info: u8, // I: how much the track rows and the player say about a file (the account's setting)
     flat: bool, // z: every album in one list, no folders
@@ -327,7 +329,7 @@ impl App {
         if !albums.is_empty() {
             album_sel.select(Some(0));
         }
-        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), source: Source::Library, shared: vec![], shared_sel: ListState::default(), playlist_mine: true, copying: None, playlists: vec![], playlist_sel: ListState::default(), open_playlist: None, shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, adder: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
+        App { api, user: cfg.username.clone(), cfg, themes, theme, albums, folders: vec![], open_folders: BTreeSet::new(), source: Source::Library, shared: vec![], shared_sel: ListState::default(), playlist_mine: true, copying: None, playlists: vec![], playlist_sel: ListState::default(), open_playlist: None, shuffle, repeat, order: vec![], order_ids: vec![], rng: order::Rng::new(), editing: None, details: None, info: info::DEFAULT, flat, marks: BTreeSet::new(), prompt: None, adder: None, confirm: None, mover: None, rows, album_sel, open: None, track_sel: ListState::default(), focus: Focus::Albums, queue: vec![], now: None, player, meters: Meters::new(), tap: vec![], panels, active: 0, cover: cover::Cover::new(), media: media::Media::new(), loud, gain_db: None, player_b: None, meters_b: Meters::new(), tap_b: vec![], ab: None, tint, tint_cur, queue_albums: vec![], view: View::Library, truth: truth::Browser::new(), search: search::Search::new(), resume: None, saved_at: Instant::now(), help: false, analysing: None, full: false, status: String::new(), quit: false }
     }
 
     fn run(&mut self, term: &mut DefaultTerminal) -> std::io::Result<()> {
@@ -416,6 +418,10 @@ impl App {
             self.confirm_key(code);
             return;
         }
+        if self.editing.is_some() {
+            self.edit_key(code, mods);
+            return;
+        }
         if self.details.is_some() {
             self.details_key(code);
             return;
@@ -487,6 +493,7 @@ impl App {
                 None => self.player.seek_by(-10.0),
             },
             (KeyCode::Char('d'), _) if self.view == View::Library && self.focus == Focus::Tracks && !self.full && self.ab.is_none() => self.open_details(),
+            (KeyCode::Char('e'), _) if self.in_album_list() || (self.in_track_list() && self.open_playlist.is_none() && self.source == Source::Library) => self.open_edit(),
             (KeyCode::Char('P'), _) if self.in_left_list() => self.toggle_source(),
             (KeyCode::Char('S'), _) if self.in_album_list() || self.in_playlist_list() || self.in_track_list() => self.toggle_share(),
             (KeyCode::Char('y'), _) if self.in_shared_list() => self.copy_selected(),
@@ -544,6 +551,84 @@ impl App {
             }
         }
         self.details = Some(d);
+    }
+
+    /// `e` on an album, or on a track of the open album: the edit table. The album is read again so the stored values show.
+    fn open_edit(&mut self) {
+        let id = if self.in_track_list() { self.open.as_ref().map(|a| a.id) } else { self.selected_album().map(|i| self.albums[i].id) };
+        let Some(id) = id else { return self.status = "e edits an album: select one".into() };
+        match self.api.album(id) {
+            Ok(full) => {
+                let mut e = edit::Edit::new(&full);
+                if self.in_track_list() {
+                    e.row = edit::HEADER.len() + self.track_sel.selected().unwrap_or(0).min(full.tracks.len().saturating_sub(1));
+                    e.col = 1;
+                    if full.tracks.is_empty() {
+                        e.row = 0;
+                        e.col = 0;
+                    }
+                }
+                self.editing = Some(e);
+            }
+            Err(err) => self.status = err,
+        }
+    }
+
+    fn edit_key(&mut self, code: KeyCode, mods: KeyModifiers) {
+        let Some(e) = self.editing.as_mut() else { return };
+        e.error.clear();
+        match code {
+            KeyCode::Esc => {
+                self.editing = None;
+                self.status = "edit cancelled".into();
+            }
+            KeyCode::Char('s') if mods.contains(KeyModifiers::CONTROL) => self.save_edit(),
+            KeyCode::Char('u') if mods.contains(KeyModifiers::CONTROL) => e.cell().clear(),
+            KeyCode::Char(ch) if !mods.contains(KeyModifiers::CONTROL) => {
+                if e.row >= edit::HEADER.len() && e.col == 0 && !ch.is_ascii_digit() {
+                    return; // the number takes digits only
+                }
+                e.cell().push(ch);
+            }
+            KeyCode::Backspace => {
+                e.cell().pop();
+            }
+            KeyCode::Tab | KeyCode::Enter => e.next(),
+            KeyCode::Down => e.down(),
+            KeyCode::Up => e.up(),
+            KeyCode::Left => e.side(-1),
+            KeyCode::Right => e.side(1),
+            _ => {}
+        }
+    }
+
+    /// ctrl-s: check, send everything, then read the album again so the lists show the saved values.
+    fn save_edit(&mut self) {
+        let Some(e) = self.editing.as_mut() else { return };
+        if !e.changed() {
+            self.editing = None;
+            self.status = "nothing changed".into();
+            return;
+        }
+        if let Err(msg) = e.check() {
+            e.error = msg;
+            return;
+        }
+        let (id, body) = (e.album, e.body());
+        match self.api.save_details(id, body) {
+            Ok(()) => {
+                self.editing = None;
+                let keep = self.open.as_ref().map(|o| o.id);
+                self.reload_library();
+                if keep == Some(id) {
+                    if let Ok(full) = self.api.album(id) {
+                        self.open = Some(full);
+                    }
+                }
+                self.status = "details saved (the files' tags are not changed)".into();
+            }
+            Err(err) => e.error = err, // the table stays: fix it and try again
+        }
     }
 
     fn details_key(&mut self, code: KeyCode) {
@@ -849,7 +934,7 @@ impl App {
             },
             SharedEntry::Playlist(p) => match self.api.playlist(p.id) {
                 Ok((name, tracks, mine)) => {
-                    let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, shared: false, shared_by: p.shared_by.clone(), tracks };
+                    let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, release_date: None, label: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, shared: false, shared_by: p.shared_by.clone(), tracks };
                     self.track_sel.select(if album.tracks.is_empty() { None } else { Some(0) });
                     self.open = Some(album);
                     self.open_playlist = Some(p.id);
@@ -952,7 +1037,7 @@ impl App {
         let Some(p) = self.playlist_sel.selected().and_then(|i| self.playlists.get(i)).cloned() else { return };
         match self.api.playlist(p.id) {
             Ok((name, tracks, _mine)) => {
-                let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, shared: false, shared_by: None, tracks };
+                let album = Album { id: 0, title: name, artist: None, display_artist: None, year: None, release_date: None, label: None, track_count: Some(tracks.len() as u64), dr: None, folder_id: None, shared: false, shared_by: None, tracks };
                 self.track_sel.select(if album.tracks.is_empty() { None } else { Some(0) });
                 self.open = Some(album);
                 self.open_playlist = Some(p.id);
@@ -2137,6 +2222,9 @@ impl App {
         }
         if let Some(a) = &self.adder {
             organize::draw_add(f, a, &self.themes[self.theme].clone());
+        }
+        if let Some(e) = &self.editing {
+            edit::draw(f, e, &self.themes[self.theme].clone());
         }
         if let Some(d) = &self.details {
             details::draw(f, d, &self.themes[self.theme].clone(), self.info);

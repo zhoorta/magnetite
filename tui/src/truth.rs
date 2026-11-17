@@ -442,7 +442,7 @@ mod tests {
         Row {
             album_id: 1,
             album_order: order,
-            track: Track { id, title: format!("t{id}"), artist: None, album: None, number: Some(id as i64), album_id: None, duration: None, codec: None, shared: false, shared_by: None, open: true, stream_url: None, cover_url: None, truth: Some(truth) },
+            track: Track { id, title: format!("t{id}"), artist: None, album: None, number: Some(id as i64), album_id: None, duration: None, codec: None, shared: false, shared_by: None, open: true, stream_url: None, cover_url: None, truth: Some(truth), edit: None },
         }
     }
 
