@@ -21,7 +21,7 @@
 
     <section class="pb-10">
         <a href="{{ route('library') }}" class="block">
-            <img src="/screenshots/library-hero.png" alt="The library in the Terminal theme: albums on the left, the tracks with their dynamic range on the right, and the player with two meters below" width="1268" height="613"
+            <img src="/screenshots/library-hero.png" alt="The library in the Terminal theme: a folder tree with the dynamic range of each folder, the tracks of an album with their dynamic range, and the player with four meters below" width="1800" height="1252"
                  class="w-full rounded-theme border border-white/10" fetchpriority="high">
         </a>
     </section>
@@ -114,6 +114,28 @@
                 </p>
             </div>
         </template>
+
+        <h3 class="mt-8 text-xs uppercase tracking-widest text-muted">Full screen</h3>
+        <p class="mt-2 max-w-prose text-xs text-muted">
+            F gives the meters the whole window. Up to four panels share it, and the controls hide after three seconds. Posters are upright, so two sit side by side.
+        </p>
+        <div x-data="{ still: window.matchMedia('(prefers-reduced-motion: reduce)').matches }" class="mt-3 grid gap-3 sm:grid-cols-2">
+            <video class="w-full rounded-theme border border-white/10 sm:col-span-2" width="1280" height="770" poster="/media/fullscreen-meters.jpg"
+                   muted loop playsinline preload="none" aria-label="Full-screen meters: wide meters, magic eyes, crest factor and loudness range, moving with the music"
+                   x-init="still || new IntersectionObserver(([e]) => e.isIntersecting ? $el.play() : $el.pause(), { threshold: 0.3 }).observe($el)">
+                <source src="/media/fullscreen-meters.mp4" type="video/mp4">
+            </video>
+            <video class="w-full rounded-theme border border-white/10" width="640" height="732" poster="/media/fullscreen-circuit.jpg"
+                   muted loop playsinline preload="none" aria-label="The Circuit poster in full screen: a schematic whose straps fill with the frequency ranges"
+                   x-init="still || new IntersectionObserver(([e]) => e.isIntersecting ? $el.play() : $el.pause(), { threshold: 0.3 }).observe($el)">
+                <source src="/media/fullscreen-circuit.mp4" type="video/mp4">
+            </video>
+            <video class="w-full rounded-theme border border-white/10" width="640" height="732" poster="/media/fullscreen-overcome.jpg"
+                   muted loop playsinline preload="none" aria-label="The Overcome poster in full screen: one line per third-octave band and two circles that follow the left and right peaks"
+                   x-init="still || new IntersectionObserver(([e]) => e.isIntersecting ? $el.play() : $el.pause(), { threshold: 0.3 }).observe($el)">
+                <source src="/media/fullscreen-overcome.mp4" type="video/mp4">
+            </video>
+        </div>
     </section>
 
     <section id="analysis" class="scroll-mt-8 border-t border-white/10 py-10">
