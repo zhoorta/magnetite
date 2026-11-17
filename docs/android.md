@@ -105,6 +105,8 @@ Steps 1 and 2 of 4 (step 2: `player/Spectrum.kt` FFT over a mono ring buffer in 
 
 ## Meters (2026-10-09)
 
+Since 2026-11-17 it also has the web's `k-meter`, `crest` and `lra` (K-20 fixed, no scale switch), and `loudness` is drawn as nixie tubes: `ui/NewMeters.kt`, ports of the web modules; `Loudness` keeps the live loudness range in a fixed 800-bin histogram (`lra`, `lraLo`, `lraHi`, `lraShape`) and picker thumbnails for them are in `MeterThumbs.kt`.
+
 The app has the web's nine meters under the same ids (`vu-wide`, `vu-needle`, `vu-leds`, `magic-eye`, `scope`, `goniometer`, `loudness`, `third-octave`, `spectrogram`), drawn in `ui/Meters.kt` on Compose canvases in the Terminal colours. The list is the user's `users.meters`: read from `GET /me` after sign-in, changed in the Meters picker (Now Playing top bar, or tap the meter panel in the mini player) and saved at once with `PUT /api/v1/settings/meters` (the web controller; up to 4, ids checked for shape only, unknown ids are ignored by both clients). The mini player shows the first meter, Now Playing shows all of them under the controls.
 
 - `player/Loudness.kt` is a port of `worklet/meter-processor.js`, fed per frame from `MeterTap`: K-weighted momentary, short-term and integrated LUFS (gated), true peak (4x, 12 taps per phase instead of 48), correlation, and the last 1024 samples for the goniometer. It resets at every track change (`PlaybackService`).
