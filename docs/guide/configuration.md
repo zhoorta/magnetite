@@ -37,6 +37,8 @@ General settings that matter on a server:
 
 All of them are in the Docker image.
 
+Fingerprints also need an AcoustID application key. It is free: register an application at [acoustid.org/new-application](https://acoustid.org/new-application) and put the key in `MAGNETITE_ACOUSTID_KEY`. Without the key, or without `fpcalc`, the fingerprint step is skipped.
+
 ## What is sent to other services
 
 Magnetite contacts other services only when a look-up is asked for:

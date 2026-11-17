@@ -105,7 +105,7 @@ The database is migrated on start. The key, the database and the music stay in t
 
 ## Without Docker
 
-Needs PHP 8.3 or newer with Composer, and Node. ffmpeg and ffprobe are needed to play ALAC in every browser and for the file analysis.
+Needs PHP 8.3 or newer with Composer, and Node. ffmpeg and ffprobe are needed to play ALAC in every browser and for the file analysis. `fpcalc` (on Debian and Ubuntu the package `libchromaprint-tools`) is optional: with it and an AcoustID key, untagged albums can be identified by audio fingerprint (see [Configuration](configuration.md)).
 
     git clone https://github.com/zhoorta/magnetite.git
     cd magnetite

@@ -42,7 +42,7 @@ The truth view lists every analysed file in one table, worst first, and the find
 ## Library
 
 - Two panes, a command line, an edit table and search with filters, built for the keyboard. Every key also has a button for touch.
-- Untagged albums get suggested names from the folder and file names, MusicBrainz and, with an AcoustID key, audio fingerprints. Only fingerprints are sent, never audio.
+- Untagged albums get suggested names from the folder and file names, MusicBrainz and, with a free AcoustID key and `fpcalc`, audio fingerprints. Only fingerprints are sent, never audio.
 - Each person has their own library and can share albums, tracks and playlists, play only. Zips of audio and covers can be uploaded; nothing is overwritten.
 - The player keeps playing across page changes. The queue and position are restored, paused, after a reload.
 - Files are served only through `/stream`, with a type allowlist and strict headers. ALAC is converted to FLAC and cached.
