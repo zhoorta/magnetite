@@ -36,7 +36,7 @@ The processes run as `www-data` (uid 33), not root. Back up `data` (the database
 
 ## Inside the image
 
-PHP 8.4 with `gd`, `zip`, `intl`, `opcache`, `pcntl`; ffmpeg and ffprobe (ALAC to FLAC, `magnetite:analyze`); `fpcalc` (album fingerprints, used only when `MAGNETITE_ACOUSTID_KEY` is set); Node 22 (`bin/measure.mjs`). Size is about 1.7 GB, mostly the base image and ffmpeg. Logs go to stderr (`docker compose logs`).
+PHP 8.4 with `gd`, `zip`, `intl`, `opcache`, `pcntl`; ffmpeg and ffprobe (ALAC to FLAC, `magnetite:analyze`); `fpcalc` (album fingerprints, used only when `MAGNETITE_ACOUSTID_KEY` is set); Node 22 (`bin/measure.mjs`). Size is 1.7 GB on disk and about 450 MB to pull (measured 2026-11-17): the FrankenPHP base about 400 MB, PHP extensions with ffmpeg and chromaprint 457 MB, Node 122 MB, the FrankenPHP binary 55 MB, the app and `vendor/` 66 MB. Logs go to stderr (`docker compose logs`).
 
 ## A library in Ferrite
 

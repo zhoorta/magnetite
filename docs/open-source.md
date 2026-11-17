@@ -6,7 +6,7 @@ Draft 2026-11-10. Nothing here is built yet; `PLAN.md` has the checkbox. Revisit
 
 - Repo `zhoorta/magnetite` is **private**. AGPL-3.0-or-later in `LICENSE`, `composer.json`, `package.json`, `tui/Cargo.toml` and the README (one licence everywhere since 2026-11-13).
 - CI (`.github/workflows/ci.yml`) already tests and **publishes a multi-arch image** (amd64 and arm64) to GHCR (`latest`, short sha, semver on `v*` tags). Private repo, so the image is private too.
-- Install today: `docs/docker.md` (one container; the key, the database and the first user are made on the first start) or `docs/bare-metal.md` (nginx, PHP-FPM, systemd; written for one real server). The image is about 1.7 GB (base image, ffmpeg, Node for `bin/measure.mjs`).
+- Install today: `docs/docker.md` (one container; the key, the database and the first user are made on the first start) or `docs/bare-metal.md` (nginx, PHP-FPM, systemd; written for one real server). The image is 1.7 GB on disk and about 450 MB to pull (2026-11-17; the layers are in `docs/docker.md`).
 - The README is nine lines, no screenshots.
 - `PLAN.md` positioning: "pitch the look, not the library"; stay standalone; an OpenSubsonic **client** was dropped (Feishin covers it).
 - Clients: web, terminal (Rust), Android, iOS. All need a server. Only the web and the TUI are polished.
@@ -44,7 +44,7 @@ Goal: from nothing to playing a track with three commands, on amd64 and arm64.
 
 - [x] **Healthcheck**, sane defaults for `APP_URL` behind a proxy, and a clear message when `/music` is not writable (the uid problem in `docs/docker.md`).
 - [x] **Test it like a stranger** (2026-11-16: `bin/smoke-docker.sh`, run by the `smoke` job in CI; checked locally on a built arm64 image: plain `docker run`, healthy, `/up`, `/setup` closed, a private route refused, sign-in, restart, sign-in again): a script that starts the image on an empty machine (CI job, `docker run` plus a request to `/up` and a sign-in), so the quick start cannot rot.
-- [ ] Smaller image later, once the analysis no longer needs Node (phase 4).
+- [ ] Smaller image, later (planned 2026-11-17, not urgent: the pull is about 450 MB). In order of gain: drop Node (122 MB) once a Rust measure binary replaces `bin/measure.mjs` (phase 4); a slimmer ffmpeg (the Debian package pulls many codec libraries; check that ALAC conversion and the analysis, which also uses ffprobe, still work); Alpine is not worth it (musl with FrankenPHP and ffmpeg). The Dockerfile has no waste otherwise (multi-stage, `.dockerignore` leaves out the clients, docs and tests).
 
 ### 2. First impressions (M)
 - [~] **README that sells it** (2026-11-16: who it is for, `docker run`, an honest comparison with Navidrome, Koel and Feishin are in; still wanted: a TUI screenshot and a GIF of the meters): one screenshot or GIF each of the web player with a theme, the meters, the file-truth table in the TUI; what it is in three lines; the `docker run`; a short honest "compared to Navidrome / Koel / Feishin" (what we do, what we do not).
