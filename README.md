@@ -35,9 +35,9 @@ Posters are upright, so two sit side by side in full screen. Circuit (left) fill
 - padded bit depth, clipping, very compressed masters, peaks over 0 dBTP, DC offset, decode errors;
 - exact duplicates, whatever the tags say, and other copies of the same recording.
 
-The truth view lists every analysed file in one table, worst first, with the findings of the selected file explained underneath, and the player bar shows the format, dynamic range and loudness of the playing track. The analysis is its own step after a scan, runs on the server and never changes the files. The thresholds, and where they can be wrong, are in [docs/guide/file-analysis.md](docs/guide/file-analysis.md).
+The truth view lists every analysed file in one table, worst first, and the findings view (`o`) only the files with a finding. The findings of the selected file are explained underneath, and the player bar shows the format, dynamic range and loudness of the playing track. The analysis is its own step after a scan, runs on the server and never changes the files. The thresholds, and where they can be wrong, are in [docs/guide/file-analysis.md](docs/guide/file-analysis.md).
 
-![The truth view: 221 files with findings, worst first, and the findings of the selected file in words](public/screenshots/truth-crop.png)
+![The findings view: 221 files with a finding, worst first, and the findings of the selected file in words](public/screenshots/truth-crop.png)
 
 ## Library
 

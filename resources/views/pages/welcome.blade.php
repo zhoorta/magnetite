@@ -143,11 +143,11 @@
         <p class="mt-2 max-w-prose text-muted">
             The analysis looks at the audio itself, not only the tags and the file format. Each file is decoded once and measured: dynamic range, loudness, true peak,
             clipped peaks and where the spectrum ends. From these it flags probable upsampling, probable lossy sources and other problems.
-            The truth view lists all files, worst first, and the findings of the selected file are on the right.
+            The findings view lists the files with a finding, worst first, and the findings of the selected file are on the right. The truth view lists every file.
             The analysis runs on the server as its own step, after a scan, and never changes the files.
         </p>
         <figure class="mt-6">
-            <img src="/screenshots/truth-crop.png" alt="The truth view: 221 files with findings, worst first, with their dynamic range and loudness, and what is wrong with the selected file on the right" width="1800" height="901"
+            <img src="/screenshots/truth-crop.png" alt="The findings view: 221 files with a finding, worst first, with their dynamic range and loudness, and what is wrong with the selected file on the right" width="1800" height="901"
                  class="w-full rounded-theme border border-white/10" loading="lazy">
         </figure>
     </section>
