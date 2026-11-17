@@ -51,6 +51,8 @@ One server, four clients. They share the library, the shared music, the playlist
 | Android (`android/`) | Phone, tablet and Android TV. Twelve meters, posters, lock-screen controls. APK, not on the Play Store |
 | iOS (`ios/`) | SwiftUI, iPhone and iPad. Nine of the twelve meters, background playback. Built with Xcode |
 
+Binaries of the terminal client and the signed Android APK are attached to each [release](https://github.com/zhoorta/magnetite/releases).
+
 ## Install
 
 With Docker, one command and nothing to configure (the image is built for amd64 and arm64):

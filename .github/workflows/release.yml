@@ -1,0 +1,64 @@
+name: Release
+
+# Runs on a version tag (v0.1.0). Builds the terminal client for each platform and
+# publishes a GitHub Release with the changelog section as its notes. The Android APK
+# is signed with a key that is not in CI, so it is attached by hand (gh release upload).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  tui:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, name: macos-arm64 }
+          - { os: macos-15-intel, name: macos-x86_64 }
+          - { os: ubuntu-24.04, name: linux-x86_64 }
+          - { os: ubuntu-24.04-arm, name: linux-aarch64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: ALSA headers (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+      - run: cargo build --release --locked
+        working-directory: tui
+      - name: Package
+        run: |
+          d=magnetite-tui-${GITHUB_REF_NAME}-${{ matrix.name }}
+          mkdir "$d"
+          cp tui/target/release/magnetite LICENSE "$d"/
+          tar czf "$d.tar.gz" "$d"
+          shasum -a 256 "$d.tar.gz" > "$d.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tui-${{ matrix.name }}
+          path: magnetite-tui-*
+
+  release:
+    needs: tui
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tui-*
+          merge-multiple: true
+          path: dist
+      - name: Notes from CHANGELOG.md
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
+          test -s notes.md || echo "See CHANGELOG.md." > notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md

@@ -25,7 +25,11 @@ It has the library with folders, shared music, search, playlists, the meters, an
 
 ## Terminal
 
-A client written in Rust that decodes the audio itself, so its meters are computed from the decoded samples. It needs a Rust toolchain to build.
+A client written in Rust that decodes the audio itself, so its meters are computed from the decoded samples.
+
+**Download.** Each release has a `magnetite-tui-…` archive for macOS (arm64, x86_64) and Linux (x86_64, aarch64), with a `.sha256` file. Unpack it and run `./magnetite`. The macOS binaries are not signed: after downloading, run `xattr -d com.apple.quarantine magnetite` once. On Linux the sound output needs ALSA (`libasound2`).
+
+**Build.** It needs a Rust toolchain, and on Linux the ALSA development files (`libasound2-dev`).
 
     cd tui
     cargo run --release -- login https://music.example.com

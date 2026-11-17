@@ -4,11 +4,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versions follow [semver
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-17
+
 ### Added
 - The docked player has a compact mode on phones (no meters, small cover); the choice is saved per browser.
 - Media Session: lock screen, headset and media-key controls with the track, cover and position.
 - One-command Docker install (`docker run`), a first-run page (`/setup`) and a CI smoke test of the image.
-- Terminal client, Android (phone, tablet, TV) and iOS clients.
+- Terminal client, Android (phone, tablet, TV) and iOS clients. The release has terminal binaries for macOS and Linux and a signed Android APK.
 - Dense, keyboard-first library with search, a truth view, an edit table and an online lookup.
 - File truth: loudness, true peak, dynamic range, clipping, lossy-source and upsampling findings per file.
 - Multi-user libraries with sharing, playlists, Ferrite storage, and a read-only demo library.
