@@ -1,102 +1,86 @@
-// Loudness readout in LUFS (EBU R128): momentary, short-term and integrated, plus true peak.
-// The numbers come from the meter worklet; this only draws them.
+// Loudness readout in LUFS (EBU R128) as nixie tubes: momentary, short-term and integrated, plus the true peak.
+// The numbers come from the meter worklet; this only draws them. Each digit sits in its own dark cell and glows
+// (a wide faint stroke under a bright fill: no shadowBlur, which is too slow to run 20 times a frame).
 
-import { toDb } from './meter';
+import { toDb } from './meter.js';
 
 const ROWS = [
-    ['MOMENTARY', 'm'],
-    ['SHORT-TERM', 's'],
-    ['INTEGRATED', 'i'],
+    ['M', 'MOMENTARY', 'LUFS'],
+    ['S', 'SHORT-TERM', 'LUFS'],
+    ['I', 'INTEGRATED', 'LUFS'],
+    ['TP', 'TRUE PEAK', 'dBTP'],
 ];
-const TICKS = [-35, -23, -14, -5];
+const CELLS = 5; // -23.4
 
-const fmt = (v) => (Number.isFinite(v) ? `${v < 0 ? '−' : '+'}${Math.abs(v).toFixed(1)}` : '−−.-');
+/** `−23.4` padded to the cells; a value that is not there yet shows dashes. */
+export const nixieText = (v) => (Number.isFinite(v) ? `${v < 0 ? '−' : ' '}${Math.abs(v).toFixed(1)}`.padStart(CELLS, ' ') : ' −−.−'.slice(-CELLS));
 
 export default {
     id: 'loudness',
     needs: ['lufs'],
     label: 'Loudness (LUFS)',
     params: {
-        min: -41,
-        max: -5,
-        target: -23, // EBU R128 programme loudness
+        digit: '#ffa04a', // the glow of the tubes; a nixie is orange whatever the theme
         ceiling: -1, // dBTP, EBU R128 true-peak limit
         warn: '#ff4d3d',
     },
 
     draw(g, { lufs }, { w, h, colors, params }) {
         const p = { ...this.params, ...params };
-        const margin = Math.min(w, h) * 0.07;
-        const rowH = Math.min((h - margin * 2) / 4.4, w * 0.12);
-        const block = rowH * 4 + rowH * 0.4;
-        const top = (h - block) / 2;
-        const label = Math.max(9, Math.min(rowH * 0.22, w * 0.02));
-        const big = Math.max(14, Math.min(rowH * 0.5, w * 0.07));
-        const numW = big * 3.4;
-        const barX = margin;
-        const barW = w - margin * 2 - numW;
-        const at = (v) => Math.max(0, Math.min(1, (v - p.min) / (p.max - p.min)));
+        const margin = Math.min(w, h) * 0.06;
+        const rowH = (h - margin * 2) / ROWS.length;
+        const cellH = Math.min(rowH * 0.86, (w - margin * 2) / 9);
+        const cellW = cellH * 0.78;
+        const gap = cellW * 0.12;
+        const tubes = CELLS * (cellW + gap) - gap;
+        const label = Math.max(9, Math.min(cellH * 0.3, w * 0.03));
+        const x0 = (w - (tubes + label * 4.6)) / 2 + label * 1.6; // room for the row tag at the left and the unit at the right
 
-        ROWS.forEach(([name, key], i) => {
-            const y = top + i * rowH;
-            const v = lufs[key];
-            const barH = Math.max(4, rowH * 0.16);
-            const barY = y + rowH * 0.62;
+        const tp = Math.max(lufs.tpL > 0 ? toDb(lufs.tpL) : -Infinity, lufs.tpR > 0 ? toDb(lufs.tpR) : -Infinity);
+        const values = [lufs.m, lufs.s, lufs.i, tp];
 
-            g.textBaseline = 'alphabetic';
-            g.textAlign = 'left';
-            g.fillStyle = colors.muted;
-            g.font = `${Math.round(label)}px ${colors.font}`;
-            g.fillText(name, barX, y + label * 1.1);
+        ROWS.forEach(([tag, , unit], i) => {
+            const y = margin + i * rowH + (rowH - cellH) / 2;
+            const v = values[i];
+            const hot = i === 3 && v > p.ceiling;
+            const glow = hot ? p.warn : p.digit;
 
-            g.fillStyle = colors.muted;
-            g.globalAlpha = 0.22;
-            g.fillRect(barX, barY, barW, barH);
-            g.globalAlpha = 1;
-            g.fillStyle = key === 'i' ? colors.accent2 : colors.accent;
-            g.fillRect(barX, barY, barW * at(v), barH);
-
-            // target tick
-            g.fillStyle = colors.text;
-            g.fillRect(barX + barW * at(p.target) - 0.5, barY - barH * 0.35, 1.5, barH * 1.7);
-
+            g.textBaseline = 'middle';
             g.textAlign = 'right';
-            g.fillStyle = colors.text;
-            g.font = `${Math.round(big)}px ${colors.font}`;
-            g.fillText(fmt(v), w - margin - label * 3.2, y + rowH * 0.55);
             g.fillStyle = colors.muted;
             g.font = `${Math.round(label)}px ${colors.font}`;
-            g.fillText('LUFS', w - margin, y + rowH * 0.55);
-        });
-
-        // scale under the three bars
-        const scaleY = top + rowH * 3 - label * 0.15;
-        g.fillStyle = colors.muted;
-        g.textBaseline = 'alphabetic';
-        g.font = `${Math.round(label)}px ${colors.font}`;
-        g.textAlign = 'center';
-        for (const t of TICKS) g.fillText(String(t), barX + barW * at(t), scaleY + label * 1.2);
-
-        // true peak, one number per channel; red above the ceiling
-        const y = top + rowH * 3.4;
-        g.textAlign = 'left';
-        g.fillStyle = colors.muted;
-        g.font = `${Math.round(label)}px ${colors.font}`;
-        g.fillText('TRUE PEAK', barX, y + label * 1.1);
-        [['L', lufs.tpL], ['R', lufs.tpR]].forEach(([name, lin], i) => {
-            const db = lin > 0 ? toDb(lin) : -Infinity;
-            const x = barX + barW * 0.45 + i * barW * 0.28;
+            g.fillText(tag, x0 - label * 0.6, y + cellH / 2);
             g.textAlign = 'left';
-            g.fillStyle = colors.muted;
-            g.font = `${Math.round(label)}px ${colors.font}`;
-            g.fillText(name, x, y + rowH * 0.5);
-            g.fillStyle = db > p.ceiling ? p.warn : colors.text;
-            g.font = `${Math.round(big * 0.8)}px ${colors.font}`;
-            g.fillText(fmt(db), x + label * 1.6, y + rowH * 0.5);
+            g.fillText(unit, x0 + tubes + label * 0.6, y + cellH / 2);
+
+            const text = nixieText(v);
+            g.font = `${Math.round(cellH * 0.74)}px ${colors.font}`;
+            g.textAlign = 'center';
+            g.lineJoin = 'round';
+            for (let k = 0; k < CELLS; k++) {
+                const x = x0 + k * (cellW + gap);
+                g.globalAlpha = 1;
+                g.fillStyle = colors.bg;
+                g.beginPath();
+                g.roundRect(x, y, cellW, cellH, cellW * 0.16);
+                g.fill();
+                g.strokeStyle = colors.muted;
+                g.globalAlpha = 0.25;
+                g.lineWidth = 1;
+                g.stroke();
+                const ch = text[k];
+                if (ch === ' ') continue;
+                const cx = x + cellW / 2;
+                const cy = y + cellH * 0.53;
+                g.strokeStyle = glow;
+                g.fillStyle = glow;
+                g.lineWidth = cellH * 0.16;
+                g.globalAlpha = 0.14;
+                g.strokeText(ch, cx, cy);
+                g.globalAlpha = 1;
+                g.fillText(ch, cx, cy);
+            }
+            g.globalAlpha = 1;
         });
-        g.textAlign = 'right';
-        g.fillStyle = colors.muted;
-        g.font = `${Math.round(label)}px ${colors.font}`;
-        g.fillText('dBTP', w - margin, y + rowH * 0.5);
     },
 };
