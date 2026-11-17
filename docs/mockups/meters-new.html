@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magnetite new meters</title>
+<style>
+:root { --bg: #0b0d14; --surface: #141824; --text: #e6e8ef; --muted: #8a90a6; --accent: #ff5a5f; --accent2: #ffb86b; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 15px/1.5 ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 22px; }
+h1 { font: 700 20px ui-monospace, Menlo, monospace; margin: 0; color: var(--accent); }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+figure { margin: 0; background: var(--surface); border-radius: 8px; padding: 12px; }
+figcaption { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); margin-top: 8px; }
+figcaption b { color: var(--accent2); }
+canvas { width: 100%; height: auto; display: block; border-radius: 6px; background: #0a0c10; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Magnetite: five new meters (mockup)</h1>
+  <p>Drawn on a made-up signal in the Late-night FM colours. Each is one cell of the meter layout (up to four cells at once). Nothing here reads real audio.</p>
+  <div class="grid">
+    <figure><canvas id="ppm" width="480" height="300"></canvas><figcaption><b>PPM</b> BBC scale 1-7, quasi-peak: fast attack, slow fall, peak flag at 7.</figcaption></figure>
+    <figure><canvas id="k" width="480" height="300"></canvas><figcaption><b>K-meter</b> K-20: RMS body, peak tick, 0 at -20 dBFS (K-12 and K-14 are a setting).</figcaption></figure>
+    <figure><canvas id="crest" width="480" height="300"></canvas><figcaption><b>Crest factor</b> peak minus RMS in dB, with the last 30 s as a line.</figcaption></figure>
+    <figure><canvas id="lra" width="480" height="300"></canvas><figcaption><b>LRA</b> spread of the short-term loudness; the bracket is the 10th to 95th percentile.</figcaption></figure>
+    <figure><canvas id="nixie" width="480" height="300"></canvas><figcaption><b>Nixie readout</b> momentary, short-term, integrated LUFS and true peak.</figcaption></figure>
+  </div>
+</div>
+<script>
+const C = { bg: '#0a0c10', surface: '#141824', text: '#e6e8ef', muted: '#8a90a6', accent: '#ff5a5f', accent2: '#ffb86b', ok: '#7ec17e' };
+const F = 'ui-monospace, Menlo, monospace';
+// a made-up programme: loudness wanders, with beats
+const sig = (t) => {
+  const beat = Math.max(0, Math.sin(t * 7.3)) ** 3;
+  const swell = 0.5 + 0.5 * Math.sin(t * 0.35);
+  const rms = -26 + 9 * swell + 2 * Math.sin(t * 1.9);
+  return { rms, peak: rms + 8 + 5 * beat + 1.5 * Math.sin(t * 11), mom: rms + 3.5, short: -17 + 6 * Math.sin(t * 0.21) + 2 * Math.sin(t * 0.7) };
+};
+const ctx = (id) => { const c = document.getElementById(id); return [c.getContext('2d'), c.width, c.height]; };
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const hist = { crest: [], short: [] };
+let ppmV = -40, ppmHold = -40, kRms = -40, kPk = -40;
+
+function txt(g, s, x, y, size, col, align = 'left') { g.font = `${size}px ${F}`; g.fillStyle = col; g.textAlign = align; g.textBaseline = 'middle'; g.fillText(s, x, y); }
+
+function ppm(t, dt) {
+  const [g, w, h] = ctx('ppm'); g.clearRect(0, 0, w, h);
+  const s = sig(t); const x0 = 40, x1 = w - 40;
+  // quasi-peak: attack ~5 ms (instant here), fall 24 dB over 2.8 s (BBC)
+  ppmV = s.peak > ppmV ? s.peak : ppmV - dt * (24 / 2.8);
+  const lvl = (db) => clamp((db + 40) / 40, 0, 1); // -40..0 dBFS on the bar; marks 1..7 are 4 dB apart, 4 = -18
+  txt(g, 'PPM', x0, 28, 16, C.muted);
+  for (let i = 1; i <= 7; i++) {
+    const db = -18 + (i - 4) * 4 + 0; const x = x0 + (x1 - x0) * lvl(db - 8);
+    g.strokeStyle = C.muted; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, 110); g.lineTo(x, 128); g.stroke();
+    txt(g, i, x, 146, 15, i >= 6 ? C.accent : C.text, 'center');
+  }
+  g.fillStyle = '#1b2030'; g.fillRect(x0, 70, x1 - x0, 28);
+  const xv = x0 + (x1 - x0) * lvl(ppmV - 8);
+  g.fillStyle = C.accent2; g.fillRect(x0, 70, Math.max(0, xv - x0), 28);
+  g.fillStyle = C.text; g.fillRect(xv - 2, 62, 4, 44);
+  // second channel, a little lower
+  const v2 = ppmV - 2 - 1.5 * Math.sin(t * 2); const xv2 = x0 + (x1 - x0) * lvl(v2 - 8);
+  g.fillStyle = '#1b2030'; g.fillRect(x0, 180, x1 - x0, 28); g.fillStyle = C.accent2; g.fillRect(x0, 180, Math.max(0, xv2 - x0), 28);
+  g.fillStyle = C.text; g.fillRect(xv2 - 2, 172, 4, 44);
+  txt(g, 'L', x0 - 24, 84, 14, C.muted); txt(g, 'R', x0 - 24, 194, 14, C.muted);
+  txt(g, 'BBC · quasi-peak', x0, 262, 13, C.muted);
+  g.fillStyle = ppmV > -8 ? C.accent : '#3a2024'; g.beginPath(); g.arc(x1 - 6, 28, 7, 0, 7); g.fill();
+}
+
+function kmeter(t, dt) {
+  const [g, w, h] = ctx('k'); g.clearRect(0, 0, w, h);
+  const s = sig(t); kRms += (s.rms - kRms) * clamp(dt / 0.3, 0, 1); kPk = s.peak > kPk ? s.peak : kPk - dt * 6;
+  const ref = -20, top = 24, bot = h - 36, bw = 54;
+  const y = (db) => bot - (bot - top) * clamp((db - ref + 40) / 44, 0, 1); // -40..+4 around the K zero
+  txt(g, 'K-20', 28, 22, 16, C.muted);
+  [[0, 1], [1, 2]].forEach(([i]) => {
+    const x = 120 + i * 120; const r = kRms - i * 1.2, p = kPk - i * 1.2;
+    g.fillStyle = '#1b2030'; g.fillRect(x, top, bw, bot - top);
+    const grad = [[-40, 0, C.ok], [0, 4, C.accent]]; // green below the K zero, red above (K: green, yellow, red)
+    grad.forEach(([a, b, col]) => { const ya = y(clamp(r, a + ref, b + ref)); const yb = y(a + ref); g.fillStyle = col; if (r > a + ref) g.fillRect(x, ya, bw, yb - ya); });
+    g.fillStyle = C.text; g.fillRect(x - 6, y(p), bw + 12, 3);
+    txt(g, i ? 'R' : 'L', x + bw / 2, bot + 18, 14, C.muted, 'center');
+  });
+  for (let k = -40; k <= 4; k += 4) { const yy = y(k + ref); g.strokeStyle = C.muted; g.lineWidth = k === 0 ? 2 : 1; g.beginPath(); g.moveTo(98, yy); g.lineTo(112, yy); g.stroke(); if (k % 8 === 0) txt(g, k, 90, yy, 12, k === 0 ? C.text : C.muted, 'right'); }
+  txt(g, 'RMS ' + (kRms - ref).toFixed(1), 340, 80, 15, C.text); txt(g, 'peak ' + (kPk - ref).toFixed(1), 340, 108, 15, C.muted);
+  txt(g, 'dB re K-zero', 340, 150, 12, C.muted);
+}
+
+function crest(t, dt) {
+  const [g, w, h] = ctx('crest'); g.clearRect(0, 0, w, h);
+  const s = sig(t); const cf = s.peak - s.rms + 1.5 * Math.sin(t * 3);
+  if ((hist.crest.t = (hist.crest.t || 0) + dt) > 0.25) { hist.crest.t = 0; hist.crest.push(cf); if (hist.crest.length > 120) hist.crest.shift(); }
+  txt(g, 'CREST FACTOR', 24, 26, 15, C.muted);
+  txt(g, cf.toFixed(1), 24, 92, 62, C.accent2); txt(g, 'dB', 190, 108, 20, C.muted);
+  txt(g, 'peak ' + s.peak.toFixed(1) + '   rms ' + s.rms.toFixed(1), 24, 150, 13, C.muted);
+  const x0 = 24, x1 = w - 24, y0 = 175, y1 = 268;
+  g.strokeStyle = '#27304a'; g.lineWidth = 1; [6, 12, 18].forEach((v) => { const yy = y1 - (y1 - y0) * v / 24; g.beginPath(); g.moveTo(x0, yy); g.lineTo(x1, yy); g.stroke(); txt(g, v, x1, yy - 7, 11, C.muted, 'right'); });
+  g.strokeStyle = C.accent; g.lineWidth = 2; g.beginPath();
+  hist.crest.forEach((v, i) => { const x = x0 + (x1 - x0) * i / 119, y = y1 - (y1 - y0) * clamp(v, 0, 24) / 24; i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+}
+
+function lra(t, dt) {
+  const [g, w, h] = ctx('lra'); g.clearRect(0, 0, w, h);
+  // a static distribution of short-term loudness values, from the made-up programme
+  const bins = new Array(30).fill(0); for (let k = 0; k < 600; k++) { const v = sig(k * 0.7).short; bins[clamp(Math.floor((v + 36) / 1), 0, 29)]++; }
+  const mx = Math.max(...bins), x0 = 30, x1 = w - 30, y0 = 50, y1 = 200, bw = (x1 - x0) / 30;
+  const tot = bins.reduce((a, b) => a + b), at = (q) => { let a = 0; for (let i = 0; i < 30; i++) { a += bins[i]; if (a >= tot * q) return i; } return 29; };
+  const lo = at(0.1), hi = at(0.95);
+  bins.forEach((n, i) => { const hh = (y1 - y0) * n / mx; g.fillStyle = i >= lo && i <= hi ? C.accent : '#3a4160'; g.fillRect(x0 + i * bw + 1, y1 - hh, bw - 2, hh); });
+  g.strokeStyle = C.accent2; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 + lo * bw, y1 + 12); g.lineTo(x0 + lo * bw, y1 + 20); g.lineTo(x0 + (hi + 1) * bw, y1 + 20); g.lineTo(x0 + (hi + 1) * bw, y1 + 12); g.stroke();
+  txt(g, 'LRA', 30, 26, 15, C.muted); txt(g, (hi - lo + 1).toFixed(1) + ' LU', x1, 26, 22, C.accent2, 'right');
+  txt(g, '-36', x0, 232, 11, C.muted); txt(g, '-6 LUFS short-term', x1, 232, 11, C.muted, 'right');
+  txt(g, 'gated 10th to 95th percentile (EBU 3342)', 30, 270, 12, C.muted);
+}
+
+function nixie(t) {
+  const [g, w, h] = ctx('nixie'); g.clearRect(0, 0, w, h);
+  const s = sig(t);
+  const rows = [['M', s.mom, 'LUFS'], ['S', s.short, 'LUFS'], ['I', -16.8 + 0.4 * Math.sin(t * 0.1), 'LUFS'], ['TP', -1.2 + 0.5 * Math.sin(t * 0.8), 'dBTP']];
+  rows.forEach(([name, v, unit], i) => {
+    const y = 20 + i * 66; txt(g, name, 22, y + 28, 20, C.muted);
+    const str = v.toFixed(1).padStart(5, ' ');
+    [...str].forEach((ch, k) => {
+      const x = 62 + k * 52;
+      g.fillStyle = '#15100d'; g.beginPath(); g.roundRect(x, y, 46, 56, 8); g.fill();
+      g.strokeStyle = '#2b2018'; g.stroke();
+      if (ch === ' ') return;
+      // the glowing digit: a soft halo under a thin bright stroke
+      g.save(); g.shadowColor = '#ff8a2a'; g.shadowBlur = 16; txt(g, ch, x + 23, y + 31, 44, '#ffa04a', 'center'); g.restore();
+      txt(g, ch, x + 23, y + 31, 44, '#ffd9a8', 'center');
+    });
+    txt(g, unit, 62 + 5 * 52 + 6, y + 36, 13, C.muted);
+  });
+}
+
+let last = performance.now(), start = last;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; const t = (now - start) / 1000 + 5;
+  ppm(t, dt); kmeter(t, dt); crest(t, dt); lra(t, dt); nixie(t);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
