@@ -52,12 +52,33 @@ Back up `data` and the music. `storage` can be rebuilt: covers by a scan, conver
 
 ### Reaching it from other machines
 
-The container listens on `127.0.0.1` over plain HTTP. To use it from anywhere else, put a reverse proxy with TLS in front (nginx, Caddy, Traefik), copy `.env.docker.example` to `.env.docker` and set:
+The container speaks plain HTTP. With Compose it is published on `127.0.0.1` only; with `docker run -p 8080:8080` it is published on every interface, so use `-p 127.0.0.1:8080:8080` on a server. To use it from anywhere else, put a reverse proxy with TLS in front (Caddy, nginx, Traefik) and set the public address:
 
     APP_URL=https://music.example.com
     SESSION_SECURE_COOKIE=true
 
-Two things to check on the proxy: its limit on the size of a request body (nginx `client_max_body_size`) must allow the zips to be uploaded, and it should not buffer the responses of `/stream/`.
+With Compose, copy `.env.docker.example` to `.env.docker` and write them there; with `docker run`, pass them as `-e`.
+
+Before the server is reachable, create the first user (`MAGNETITE_USER` and `MAGNETITE_PASSWORD`), because until a user exists anyone who finds the address can use the set-up page and become the administrator.
+
+A complete example on a VPS, with the container bound to localhost:
+
+    docker run -d --name magnetite --restart unless-stopped \
+      -p 127.0.0.1:8080:8080 \
+      -v magnetite-data:/data -v magnetite-music:/music \
+      -e MAGNETITE_USER=yourname -e MAGNETITE_PASSWORD='a-long-password' \
+      -e APP_URL=https://music.example.com -e SESSION_SECURE_COOKIE=true \
+      ghcr.io/zhoorta/magnetite
+
+Point a DNS record for the name at the server, install Caddy (`apt install caddy`) and put this in `/etc/caddy/Caddyfile`:
+
+    music.example.com {
+        reverse_proxy 127.0.0.1:8080
+    }
+
+Then `systemctl reload caddy`. Caddy gets and renews the certificate by itself, has no upload limit by default and does not buffer streams. Allow only ports 22, 80 and 443 in the firewall; 8080 stays closed.
+
+With another proxy, two things to check: its limit on the size of a request body (nginx `client_max_body_size`) must allow the zips to be uploaded, and it should not buffer the responses of `/stream/` (nginx `proxy_buffering off`).
 
 ### More users
 
