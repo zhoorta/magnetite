@@ -101,3 +101,33 @@ test('goniometer buffer is in time order, newest last, and reset clears the read
     assert.equal(dsp.snapshot().tpL, 0);
     assert.equal(dsp.snapshot().lufsI, -Infinity);
 });
+
+test('the live loudness range follows the list-based one and stays bounded', () => {
+    const fs = 48000;
+    const loud = sine(fs, 1000, dbToLin(-20));
+    const quiet = sine(fs, 1000, dbToLin(-30));
+    const live = new MeterDsp(fs);
+    const offline = new MeterDsp(fs, { live: false, lra: true });
+    for (const dsp of [live, offline]) {
+        run(fs, 40, (n) => [loud(n), loud(n)], dsp);
+        run(fs, 40, (n) => [quiet(n), quiet(n)], dsp);
+    }
+    const snap = live.snapshot();
+    assert.ok(Math.abs(snap.lra - offline.loudnessRange()) < 0.3, `live ${snap.lra} offline ${offline.loudnessRange()}`);
+    assert.ok(snap.lra > 8 && snap.lra < 12, `range ${snap.lra}`);
+    assert.ok(snap.lraLo < snap.lraHi && snap.lraHi > -24 && snap.lraLo < -26);
+    assert.equal(snap.lraShape.length, 60);
+    assert.ok(snap.lraShape.reduce((a, b) => a + b, 0) > 600); // the short-term values of both halves are in the histogram
+    assert.equal(live.lraHist.length, 800); // fixed size
+});
+
+test('no loudness range before there is programme, and it starts again after a reset', () => {
+    const fs = 44100;
+    const s = sine(fs, 1000, dbToLin(-20));
+    const dsp = run(fs, 2, (n) => [s(n), s(n)]);
+    assert.equal(dsp.snapshot().lra, 0);
+    run(fs, 10, (n) => [s(n), s(n)], dsp);
+    assert.ok(dsp.snapshot().lra < 0.5); // a steady tone has no range
+    dsp.reset();
+    assert.equal(dsp.snapshot().lraShape.reduce((a, b) => a + b, 0), 0);
+});

@@ -13,6 +13,9 @@ export const GONIO_LEN = 1024;
 const ABS_GATE = -70; // LUFS
 const REL_GATE = -10; // LU below the ungated mean
 const OFFSET = -0.691;
+const LRA_BINS = 800; // the live loudness range keeps a histogram of the short-term values: 0.1 LU bins from -70 LUFS up, so its memory does not grow with the programme
+const SHOWN_MIN = -60; // the coarse histogram handed to the meter: 1 LU bins from -60 to 0 LUFS
+const SHOWN_BINS = 60;
 const CORR_TAU = 0.3; // seconds
 const OVERSAMPLE = 4;
 const TAPS_PER_PHASE = 48;
@@ -139,6 +142,10 @@ export class MeterDsp {
         this.ringPos = 0;
         this.lastLoud = [-1e9, -1e9]; // sample index of the last sample big enough to matter for the true peak
         this.index = 0;
+        this.lraHist = new Uint32Array(LRA_BINS); // live loudness range (EBU Tech 3342), see liveRange()
+        this.lraEnergy = 0; // the short-term energies above -70 LUFS, summed, and how many
+        this.lraN = 0;
+        this.lra = { lra: 0, lo: -Infinity, hi: -Infinity };
         this.shortTerm = []; // mean energy of each 3 s window, every 100 ms (only with { lra: true })
         this.sLL = 0;
         this.sRR = 0;
@@ -221,7 +228,62 @@ export class MeterDsp {
             if (this.live) this.integrated = this.integratedLufs();
         }
 
-        if (this.keepShortTerm && this.blocks.length >= 30) this.shortTerm.push(this.mean(this.blocks));
+        if (this.blocks.length >= 30) {
+            const e = this.mean(this.blocks);
+            if (this.keepShortTerm) this.shortTerm.push(e);
+            if (this.live) this.addShortTerm(e);
+        }
+    }
+
+    /** One short-term value (every 100 ms once 3 s have played) into the histogram, and the range from it. */
+    addShortTerm(e) {
+        const l = energyToLufs(e);
+        if (!(l > ABS_GATE)) return;
+        this.lraHist[Math.min(LRA_BINS - 1, Math.floor((l - ABS_GATE) * 10))]++;
+        this.lraEnergy += e;
+        this.lraN++;
+        this.lra = this.liveRange();
+    }
+
+    /**
+     * The loudness range from the histogram, as `loudnessRange()` does from the list: values under 20 LU below the mean
+     * of those above -70 are dropped, then the 10th and 95th percentile. Resolution 0.1 LU. `lo` and `hi` are the two
+     * percentiles in LUFS (the range is `hi - lo`; 0 until there are two values).
+     */
+    liveRange() {
+        const none = { lra: 0, lo: -Infinity, hi: -Infinity };
+        if (this.lraN < 2) return none;
+
+        const threshold = energyToLufs(this.lraEnergy / this.lraN) - 20;
+        let from = Math.max(0, Math.ceil((threshold - ABS_GATE) * 10));
+        if ((from / 10) + ABS_GATE <= threshold) from++; // a bin must be above the threshold, not on it
+        let count = 0;
+        for (let i = from; i < LRA_BINS; i++) count += this.lraHist[i];
+        if (count < 2) return none;
+
+        const nth = (k) => { // the value of the k-th (0-based) of the sorted values: the centre of the bin holding it
+            let seen = 0;
+            for (let i = from; i < LRA_BINS; i++) {
+                seen += this.lraHist[i];
+                if (seen > k) return ABS_GATE + (i + 0.5) / 10;
+            }
+            return ABS_GATE + LRA_BINS / 10;
+        };
+        const lo = nth(Math.round((count - 1) * 0.1));
+        const hi = nth(Math.round((count - 1) * 0.95));
+
+        return { lra: hi - lo, lo, hi };
+    }
+
+    /** The short-term values by loudness, 1 LU bins from -60 to 0 LUFS, for the meter that draws them. */
+    shortTermShape() {
+        const out = new Uint32Array(SHOWN_BINS);
+        for (let i = 0; i < LRA_BINS; i++) {
+            const k = Math.floor(i / 10 + ABS_GATE - SHOWN_MIN);
+            if (k >= 0 && k < SHOWN_BINS) out[k] += this.lraHist[i];
+        }
+
+        return out;
     }
 
     mean(list) {
@@ -280,6 +342,10 @@ export class MeterDsp {
             lufsI: this.integrated,
             tpL: this.tp[0],
             tpR: this.tp[1],
+            lra: this.lra.lra,
+            lraLo: this.lra.lo,
+            lraHi: this.lra.hi,
+            lraShape: this.shortTermShape(),
             corr: d > 1e-9 ? this.sLR / d : 0,
             gonio,
         };

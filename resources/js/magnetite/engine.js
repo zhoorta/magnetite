@@ -14,7 +14,7 @@ export const SILENCE = {
     freq: new Uint8Array(FFT / 2),
     wave: new Uint8Array(FFT).fill(128),
     levels: { l: { rms: 0, peak: 0 }, r: { rms: 0, peak: 0 } },
-    lufs: { m: -Infinity, s: -Infinity, i: -Infinity, tpL: 0, tpR: 0 },
+    lufs: { m: -Infinity, s: -Infinity, i: -Infinity, tpL: 0, tpR: 0, lra: 0, lraLo: -Infinity, lraHi: -Infinity, lraShape: new Uint32Array(60) },
     stereo: { corr: 0, gonio: new Float32Array(2) },
     bands: new Float32Array(BAND_LABELS.length).fill(BAND_FLOOR),
     spec: new Float32Array(SPEC_FFT / 2).fill(-120),
@@ -122,6 +122,10 @@ export class AudioEngine {
                     this.lufs.i = data.lufsI;
                     this.lufs.tpL = data.tpL;
                     this.lufs.tpR = data.tpR;
+                    this.lufs.lra = data.lra;
+                    this.lufs.lraLo = data.lraLo;
+                    this.lufs.lraHi = data.lraHi;
+                    this.lufs.lraShape = data.lraShape;
                     this.stereo.corr = data.corr;
                     this.stereo.gonio = data.gonio;
                 };
