@@ -4,7 +4,7 @@ Magnetite is a self-hosted music player. Its meters show loudness (LUFS), true p
 
 Site and demo: [magnetite.stackcare.pt](https://magnetite.stackcare.pt). A library can be a folder on the server or a folder in [Ferrite](https://github.com/zhoorta/ferrite), a file server by the same author.
 
-![The library with the Terminal theme: folders and albums, tracks with their dynamic range, and the player with two meters](public/screenshots/library.png)
+![The library with the Terminal theme: a folder tree with the dynamic range of each folder, the tracks of an album, and the player with four meters](public/screenshots/library-hero.png)
 
 ## Meters and posters
 
@@ -12,9 +12,20 @@ Up to four meters show at once, next to the player or in full screen. Every one 
 
 ![The twelve meters: wide meters, VU needles, LED meters, magic eyes, scope, goniometer, loudness, K-meter, crest factor, loudness range, third-octave analyser and spectrogram](public/screenshots/meters.png)
 
+Full screen (`F`) gives the meters the whole window; four panels share it and the controls hide after three seconds:
+
+![Full-screen meters: wide meters, magic eyes, crest factor and loudness range moving with the music](public/media/fullscreen-meters.gif)
+
 Posters are meters drawn like printed posters: flat shapes in a few colours, with the artist, title and album of the playing track printed on them, moving with the music. Arches, Fan and Pillars grow with the energy of each frequency range, Lens shows the two channels as two discs that overlap as they become alike, and Halftone and Facets scroll like a spectrogram.
 
 ![The fifteen posters](public/screenshots/posters.png)
+
+Posters are upright, so two sit side by side in full screen. Circuit (left) fills its straps with seven frequency ranges; Overcome (right) draws one line per third-octave band, with two circles on the left and right peaks:
+
+<p>
+  <img src="public/media/fullscreen-circuit.gif" alt="The Circuit poster in full screen" width="340">
+  <img src="public/media/fullscreen-overcome.gif" alt="The Overcome poster in full screen" width="340">
+</p>
 
 ## File analysis
 
@@ -26,7 +37,7 @@ Posters are meters drawn like printed posters: flat shapes in a few colours, wit
 
 The truth view lists every analysed file in one table, worst first, with the findings of the selected file explained underneath, and the player bar shows the format, dynamic range and loudness of the playing track. The analysis is its own step after a scan, runs on the server and never changes the files. The thresholds, and where they can be wrong, are in [docs/guide/file-analysis.md](docs/guide/file-analysis.md).
 
-![The truth view: every file in one list, worst first](public/screenshots/truth.png)
+![The truth view: 221 files with findings, worst first, and the findings of the selected file in words](public/screenshots/truth-crop.png)
 
 ## Library
 
