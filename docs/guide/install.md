@@ -4,9 +4,15 @@ There are two ways to run Magnetite: in one Docker container, or directly with P
 
 ## With Docker
 
-Needs Docker with Compose. The image is built from the source, so the first start takes a few minutes.
+Needs Docker. The image is published for amd64 and arm64:
 
-    git clone <repository address> magnetite
+    docker run -d --name magnetite -p 8080:8080 \
+      -v magnetite-data:/data -v /path/to/music:/music \
+      ghcr.io/zhoorta/magnetite
+
+To build it from the source with Compose instead (the first start takes a few minutes):
+
+    git clone https://github.com/zhoorta/magnetite.git
     cd magnetite
     docker compose up -d --build
 
@@ -70,13 +76,15 @@ Everyone can change their own on the **Password** page, in the user menu (the pe
     git pull
     docker compose up -d --build
 
+With the published image: `docker pull ghcr.io/zhoorta/magnetite`, then stop, remove and start the container again with the same `docker run` command. The volumes keep everything. Commands written here as `docker compose exec app …` are `docker exec magnetite …` for a container started with `docker run`.
+
 The database is migrated on start. The key, the database and the music stay in their volumes.
 
 ## Without Docker
 
 Needs PHP 8.3 or newer with Composer, and Node. ffmpeg and ffprobe are needed to play ALAC in every browser and for the file analysis.
 
-    git clone <repository address> magnetite
+    git clone https://github.com/zhoorta/magnetite.git
     cd magnetite
     composer setup
     php artisan magnetite:user yourname

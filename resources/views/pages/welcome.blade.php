@@ -239,13 +239,21 @@
     <section id="install" class="scroll-mt-8 border-t border-white/10 py-10">
         <h2 class="text-2xl font-semibold">Install and documentation</h2>
         <p class="mt-2 max-w-prose text-muted">
-            Magnetite runs in one Docker container, which is the easiest way to start, or directly with PHP 8.3 and Node. With Docker, from a copy of the source:
+            Magnetite runs in one Docker container, which is the easiest way to start, or directly with PHP 8.3 and Node. With Docker:
         </p>
-        <pre class="mt-4 overflow-x-auto rounded-theme border border-white/10 bg-surface p-4 text-xs leading-relaxed text-muted"><code>docker compose up -d --build</code></pre>
+        <pre class="mt-4 overflow-x-auto rounded-theme border border-white/10 bg-surface p-4 text-xs leading-relaxed text-muted"><code>docker run -d --name magnetite -p 8080:8080 \
+  -v magnetite-data:/data -v /path/to/music:/music \
+  ghcr.io/zhoorta/magnetite</code></pre>
         <p class="mt-4 max-w-prose text-sm text-muted">
-            Then open http://localhost:8080 and create your user in the browser.
-            The <a href="{{ route('guide', 'install') }}" wire:navigate class="text-accent underline">install page</a> has the details,
-            and the <a href="{{ route('guide') }}" wire:navigate class="text-accent underline">documentation</a> covers the library, the meters, the file analysis, themes, sharing and the clients.
+            Open http://localhost:8080 and create your user in the browser. The image is built for amd64 and arm64.
+            The <a href="{{ route('guide', 'install') }}" wire:navigate class="text-accent underline">install page</a> has the details
+            (a chosen password, a reverse proxy, updating), and the
+            <a href="{{ route('guide') }}" wire:navigate class="text-accent underline">documentation</a> covers the library, the meters, the file analysis, themes, sharing and the clients.
+        </p>
+        <p class="mt-4 max-w-prose text-sm text-muted">
+            The source is on <a href="https://github.com/zhoorta/magnetite" class="text-accent underline" rel="noopener">GitHub</a> (AGPL-3.0-or-later).
+            The terminal client for macOS and Linux and the signed Android APK are on the
+            <a href="https://github.com/zhoorta/magnetite/releases" class="text-accent underline" rel="noopener">releases page</a>.
         </p>
     </section>
 </x-layouts.app>
