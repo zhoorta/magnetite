@@ -147,7 +147,7 @@
             The analysis runs on the server as its own step, after a scan, and never changes the files.
         </p>
         <figure class="mt-6">
-            <img src="/screenshots/truth-crop.png" alt="The truth view: every file in one list, worst first, with its dynamic range and loudness, and what is wrong with the selected file on the right" width="1268" height="342"
+            <img src="/screenshots/truth-crop.png" alt="The truth view: 221 files with findings, worst first, with their dynamic range and loudness, and what is wrong with the selected file on the right" width="1800" height="901"
                  class="w-full rounded-theme border border-white/10" loading="lazy">
         </figure>
     </section>
