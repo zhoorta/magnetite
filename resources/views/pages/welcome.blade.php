@@ -1,13 +1,13 @@
 <x-layouts.app title="Magnetite · a self-hosted music player" :wide="true"
-    description="A self-hosted music player for the browser. LUFS and true-peak meters, file analysis that finds clipped and lossy files, themes stored as JSON and a keyboard-driven library. Clients for the web, the terminal, Android and iOS."
+    description="A self-hosted music player. LUFS and true-peak meters, file analysis that finds clipped and lossy files, themes stored as JSON and a keyboard-driven library. Clients for the web, the terminal, Android and iOS."
     image="/screenshots/library.png">
     <section class="grid items-center gap-10 py-6 md:grid-cols-2 md:py-12">
         <div>
             <p class="mb-3 text-xs uppercase tracking-[0.3em] text-muted">Self-hosted music player</p>
             <h1 class="text-4xl font-semibold leading-tight md:text-5xl">A music player with <span class="text-accent">loudness meters and file analysis.</span></h1>
             <p class="mt-5 max-w-prose text-lg text-muted">
-                Magnetite is a self-hosted music player that runs in the browser. Its meters show loudness (LUFS), true peak and phase.
-                It analyses every file and flags the ones that are clipped, upsampled or from a lossy source.
+                Magnetite is a self-hosted player for your own music collection. Its meters show loudness (LUFS), true peak and phase.
+                It analyses your files and flags the ones that are clipped, probably upsampled or from a lossy source.
             </p>
             <div class="mt-8 flex flex-wrap gap-3 text-sm">
                 <a href="{{ route('library') }}" class="rounded-theme bg-accent px-5 py-2 font-medium text-bg">Open the library</a>
@@ -30,8 +30,8 @@
         <section id="demo" x-data="{ tracks: @js(array_map(fn ($t) => \App\Support\DemoTracks::toPlayer($t, $demoAlbums[$t['id']] ?? null), $demo)) }" x-init="$store.player.preload(tracks)" class="scroll-mt-8 border-t border-white/10 py-10">
             <h2 class="text-2xl font-semibold">Demo tracks</h2>
             <p class="mt-2 max-w-prose text-muted">
-                {{ count($demo) }} excerpts of free music (all CC0), from a quiet piano recording to a heavily limited master.
-                The theme and the meters can be changed while a track plays. The numbers on the right come from the file analysis.
+                {{ count($demo) }} excerpts of free music (all CC0), from a quiet piano recording with wide dynamics to a heavily limited master.
+                Change the theme and the meters while a track plays, and compare the numbers on the right: they come from the file analysis.
             </p>
             <ol class="mt-6 divide-y divide-white/10 rounded-theme border border-white/10 bg-surface">
                 @foreach ($demo as $i => $t)
@@ -69,7 +69,7 @@
         <h2 class="text-2xl font-semibold">Meters and posters</h2>
         <p class="mt-2 max-w-prose text-muted">
             Every meter is drawn from the audio that is playing, frame by frame. A demo track is loaded in the player at the bottom: press play,
-            then click a picture here to show that meter, and again to hide it. Up to <span x-text="$store.player.maxPanels"></span> can show at once, in the player or in full screen (F).
+            then click a picture here to show that meter, and again to hide it. Up to <span x-text="$store.player.maxPanels"></span> meters can show at once, next to the player or in full screen (F).
         </p>
         <h3 class="mt-6 text-xs uppercase tracking-widest text-muted">Meters · <span x-text="$store.player.visualizerList.filter((v) => ! v.group).length"></span></h3>
         <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -119,8 +119,10 @@
     <section id="analysis" class="scroll-mt-8 border-t border-white/10 py-10">
         <h2 class="text-2xl font-semibold">File analysis</h2>
         <p class="mt-2 max-w-prose text-muted">
-            Every file is decoded once and measured: dynamic range, loudness, true peak, clipped peaks and where the spectrum ends.
+            The analysis looks at the audio itself, not only the tags and the file format. Each file is decoded once and measured: dynamic range, loudness, true peak,
+            clipped peaks and where the spectrum ends. From these it flags probable upsampling, probable lossy sources and other problems.
             The truth view lists all files, worst first, and the findings of the selected file are on the right.
+            The analysis runs on the server as its own step, after a scan, and never changes the files.
         </p>
         <figure class="mt-6">
             <img src="/screenshots/truth-crop.png" alt="The truth view: every file in one list, worst first, with its dynamic range and loudness, and what is wrong with the selected file on the right" width="1268" height="342"
@@ -131,7 +133,7 @@
     <section id="themes" x-data class="scroll-mt-8 py-10">
         <h2 class="text-2xl font-semibold">Themes</h2>
         <p class="mt-2 max-w-prose text-muted">
-            <span x-text="$store.player.themes.length"></span> themes come with it. Click one to change the colours, the fonts and the corners of the whole page. The choice is saved in this browser.
+            <span x-text="$store.player.themes.length"></span> themes are included. Click one to change the colours, the fonts and the corners of the whole page, the meters included. The choice is saved in this browser.
         </p>
         <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <template x-for="t in $store.player.themes" :key="t.id">
@@ -181,12 +183,12 @@
         <h2 class="text-2xl font-semibold">Library and playback</h2>
         <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             @foreach ([
-                ['Keyboard library', 'Folders, albums and tracks in two panes, with a command line, an edit table and search with filters.'],
+                ['Two-pane library', 'Folders, albums and tracks in two panes, with a command line, an edit table and search with filters.'],
                 ['One library per person', 'Each account has its own library, folders and covers.'],
-                ['Untagged albums', 'Names suggested from folder and file names, MusicBrainz or an audio fingerprint.'],
+                ['Untagged albums', 'Suggests names from the folder and file names, MusicBrainz and, with an AcoustID key, audio fingerprints. Only fingerprints are sent, never audio.'],
                 ['Playlists and sharing', 'Private playlists. Albums, tracks and playlists can be shared, play only.'],
-                ['Playback', 'Does not stop on a page change. After a reload the queue and position are restored, paused.'],
-                ['How files are served', 'Range requests and strict headers. ALAC is converted to FLAC and cached.'],
+                ['Playback keeps going', 'Music goes on while moving between pages. After a reload the queue and position are restored, paused.'],
+                ['Storage in Ferrite', 'A library can live in Ferrite, a separate self-hosted file server, read through its API with a token limited to one folder.'],
             ] as [$title, $text])
                 <div class="rounded-theme border border-white/10 bg-surface p-5">
                     <h3 class="font-semibold text-accent">{{ $title }}</h3>
@@ -198,13 +200,13 @@
 
     <section id="clients" class="scroll-mt-8 border-t border-white/10 py-10">
         <h2 class="text-2xl font-semibold">Clients</h2>
-        <p class="mt-2 max-w-prose text-muted">The web app, a terminal client, an Android app and an iOS app all talk to the same server. They show the same library and the nine plain meters; the posters are in the web app only.</p>
+        <p class="mt-2 max-w-prose text-muted">The web app, a terminal client, an Android app and an iOS app all talk to the same server. They show the same library and the same list of meters; the posters are in the web app, and the terminal client draws most of them.</p>
         <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             @foreach ([
                 ['Web', 'The library, the player and the theme studio in a browser. Everything has a key, a toolbar button, or both.'],
-                ['Terminal', 'Written in Rust. It decodes the audio itself, so the meters are computed from the decoded samples. It has the nine plain meters, the file-truth table, search with filters, loudness matching and A/B compare. Build it from tui/.'],
-                ['Android', 'One app for phones, tablets and Android TV. Download below.'],
-                ['iOS', 'A SwiftUI app for iPhone and iPad with background playback and the nine plain meters. Build it from ios/; it is not in the App Store.'],
+                ['Terminal', 'Written in Rust. It decodes the audio itself, so the meters are computed from the decoded samples. It has the twelve plain meters, the file-truth table, search with filters, loudness matching and A/B compare. Build it from tui/.'],
+                ['Android', 'One app for phones, tablets and Android TV, with lock-screen controls and the twelve plain meters. A beta; the APK is below.'],
+                ['iOS', 'A SwiftUI app for iPhone and iPad with background playback and nine of the twelve plain meters. Build it from ios/; it is not in the App Store.'],
             ] as [$client, $text])
                 <div class="rounded-theme border border-white/10 bg-surface p-5">
                     <h3 class="font-semibold text-accent">{{ $client }}</h3>
@@ -217,9 +219,9 @@
         @php($apk = public_path("downloads/magnetite-{$apkVersion}.apk"))
         @if (is_file($apk))
             <div id="android" class="mt-8 scroll-mt-8">
-                <h3 class="text-lg font-semibold">Android app <span class="ml-2 text-xs uppercase tracking-widest text-muted">beta</span></h3>
+                <h3 class="text-lg font-semibold">Download for Android</h3>
                 <p class="mt-2 max-w-prose text-muted">
-                    Works on phones, tablets and Android TV: library, folders, playlists, search, nine meters and lock-screen controls.
+                    Works on phones, tablets and Android TV: library, folders, playlists, search, meters and lock-screen controls.
                     Sign in with the address of the server.
                 </p>
                 <div class="mt-5 flex flex-wrap items-center gap-4 text-sm">
@@ -237,7 +239,7 @@
     <section id="install" class="scroll-mt-8 border-t border-white/10 py-10">
         <h2 class="text-2xl font-semibold">Install and documentation</h2>
         <p class="mt-2 max-w-prose text-muted">
-            Magnetite runs in one Docker container, or directly with PHP 8.3 and Node. With Docker, from a copy of the source:
+            Magnetite runs in one Docker container, which is the easiest way to start, or directly with PHP 8.3 and Node. With Docker, from a copy of the source:
         </p>
         <pre class="mt-4 overflow-x-auto rounded-theme border border-white/10 bg-surface p-4 text-xs leading-relaxed text-muted"><code>docker compose up -d --build</code></pre>
         <p class="mt-4 max-w-prose text-sm text-muted">
