@@ -39,7 +39,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: tui-${{ matrix.name }}
-          path: magnetite-tui-*
+          path: |
+            magnetite-tui-*.tar.gz
+            magnetite-tui-*.sha256
 
   release:
     needs: tui
