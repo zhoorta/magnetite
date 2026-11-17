@@ -1,6 +1,6 @@
 # File analysis
 
-Magnetite can measure every file from the audio itself. Tags and file names are not used. The results show whether a file is what it claims to be, and how it was mastered.
+Magnetite can measure every file from the audio itself. Tags and file names are not used. The results show what a file really is and how it was mastered.
 
 ## Running it
 

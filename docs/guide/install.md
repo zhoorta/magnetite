@@ -32,7 +32,7 @@ Until that form is finished, anyone who can reach the address can fill it in and
 
 Each user has a folder `users/{username}` inside the music folder, so the files of `yourname` go in `/path/to/music/users/yourname/`. For uploads to work the folder must be writable by uid 33 (`chown -R 33:33 /path/to/music`); the start-up log says so when it is not.
 
-### Where the data is kept
+### Volumes
 
 | In the container | What | Kept in |
 |---|---|---|

@@ -1,10 +1,10 @@
 # Documentation
 
-Magnetite is a self-hosted music player for the browser, with loudness meters, file analysis and themes. These pages cover installing it and using it.
+Magnetite is a self-hosted music player with loudness meters, file analysis and themes.
 
-| Page | What it covers |
+| Page | Contents |
 |---|---|
-| [Install](install.md) | Docker, or PHP and Node directly; the first user; where the data is kept; updating |
+| [Install](install.md) | Docker, or PHP and Node directly; the first user; volumes and backups; updating |
 | [First run](first-run.md) | Signing in, adding music, scanning and analysing |
 | [The library](library.md) | The two panes, the keys, the command line, search, editing, folders |
 | [Meters and posters](meters.md) | Choosing meters, full screen, what each meter shows |

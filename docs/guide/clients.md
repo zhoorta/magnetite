@@ -1,6 +1,6 @@
 # Clients
 
-Besides the web app there are three clients. They talk to the same server, show the same library, shared music and playlists, and use the list of meters saved in the account. They have the nine plain meters; the posters are in the web app, and the terminal client draws all but Circuit and Terrain.
+Besides the web app there are three clients. They talk to the same server, show the same library, shared music and playlists, and use the list of meters saved in the account. They have the twelve plain meters (the iOS app has nine of them); the posters are in the web app, and the terminal client draws all but Circuit and Terrain.
 
 All of them need the address of the server. Over the internet the server must use https.
 

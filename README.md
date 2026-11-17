@@ -1,22 +1,43 @@
 # Magnetite
 
-Magnetite is a self-hosted music player for the browser. It plays the files stored on the server it is installed on, shows loudness meters, analyses every file, and restyles the whole interface from a small JSON theme. A personal project by the author of Ferrite.
+Magnetite is a self-hosted music player with loudness meters and file analysis. It plays the music on the server it is installed on, measures every file, and shows the result in the library.
 
-It is for people who run their own server (a small VPS, a NAS, a home machine) and want to play a music folder they own, with a good look at the files. One Docker command installs it. It is a personal project shared in case it is useful: issues and pull requests are read on a best-effort basis (see `CONTRIBUTING.md`).
+It is meant for people who run a server (a small VPS, a NAS, a home machine) and keep a music folder on it. One Docker command installs it. It is a personal project, shared in case it is useful: issues and pull requests are read on a best-effort basis (see `CONTRIBUTING.md`). It can keep libraries in [Ferrite](https://github.com/zhoorta/ferrite), a self-hosted file server by the same author.
 
 ![The library with the Terminal theme: folders and albums, tracks with their dynamic range, and the player with two meters](public/screenshots/library.png)
 
-## What it does
+## Meters and posters
 
-- The player keeps playing across page changes; the audio element and the Web Audio graph are not recreated.
-- Nine meters, up to four at once. LUFS (momentary, short-term, integrated), true peak, phase correlation and a goniometer are computed sample by sample in an AudioWorklet.
-- `magnetite:analyze` decodes every file and reports lossy sources, upsampling, clipping, heavy compression, true peak over 0 dBTP and duplicates, with the dynamic range of each track and album.
-- The library is built for the keyboard: two panes, a command line, an edit table, search with filters and a truth view. Every key also has a button for touch.
-- A theme is one JSON file with the palette, corner radius, font and settings for each meter. The theme studio previews it live and there are 16 bundled open fonts.
-- Each person has their own library and can share albums, tracks and playlists. Zips of audio and covers can be uploaded. Files can also live in a Ferrite folder.
-- Clients: the web app, a terminal client (`tui/`, Rust), Android for phone, tablet and TV (`android/`) and iOS (`ios/`).
+Up to four meters show at once, next to the player or in full screen. There are twelve plain ones: wide meters, VU needles, LED meters, magic eyes, a scope, a goniometer, a loudness meter (LUFS and true peak as nixie digits), a K-meter, crest factor, loudness range, a third-octave analyser and a spectrogram. Loudness, true peak, phase correlation and the goniometer are computed sample by sample in an AudioWorklet, following ITU-R BS.1770, and the file analysis uses the same code, so the live reading and the stored numbers agree.
+
+Posters are meters drawn like printed posters: flat shapes in a few colours, with the artist, title and album of the playing track on them, moving with the music. There are fifteen. They use the theme's colours or their own.
+
+## File analysis
+
+`magnetite:analyze` decodes each file once and measures dynamic range, integrated loudness, loudness range, true peak, clipped peaks, bit depth in use, the average spectrum and an audio hash. From these it reports findings: probable lossy sources, probable upsampling, padded bit depth, clipping, heavy compression, peaks over 0 dBTP, DC offset, decode errors and duplicates, even when the tags differ.
+
+The truth view lists every analysed file in one table, worst first, with the findings of the selected file explained underneath. The analysis runs as its own step after a scan, on the server, and never changes the files. The thresholds and their limits are in `docs/guide/file-analysis.md`.
 
 ![The truth view: every file in one list, worst first](public/screenshots/truth.png)
+
+## Library
+
+- Two panes, a command line, an edit table and search with filters. Every key also has a button for touch.
+- Untagged albums get suggested names from the folder and file names, MusicBrainz and, with an AcoustID key, audio fingerprints. Only fingerprints are sent, never audio.
+- Each person has their own library and can share albums, tracks and playlists, play only. Zips of audio and covers can be uploaded.
+- The player keeps playing across page changes. The queue and position are restored, paused, after a reload.
+- Themes are JSON files: six colours, a corner radius and fonts. A studio edits a copy with a live preview; there are 16 bundled open fonts.
+
+## Clients
+
+One server, four clients. They share the library, the shared music, the playlists and the list of meters saved in the account.
+
+| Client | What it is |
+|---|---|
+| Web | The full app: library, player, theme studio, all meters and posters |
+| Terminal (`tui/`) | Rust. Decodes the audio itself and computes the meters from the samples. Truth table, search, loudness matching, A/B compare |
+| Android (`android/`) | Phone, tablet and Android TV. Twelve meters, posters, lock-screen controls. APK, not on the Play Store |
+| iOS (`ios/`) | SwiftUI, iPhone and iPad. Nine of the twelve meters, background playback. Built with Xcode |
 
 ## Compared to others
 
