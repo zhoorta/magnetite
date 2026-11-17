@@ -10,6 +10,7 @@ mod edit;
 mod help;
 mod info;
 mod loudness;
+mod range;
 mod media;
 mod meters;
 mod order;

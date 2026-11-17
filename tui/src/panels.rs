@@ -24,6 +24,9 @@ pub enum Kind {
     Scope,
     Goniometer,
     Loudness,
+    KMeter,
+    Crest,
+    Lra,
     VuNeedle,
     MagicEye,
     PosterPillars,
@@ -42,8 +45,8 @@ pub enum Kind {
 
 impl Kind {
     /// The plain meters first, then the posters (`m` walks through the first group, `w` through the second).
-    pub const ALL: [Kind; 22] = [
-        Kind::VuWide, Kind::VuLeds, Kind::VuNeedle, Kind::MagicEye, Kind::Spectrum, Kind::ThirdOctave, Kind::Spectrogram, Kind::Scope, Kind::Goniometer, Kind::Loudness,
+    pub const ALL: [Kind; 25] = [
+        Kind::VuWide, Kind::VuLeds, Kind::VuNeedle, Kind::MagicEye, Kind::Spectrum, Kind::ThirdOctave, Kind::Spectrogram, Kind::Scope, Kind::Goniometer, Kind::Loudness, Kind::KMeter, Kind::Crest, Kind::Lra,
         Kind::PosterPillars, Kind::PosterArches, Kind::PosterLens, Kind::PosterFan, Kind::PosterSlides, Kind::PosterDials, Kind::PosterRings,
         Kind::PosterTunnel, Kind::PosterLenses, Kind::PosterOvercome, Kind::PosterFacets, Kind::PosterHeads,
     ];
@@ -82,6 +85,9 @@ impl Kind {
             Kind::Scope => "scope",
             Kind::Goniometer => "goniometer",
             Kind::Loudness => "loudness",
+            Kind::KMeter => "k-meter",
+            Kind::Crest => "crest",
+            Kind::Lra => "lra",
             Kind::VuNeedle => "vu-needle",
             Kind::MagicEye => "magic-eye",
             Kind::PosterPillars => "poster-pillars",
@@ -109,6 +115,9 @@ impl Kind {
             Kind::Scope => "Scope",
             Kind::Goniometer => "Goniometer",
             Kind::Loudness => "Loudness (LUFS)",
+            Kind::KMeter => "K-meter",
+            Kind::Crest => "Crest factor",
+            Kind::Lra => "Loudness range",
             Kind::VuNeedle => "VU needles",
             Kind::MagicEye => "Magic eyes",
             Kind::PosterPillars => "Poster: Pillars",
@@ -170,6 +179,9 @@ pub fn draw(f: &mut Frame, area: Rect, kind: Kind, cx: &Ctx) {
         Kind::Scope => scope(cx, area),
         Kind::Goniometer => goniometer(cx, area),
         Kind::Loudness => loudness(cx, area),
+        Kind::KMeter => k_meter(cx, area),
+        Kind::Crest => crest(cx, area),
+        Kind::Lra => lra(cx, area),
         Kind::VuNeedle => needles(cx, area),
         Kind::MagicEye => eyes(cx, area),
         _ => return,
@@ -586,23 +598,171 @@ fn eyes(cx: &Ctx, area: Rect) -> Vec<Line<'static>> {
     cv.lines(c(cx.th.accent2))
 }
 
+const NIXIE: Rgb = (0xff, 0xa0, 0x4a);
+const HOT: Rgb = (0xff, 0x4d, 0x3d);
+const GREEN: Rgb = (0x7e, 0xc1, 0x7e);
+
+/// `−23.4` padded to five cells; a value that is not there yet shows dashes (the web's `nixieText`).
+pub fn nixie_text(v: Option<f64>) -> String {
+    match v {
+        Some(v) if v.is_finite() => format!("{}{:.1}", if v < 0.0 { '−' } else { ' ' }, v.abs()),
+        _ => " −−.−".to_string(),
+    }
+    .chars()
+    .rev()
+    .chain(std::iter::repeat(' '))
+    .take(5)
+    .collect::<Vec<_>>()
+    .into_iter()
+    .rev()
+    .collect()
+}
+
+/// Momentary, short-term, integrated and true peak as nixie tubes: a dark cell for each character with a glowing digit.
 fn loudness(cx: &Ctx, area: Rect) -> Vec<Line<'static>> {
     let (th, l) = (cx.th, cx.m.lufs);
-    let n = |v: Option<f64>, unit: &str| v.map_or("—".to_string(), |v| format!("{v:.1}{unit}"));
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled(format!("M {}", n(l.momentary, "")), Style::new().fg(c(th.accent2))),
-            Span::raw(format!("   S {}   I {} LUFS", n(l.short_term, ""), n(l.integrated, ""))),
-        ]),
-        Line::from(format!("LRA {} LU   TP {}", n(l.range, ""), n(l.true_peak, " dBTP"))).style(Style::new().fg(c(th.muted))),
-    ];
-    let rows = (area.height as usize).saturating_sub(2);
+    let rows = [("M", l.momentary, "LUFS"), ("S", l.short_term, "LUFS"), ("I", l.integrated, "LUFS"), ("TP", l.true_peak, "dBTP")];
+    let (w, h) = (area.width as usize, area.height as usize);
+    let cell_w = 3; // " 2 "
+    let tubes = 5 * cell_w + 4;
+    let narrow = w < tubes + 8;
+    let gap = if h >= 11 { 2 } else if h >= 7 { 1 } else { 0 };
+    let used = 4 + 3 * gap;
+    let pad = h.saturating_sub(used) / 2;
+    let mut lines = vec![Line::raw(""); pad];
+    for (i, (tag, v, unit)) in rows.iter().enumerate() {
+        let glow = if i == 3 && v.is_some_and(|v| v > -1.0) { HOT } else { NIXIE };
+        let mut spans = vec![];
+        let left = if narrow { 0 } else { (w.saturating_sub(tubes + 10)) / 2 };
+        spans.push(Span::raw(" ".repeat(left)));
+        if !narrow {
+            spans.push(Span::styled(format!("{tag:>2} "), Style::new().fg(c(th.muted))));
+        }
+        for (k, ch) in nixie_text(*v).chars().enumerate() {
+            if k > 0 {
+                spans.push(Span::raw(" "));
+            }
+            let style = if ch == ' ' { Style::new().bg(c(th.surface)) } else { Style::new().fg(c(glow)).bg(c(th.surface)).add_modifier(ratatui::style::Modifier::BOLD) };
+            spans.push(Span::styled(format!(" {ch} "), style));
+        }
+        if !narrow {
+            spans.push(Span::styled(format!(" {unit}"), Style::new().fg(c(th.muted))));
+        }
+        lines.push(Line::from(spans));
+        if i < 3 {
+            lines.extend(std::iter::repeat(Line::raw("")).take(gap));
+        }
+    }
+    lines
+}
+
+/// The RMS on the K scale (K-20: zero is -20 dBFS, read the AES17 way), green up to 0, yellow to +4, red above, with the held peak.
+fn k_meter(cx: &Ctx, area: Rect) -> Vec<Line<'static>> {
+    const SCALE: f32 = 20.0;
+    const FLOOR: f32 = 40.0;
+    let (th, m) = (cx.th, cx.m);
+    let (muted, text) = (c(th.muted), c(th.text));
+    let w = (area.width as usize).saturating_sub(18).max(4);
+    // the bar spans -40 .. +SCALE K, which is -60 .. 0 dBFS
+    let col = |k: f32| (((k + FLOOR) / (FLOOR + SCALE)).clamp(0.0, 1.0) * (w - 1) as f32).round() as usize;
+    let bar = |label: &str, pos: f32, peak_db: f32| {
+        let k = -60.0 + pos * 60.0 + SCALE; // the smoothed RMS in K units
+        let (n, p) = (col(k), col(peak_db + SCALE));
+        let mut spans = vec![Span::raw(format!("{label} "))];
+        for i in 0..w {
+            let at = i as f32 / (w - 1) as f32 * (FLOOR + SCALE) - FLOOR;
+            let color = if at > 4.0 { HOT } else if at > 0.0 { th.accent2 } else { GREEN };
+            spans.push(if i == p && p > n {
+                Span::styled("▎", Style::new().fg(text))
+            } else if i <= n && k > -FLOOR {
+                Span::styled("█", Style::new().fg(c(color)))
+            } else {
+                Span::styled("░", Style::new().fg(muted))
+            });
+        }
+        let shown = if k > -FLOOR + 0.05 { format!("{k:+6.1}") } else { "    −−".to_string() };
+        spans.push(Span::styled(format!(" {shown}"), Style::new().fg(if k > 4.0 { c(HOT) } else { text })));
+        Line::from(spans)
+    };
+    let mut scale = vec![Span::raw("  ")];
+    let mut at = 0usize;
+    for k in (-40..=20).step_by(10) {
+        let x = col(k as f32);
+        let label = if k > 0 { format!("+{k}") } else { format!("{k}") };
+        if x >= at {
+            scale.push(Span::raw(" ".repeat(x - at)));
+            scale.push(Span::styled(label.clone(), Style::new().fg(if k == 0 { text } else { muted })));
+            at = x + label.chars().count();
+        }
+    }
+    let mut lines = vec![Line::styled("K-20", Style::new().fg(muted))];
+    let blank = (area.height as usize).saturating_sub(4) / 2;
+    lines.extend(vec![Line::raw(""); blank]);
+    lines.push(bar("L", m.k.0, m.peak.0));
+    lines.push(bar("R", m.k.1, m.peak.1));
+    lines.push(Line::from(scale));
+    lines
+}
+
+/// Peak minus RMS over the last 3 s as a number, with the last 30 s as bars.
+fn crest(cx: &Ctx, area: Rect) -> Vec<Line<'static>> {
+    let (th, cr) = (cx.th, &cx.m.crest);
+    let num = cr.value.map_or("−−.−".to_string(), |v| format!("{v:.1}"));
+    let mut lines = vec![Line::from(vec![
+        Span::styled("CREST FACTOR  ", Style::new().fg(c(th.muted))),
+        Span::styled(num, Style::new().fg(c(th.accent2)).add_modifier(ratatui::style::Modifier::BOLD)),
+        Span::styled(" dB", Style::new().fg(c(th.muted))),
+    ])];
+    let rows = (area.height as usize).saturating_sub(1);
     if rows > 0 {
-        // momentary loudness over the last minute, -40 .. -5 LUFS
         let w = area.width as usize;
-        let hist = &cx.m.lufs_history;
-        let vals: Vec<f32> = (0..w).map(|x| (hist.len() + x).checked_sub(w).and_then(|i| hist.get(i)).map_or(0.0, |v| ((v + 40.0) / 35.0).clamp(0.0, 1.0))).collect();
+        let line = &cr.line;
+        let vals: Vec<f32> = (0..w).map(|x| (line.len() + x).checked_sub(w).and_then(|i| line.get(i)).map_or(0.0, |v| (v / 24.0).clamp(0.0, 1.0))).collect();
         lines.extend(block_bars(&vals, Rect::new(0, 0, area.width, rows as u16), th));
+    }
+    lines
+}
+
+/// The short-term loudness since the track began as a histogram (1 LU a bin, -60 to 0 LUFS), the 10th to 95th percentile marked.
+fn lra(cx: &Ctx, area: Rect) -> Vec<Line<'static>> {
+    let (th, l) = (cx.th, &cx.m.lra);
+    let (w, h) = (area.width as usize, area.height as usize);
+    let ready = l.bounds.is_some();
+    let num = if ready { format!("{:.1}", l.range()) } else { "−−.−".to_string() };
+    let mut lines = vec![Line::from(vec![
+        Span::styled("LOUDNESS RANGE  ", Style::new().fg(c(th.muted))),
+        Span::styled(num, Style::new().fg(c(th.accent2)).add_modifier(ratatui::style::Modifier::BOLD)),
+        Span::styled(" LU", Style::new().fg(c(th.muted))),
+    ])];
+    let rows = h.saturating_sub(if h >= 4 { 3 } else { 1 });
+    if rows == 0 {
+        return lines;
+    }
+    let shape = l.shape();
+    let max = shape.iter().copied().max().unwrap_or(1).max(1) as f32;
+    let col_of = |lufs: f64| (((lufs + 60.0) / crate::range::SHOWN as f64) * w as f64).clamp(0.0, w as f64 - 1.0) as usize;
+    let vals: Vec<f32> = (0..w)
+        .map(|x| {
+            let (a, b) = (x * crate::range::SHOWN / w, ((x + 1) * crate::range::SHOWN / w).max(x * crate::range::SHOWN / w + 1));
+            shape[a..b.min(crate::range::SHOWN)].iter().copied().max().unwrap_or(0) as f32 / max
+        })
+        .collect();
+    let bars = block_bars(&vals, Rect::new(0, 0, area.width, rows as u16), th);
+    lines.extend(bars);
+    if h >= 4 {
+        let (lo, hi) = l.bounds.map_or((usize::MAX, 0), |(lo, hi)| (col_of(lo), col_of(hi)));
+        let mark: String = (0..w).map(|x| if x == lo || x == hi { '┬' } else if x > lo && x < hi { '─' } else { ' ' }).collect();
+        lines.push(Line::styled(mark, Style::new().fg(c(th.accent2))));
+        let mut axis = vec![' '; w];
+        for t in [-50i32, -40, -30, -20, -10] {
+            let x = col_of(t as f64);
+            for (j, ch) in t.to_string().chars().enumerate() {
+                if x + j < w {
+                    axis[x + j] = ch;
+                }
+            }
+        }
+        lines.push(Line::styled(axis.into_iter().collect::<String>(), Style::new().fg(c(th.muted))));
     }
     lines
 }
@@ -679,6 +839,46 @@ mod tests {
         let mut term = Terminal::new(TestBackend::new(40, 4)).unwrap();
         term.draw(|f| draw(f, Rect::new(0, 0, 40, 4), Kind::Loudness, &Ctx { m: &m, tap: &[], rate, th: &th, track: None })).unwrap();
         assert!(text(&term).contains("LUFS"));
+    }
+
+    #[test]
+    fn nixie_text_is_five_cells() {
+        assert_eq!(nixie_text(Some(-23.44)), "−23.4");
+        assert_eq!(nixie_text(Some(-9.96)), "−10.0");
+        assert_eq!(nixie_text(Some(0.04)), "  0.0");
+        assert_eq!(nixie_text(None), " −−.−");
+        assert_eq!(nixie_text(Some(f64::NEG_INFINITY)), " −−.−");
+    }
+
+    #[test]
+    fn the_new_meters_show_their_numbers() {
+        let rate = 48000;
+        let audio = sine(1000.0, -20.0, 8.0, rate, 1.0);
+        let mut m = Meters::new();
+        let mut pos = 0;
+        while pos + 1600 * 2 <= audio.len() {
+            let end = pos + 1600 * 2;
+            m.update(&audio[end.saturating_sub(4096 * 2)..end], &audio[pos..end], rate, 1.0 / 30.0);
+            pos = end;
+        }
+        let th = crate::theme::builtin().remove(0);
+        let tap = audio[audio.len() - 4096 * 2..].to_vec();
+        let show = |kind: Kind, w: u16, h: u16| {
+            let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+            term.draw(|f| draw(f, Rect::new(0, 0, w, h), kind, &Ctx { m: &m, tap: &tap, rate, th: &th, track: None })).unwrap();
+            text(&term)
+        };
+        let t = show(Kind::KMeter, 70, 6);
+        assert!(t.contains("K-20") && t.contains('█'), "{t}");
+        // a -20 dBFS peak sine is -23 dBFS RMS, +3 for the AES17 reading: -20 dBFS, which is K-20 zero
+        assert!(t.contains("+0.") || t.contains("-0.") || t.contains("  0.0"), "{t}");
+        let t = show(Kind::Crest, 50, 6);
+        assert!(t.contains("CREST FACTOR") && t.contains("3.0"), "{t}");
+        let t = show(Kind::Lra, 60, 8);
+        assert!(t.contains("LOUDNESS RANGE"), "{t}");
+        let t = show(Kind::Loudness, 50, 12);
+        let squeezed: String = t.chars().filter(|c| *c != ' ').collect(); // the tubes are separate cells
+        assert!(squeezed.contains("−20.0") && t.contains("LUFS") && t.contains("dBTP"), "{t}");
     }
 
     #[test]

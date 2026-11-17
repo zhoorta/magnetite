@@ -28,11 +28,16 @@ pub struct Meters {
     pub eye: (f32, f32),      // 0..1 on -36..0 dBFS, magic-eye ballistics
     pub history: VecDeque<[f32; THIRD]>, // spectrogram columns, newest last
     pub lufs: Loudness,
+    pub lra: crate::range::Lra, // the short-term values since the track began, for the loudness range meter
+    pub crest: crate::range::Crest,
+    pub k: (f32, f32),        // 0..1 on -60..0 dBFS, the RMS read the AES17 way (+3 dB) with a 300 ms integration, for the K-meter
     pub lufs_history: VecDeque<f32>, // momentary, every half second
     pub poster: crate::posters::State, // what the poster meters remember between frames
     peak_age: (f32, f32),
     column_clock: f32,
     lufs_clock: f32,
+    lra_clock: f32,
+    played_frames: usize, // since the track began: the loudness range starts after 3 s
     ebu: Option<(EbuR128, u32)>,
     planner: FftPlanner<f32>,
 }
@@ -58,11 +63,16 @@ impl Meters {
             eye: (0.0, 0.0),
             history: VecDeque::new(),
             lufs: Loudness::default(),
+            lra: crate::range::Lra::new(),
+            crest: crate::range::Crest::new(),
+            k: (0.0, 0.0),
             lufs_history: VecDeque::new(),
             poster: crate::posters::State::new(),
             peak_age: (0.0, 0.0),
             column_clock: 0.0,
             lufs_clock: 0.0,
+            lra_clock: 0.0,
+            played_frames: 0,
             ebu: None,
             planner: FftPlanner::new(),
         }
@@ -72,6 +82,10 @@ impl Meters {
     pub fn reset_track(&mut self) {
         self.ebu = None;
         self.lufs = Loudness::default();
+        self.lra.clear();
+        self.crest.clear();
+        self.lra_clock = 0.0;
+        self.played_frames = 0;
         self.lufs_history.clear();
         self.history.clear();
     }
@@ -104,6 +118,9 @@ impl Meters {
         follow(&mut self.needle.1, self.rms.1, n);
         follow(&mut self.eye.0, self.rms.0, e);
         follow(&mut self.eye.1, self.rms.1, e);
+        let k = (-60.0, 0.0, 0.3, 0.3);
+        follow(&mut self.k.0, self.rms.0 + 3.01, k);
+        follow(&mut self.k.1, self.rms.1 + 3.01, k);
     }
 
     fn mags(&mut self, t: &[f32], n: usize) -> Vec<f32> {
@@ -140,6 +157,7 @@ impl Meters {
         let db = |x: f64| (10.0 * x.max(1e-9).log10()) as f32;
         self.rms = (db(sl / N as f64), db(sr / N as f64));
         self.ballistics(dt);
+        self.crest.push(dt, pl.max(pr), ((sl.max(sr)) / N as f64).sqrt() as f32);
         self.corr = if sl > 1e-9 && sr > 1e-9 { (lr / (sl * sr).sqrt()) as f32 } else { 0.0 };
         let pk = |p: f32| 20.0 * p.max(1e-5).log10();
         for (cur, new, age) in [(&mut self.peak.0, pk(pl), &mut self.peak_age.0), (&mut self.peak.1, pk(pr), &mut self.peak_age.1)] {
@@ -208,6 +226,16 @@ impl Meters {
             range: e.loudness_range().ok().and_then(finite),
             true_peak: (0..2).filter_map(|c| e.true_peak(c).ok()).map(|p| 20.0 * p.max(1e-9).log10()).fold(None, |a: Option<f64>, v| Some(a.map_or(v, |a| a.max(v)))),
         };
+        self.played_frames += played.len() / 2;
+        self.lra_clock += dt;
+        if self.lra_clock >= 0.1 {
+            self.lra_clock = 0.0;
+            if self.played_frames as f64 >= 3.0 * rate as f64 {
+                if let Some(v) = self.lufs.short_term {
+                    self.lra.add(v);
+                }
+            }
+        }
         self.lufs_clock += dt;
         if self.lufs_clock >= 0.5 {
             self.lufs_clock = 0.0;
