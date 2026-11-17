@@ -27,6 +27,10 @@ It has the library with folders, shared music, search, playlists, the meters, an
 
 A client written in Rust that decodes the audio itself, so its meters are computed from the decoded samples.
 
+**Install script.** Downloads the latest release for your system, checks its checksum and puts `magnetite` in `~/.local/bin` (`MAGNETITE_INSTALL_DIR` changes it, `MAGNETITE_VERSION=v0.4.12` picks a release):
+
+    curl -fsSL https://raw.githubusercontent.com/zhoorta/magnetite/main/tui/install.sh | sh
+
 **Download.** Each release has a `magnetite-tui-…` archive for macOS (arm64, x86_64) and Linux (x86_64, aarch64), with a `.sha256` file. Unpack it and run `./magnetite`. The macOS binaries are not signed: after downloading, run `xattr -d com.apple.quarantine magnetite` once. On Linux the sound output needs ALSA (`libasound2`).
 
 **Build.** It needs a Rust toolchain, and on Linux the ALSA development files (`libasound2-dev`).
