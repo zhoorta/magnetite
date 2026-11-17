@@ -5,6 +5,7 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.log10
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -23,10 +24,19 @@ object Loudness {
     private const val OFFSET = -0.691
     private const val TAPS = 12 // per phase; shorter than the web's 48, flat enough for a phone meter
     private const val RING = 32
+    private const val LRA_BINS = 800 // 0.1 LU bins from -70 LUFS up, so memory does not grow with the programme
+    const val SHOWN_BINS = 60
+    private const val SHOWN_MIN = -60
 
     @Volatile var momentary = Double.NEGATIVE_INFINITY; private set
     @Volatile var shortTerm = Double.NEGATIVE_INFINITY; private set
     @Volatile var integrated = Double.NEGATIVE_INFINITY; private set
+    /** Live loudness range (EBU Tech 3342) in LU from a fixed histogram of the short-term values; 0 until two values exist. */
+    @Volatile var lra = 0f; private set
+    @Volatile var lraLo = Double.NEGATIVE_INFINITY; private set
+    @Volatile var lraHi = Double.NEGATIVE_INFINITY; private set
+    /** The short-term values by loudness, 1 LU bins from -60 to 0 LUFS (the meter draws these). */
+    val lraShape = IntArray(SHOWN_BINS)
     @Volatile var truePeakL = 0f; private set
     @Volatile var truePeakR = 0f; private set
     @Volatile var correlation = 0f; private set
@@ -86,6 +96,9 @@ object Loudness {
     private var blockPos = 0
     private val gated = ArrayList<Double>()
     private var sinceIntegrated = 0
+    private val lraHist = IntArray(LRA_BINS)
+    private var lraEnergy = 0.0
+    private var lraN = 0
     private val ringL = DoubleArray(RING * 2)
     private val ringR = DoubleArray(RING * 2)
     private var ringPos = 0
@@ -108,6 +121,7 @@ object Loudness {
     /** New track: the integrated value starts again, like the web's reset. */
     @Synchronized fun reset() {
         blockSum = 0.0; blockCount = 0; blockN = 0; blockPos = 0; gated.clear(); sinceIntegrated = 0
+        lraHist.fill(0); lraEnergy = 0.0; lraN = 0; lraShape.fill(0); lra = 0f; lraLo = Double.NEGATIVE_INFINITY; lraHi = Double.NEGATIVE_INFINITY
         tpL = 0.0; tpR = 0.0; sLL = 0.0; sRR = 0.0; sLR = 0.0
         ringL.fill(0.0); ringR.fill(0.0); gonio.fill(0f)
         for (f in filtersL + filtersR) { f.z1 = 0.0; f.z2 = 0.0 }
@@ -171,7 +185,43 @@ object Loudness {
             if (toLufs(e400) > ABS_GATE) gated.add(e400)
             if (++sinceIntegrated >= 10) { sinceIntegrated = 0; integrated = integratedLufs() }
         }
-        if (blockN >= 30) shortTerm = toLufs(mean(0, 30))
+        if (blockN >= 30) {
+            val e = mean(0, 30)
+            shortTerm = toLufs(e)
+            addShortTerm(e)
+        }
+    }
+
+    private fun addShortTerm(e: Double) {
+        val l = toLufs(e)
+        if (!(l > ABS_GATE)) return
+        lraHist[min(LRA_BINS - 1, ((l - ABS_GATE) * 10).toInt())]++
+        lraEnergy += e; lraN++
+        for (k in 0 until SHOWN_BINS) lraShape[k] = 0
+        for (i in 0 until LRA_BINS) {
+            val k = (i / 10) + ABS_GATE.toInt() - SHOWN_MIN
+            if (k in 0 until SHOWN_BINS) lraShape[k] += lraHist[i]
+        }
+        liveRange()
+    }
+
+    /** The loudness range: values more than 20 LU under the mean are dropped, then the 10th to 95th percentile (the web's `liveRange()`). */
+    private fun liveRange() {
+        if (lraN < 2) return
+        val threshold = toLufs(lraEnergy / lraN) - 20
+        var from = max(0, kotlin.math.ceil((threshold - ABS_GATE) * 10).toInt())
+        if (from / 10.0 + ABS_GATE <= threshold) from++
+        var count = 0
+        for (i in from until LRA_BINS) count += lraHist[i]
+        if (count < 2) return
+        fun nth(k: Int): Double {
+            var seen = 0
+            for (i in from until LRA_BINS) { seen += lraHist[i]; if (seen > k) return ABS_GATE + (i + 0.5) / 10 }
+            return ABS_GATE + LRA_BINS / 10.0
+        }
+        val lo = nth(Math.round((count - 1) * 0.1).toInt())
+        val hi = nth(Math.round((count - 1) * 0.95).toInt())
+        lraLo = lo; lraHi = hi; lra = (hi - lo).toFloat()
     }
 
     private fun integratedLufs(): Double {

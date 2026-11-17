@@ -125,11 +125,57 @@ private fun plainThumb(id: String): Bitmap {
             fill(accent, 0.7f)
             for (k in 0 until 220) { val t = k * 0.21; val m = sin(t * 1.3) * 0.7 * (0.6 + 0.4 * sin(t * 0.37)); val s = sin(t * 2.9 + 1) * 0.28; c.drawCircle(cx + (s * r).toFloat(), cy - (m * r).toFloat(), 1.8f, p) }
         }
-        "loudness" -> listOf(0.62f, 0.55f, 0.5f).forEachIndexed { i, v ->
-            val y = h * (0.18f + i * 0.24f)
-            fill(muted, 0.25f); c.drawRect(w * 0.08f, y, w * 0.7f, y + h * 0.1f, p)
-            fill(if (i == 2) accent2 else accent); c.drawRect(w * 0.08f, y, w * (0.08f + 0.62f * v), y + h * 0.1f, p)
-            fill(text); p.textSize = h * 0.16f; p.textAlign = Paint.Align.RIGHT; c.drawText("-${14 + i}.${i + 2}", w * 0.94f, y + h * 0.12f, p)
+        "loudness" -> {
+            // nixie tubes: four rows of dark cells with a glowing digit, like the meter
+            val digits = listOf("-14.2", "-15.0", "-16.1", "-0.6")
+            val cellH = h * 0.2f; val cellW = cellH * 0.78f; val gap = cellW * 0.12f
+            val x0 = (w - (5 * (cellW + gap) - gap)) / 2
+            digits.forEachIndexed { r, str ->
+                val y = h * 0.07f + r * h * 0.235f
+                str.padStart(5, ' ').forEachIndexed { k, ch ->
+                    val x = x0 + k * (cellW + gap)
+                    fill(0xFF0A0C0B.toInt()); c.drawRoundRect(x, y, x + cellW, y + cellH, cellW * 0.16f, cellW * 0.16f, p)
+                    line(muted, 1f, 0.25f); c.drawRoundRect(x, y, x + cellW, y + cellH, cellW * 0.16f, cellW * 0.16f, p)
+                    if (ch != ' ') {
+                        p.textSize = cellH * 0.74f; p.textAlign = Paint.Align.CENTER
+                        val ty = y + cellH * 0.53f - (p.ascent() + p.descent()) / 2
+                        line(0xFFFFA04A.toInt(), cellH * 0.16f, 0.14f); c.drawText(ch.toString(), x + cellW / 2, ty, p)
+                        fill(if (r == 3) 0xFFFF4D3D.toInt() else 0xFFFFA04A.toInt()); c.drawText(ch.toString(), x + cellW / 2, ty, p)
+                    }
+                }
+            }
+        }
+        "k-meter" -> {
+            val top = h * 0.12f; val bot = h * 0.88f; val bw = w * 0.1f
+            listOf(0.52f, 0.46f).forEachIndexed { i, v ->
+                val x = w * 0.36f + i * w * 0.16f
+                fill(muted, 0.2f); c.drawRect(x, top, x + bw, bot, p)
+                val yv = bot - (bot - top) * v
+                val y0 = bot - (bot - top) * 0.667f // the K zero: 40 of 60 dB
+                fill(0xFF7EC17E.toInt()); c.drawRect(x, maxOf(yv, y0), x + bw, bot, p)
+                if (yv < y0) { fill(accent2); c.drawRect(x, yv, x + bw, y0, p) }
+                fill(text); c.drawRect(x - 2f, bot - (bot - top) * (v + 0.1f), x + bw + 2f, bot - (bot - top) * (v + 0.1f) + 3f, p)
+            }
+            for (k in 0..6) { line(muted, if (k == 4) 2f else 1f, 0.7f); val y = bot - (bot - top) * k / 6f; c.drawLine(w * 0.3f, y, w * 0.34f, y, p) }
+        }
+        "crest" -> {
+            p.textSize = h * 0.3f; p.textAlign = Paint.Align.LEFT; fill(accent2); c.drawText("12.4", w * 0.07f, h * 0.38f, p)
+            val path = Path()
+            for (x in 0..60) { val t = x / 60f; val y = h * 0.82f - h * 0.22f * (0.55f + 0.3f * sin(t * 9 * PI) + 0.15f * sin(t * 23 * PI)).toFloat(); if (x == 0) path.moveTo(w * 0.07f + w * 0.86f * t, y) else path.lineTo(w * 0.07f + w * 0.86f * t, y) }
+            line(muted, 1f, 0.3f); for (r in 0..2) c.drawLine(w * 0.07f, h * (0.56f + r * 0.14f), w * 0.93f, h * (0.56f + r * 0.14f), p)
+            line(accent, 2.5f); c.drawPath(path, p)
+        }
+        "lra" -> {
+            fill(accent2); p.textSize = h * 0.2f; p.textAlign = Paint.Align.RIGHT; c.drawText("8.2", w * 0.9f, h * 0.24f, p)
+            for (i in 0 until 40) {
+                val n = Math.exp(-Math.pow((i - 26) / 5.0, 2.0)) + 0.35 * Math.exp(-Math.pow((i - 17) / 3.0, 2.0))
+                val inside = i in 12..32
+                fill(if (inside) accent else muted, if (inside) 1f else 0.4f)
+                val bh = (h * 0.5f * n).toFloat()
+                c.drawRect(w * 0.07f + i * w * 0.0215f, h * 0.84f - bh, w * 0.07f + i * w * 0.0215f + w * 0.018f, h * 0.84f, p)
+            }
+            line(accent2, 2f); val yy = h * 0.9f
+            c.drawLine(w * 0.07f + 12 * w * 0.0215f, yy - 6f, w * 0.07f + 12 * w * 0.0215f, yy, p); c.drawLine(w * 0.07f + 12 * w * 0.0215f, yy, w * 0.07f + 33 * w * 0.0215f, yy, p); c.drawLine(w * 0.07f + 33 * w * 0.0215f, yy, w * 0.07f + 33 * w * 0.0215f, yy - 6f, p)
         }
         "third-octave" -> for (i in 0 until 31) {
             val v = (0.15f + 0.8f * (0.5f + 0.5f * sin(i * 0.55f + 0.6f)) * (1 - i / 60f)).coerceIn(0f, 1f)

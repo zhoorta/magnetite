@@ -57,6 +57,9 @@ val MeterCatalog = listOf(
     MeterInfo("scope", "Scope", 90, 56),
     MeterInfo("goniometer", "Goniometer", 240, 110),
     MeterInfo("loudness", "Loudness (LUFS)", 190, 100),
+    MeterInfo("k-meter", "K-meter", 190, 110),
+    MeterInfo("crest", "Crest factor", 150, 80),
+    MeterInfo("lra", "Loudness range", 150, 80),
     MeterInfo("third-octave", "Third-octave", 150, 80),
     MeterInfo("spectrogram", "Spectrogram", 150, 80),
 ) + Posters.catalog.map { it.first }
@@ -76,7 +79,10 @@ fun MeterView(id: String, playing: Boolean, compact: Boolean = false, fill: Bool
         "magic-eye" -> MeterCanvas(playing, size) { dt, lv -> magicEyes(dt, lv) }
         "scope" -> MeterCanvas(playing, size) { _, lv -> scope(lv) }
         "goniometer" -> MeterCanvas(playing, size) { _, lv -> goniometer(lv) }
-        "loudness" -> MeterCanvas(playing, size) { _, _ -> loudness() }
+        "loudness" -> MeterCanvas(playing, size) { _, _ -> nixieLoudness() }
+        "k-meter" -> MeterCanvas(playing, size) { dt, lv -> kMeter(dt, lv) }
+        "crest" -> MeterCanvas(playing, size) { dt, lv -> crestFactor(dt, lv) }
+        "lra" -> MeterCanvas(playing, size) { _, _ -> loudnessRange() }
         "third-octave" -> ThirdOctave(playing, size)
         "spectrogram" -> Spectrogram(playing, size)
         else -> if (id.startsWith("poster-")) PosterMeter(id, playing, size, track, position)
@@ -120,7 +126,7 @@ internal fun MeterCanvas(playing: Boolean, modifier: Modifier, work: ((dt: Float
 
 private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.MONOSPACE }
 
-private fun DrawScope.text(s: String, x: Float, y: Float, size: Float, color: Color, align: Paint.Align = Paint.Align.CENTER) {
+internal fun DrawScope.text(s: String, x: Float, y: Float, size: Float, color: Color, align: Paint.Align = Paint.Align.CENTER) {
     paint.textSize = size
     paint.color = color.toArgb()
     paint.textAlign = align
@@ -129,9 +135,9 @@ private fun DrawScope.text(s: String, x: Float, y: Float, size: Float, color: Co
     drawIntoCanvas { it.nativeCanvas.drawText(s, x, yy, paint) }
 }
 
-private fun db(x: Float) = 20f * log10(max(x, 1e-6f))
+internal fun db(x: Float) = 20f * log10(max(x, 1e-6f))
 private fun deg(rad: Double) = (rad * 180 / PI).toFloat()
-private fun Color.a(alpha: Float) = copy(alpha = alpha)
+internal fun Color.a(alpha: Float) = copy(alpha = alpha)
 
 /** Ballistics of one meter channel, a port of `visualizers/meter.js`. `value` and `peak` are positions on the scale (0..1). */
 class Ballistic {
@@ -374,43 +380,6 @@ private fun DrawScope.goniometer(lv: Lv) {
 }
 
 // ---- loudness ---------------------------------------------------------------------------------------------------
-
-private fun fmt(v: Double): String {
-    if (!v.isFinite()) return "−−.-"
-    val tenths = kotlin.math.round(kotlin.math.abs(v) * 10).toInt() // no String.format: it allocates and runs several times per frame
-    return "${if (v < 0) "−" else "+"}${tenths / 10}.${tenths % 10}"
-}
-
-private fun DrawScope.loudness() {
-    val margin = min(size.width, size.height) * 0.07f
-    val rowH = min((size.height - margin * 2) / 4.4f, size.width * 0.12f)
-    val top = (size.height - (rowH * 4 + rowH * 0.4f)) / 2
-    val label = max(9f, min(rowH * 0.22f, size.width * 0.02f))
-    val big = max(14f, min(rowH * 0.5f, size.width * 0.07f))
-    val numW = big * 3.4f
-    val barW = size.width - margin * 2 - numW - label * 4.5f
-    val at = { v: Double -> ((v - -41) / 36).toFloat().coerceIn(0f, 1f) }
-    listOf(Triple("MOMENTARY", Loudness.momentary, Palette.Accent), Triple("SHORT-TERM", Loudness.shortTerm, Palette.Accent), Triple("INTEGRATED", Loudness.integrated, Palette.Accent2)).forEachIndexed { i, (name, v, color) ->
-        val y = top + i * rowH
-        val barH = max(4f, rowH * 0.16f)
-        val barY = y + rowH * 0.62f
-        text(name, margin, y + label, label, Palette.Muted, Paint.Align.LEFT)
-        drawRect(Palette.Muted.a(0.22f), Offset(margin, barY), Size(barW, barH))
-        drawRect(color, Offset(margin, barY), Size(barW * at(v), barH))
-        drawRect(Palette.Text, Offset(margin + barW * at(-23.0) - 0.5f, barY - barH * 0.35f), Size(1.5f, barH * 1.7f))
-        text(fmt(v), size.width - margin - label * 3.2f, y + rowH * 0.45f, big, Palette.Text, Paint.Align.RIGHT)
-        text("LUFS", size.width - margin, y + rowH * 0.45f, label, Palette.Muted, Paint.Align.RIGHT)
-    }
-    val y = top + rowH * 3.4f
-    text("TRUE PEAK", margin, y + label, label, Palette.Muted, Paint.Align.LEFT)
-    listOf("L" to Loudness.truePeakL, "R" to Loudness.truePeakR).forEachIndexed { i, (name, lin) ->
-        val d = if (lin > 0) db(lin).toDouble() else Double.NEGATIVE_INFINITY
-        val x = margin + barW * 0.45f + i * barW * 0.28f
-        text(name, x, y + rowH * 0.4f, label, Palette.Muted, Paint.Align.LEFT)
-        text(fmt(d), x + label * 1.6f, y + rowH * 0.4f, big * 0.8f, if (d > -1.0) Palette.Red else Palette.Text, Paint.Align.LEFT)
-    }
-    text("dBTP", size.width - margin, y + rowH * 0.4f, label, Palette.Muted, Paint.Align.RIGHT)
-}
 
 // ---- third-octave -----------------------------------------------------------------------------------------------
 
