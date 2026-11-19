@@ -1,6 +1,6 @@
 # Poster meters
 
-Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Twelve designs of the mockup, the Tunnel, the Circuit and the Terrain are built; Warp (stripes around an eye) and Columns were removed on 2026-11-13 and are kept on the `poster-warp` and `poster-columns` branches (`resources/js/magnetite/visualizers/poster-*.js`).
+Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Twelve designs of the mockup, the Tunnel, the Circuit, the Terrain and the Airport are built; Warp (stripes around an eye) and Columns were removed on 2026-11-13 and are kept on the `poster-warp` and `poster-columns` branches (`resources/js/magnetite/visualizers/poster-*.js`).
 
 Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 
@@ -23,6 +23,7 @@ Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 | Heads | Sixteen heads, one per range, each swelling with energy; the red one is the loudest range (with hysteresis, so it does not flicker) | bands |
 | Slides | Four rows of half-discs, low to high; a dome and a bowl slide towards each other with the energy and overlap | bands |
 | Tunnel | Line only, one colour: ruled boxes with the track's text, a small spectrum, a globe that turns with the level and the time played; seven circles hang from one top edge and the gap between two is a frequency range (more energy, wider gap) | bands, progress |
+| Airport | An FAA airport diagram (US government chart, public domain) with the airport's names taken out of the picture and the track printed in their place. A plane rolls down a runway as the track plays, a different one for each track (the diagonal, the two long ones, the short one, chosen from the track's name); the centreline lights behind it. The long runways fill with L and R (lights from the south end), the short one with the peak, the diagonal one with the loudness; 30 bars east of the right runway are the bands, a dot at each held peak; the terminal flashes and the tower pings on bass onsets, twelve gate lights follow band groups; the pavement data become the levels in dB | bands, levels, progress |
 
 ## Themes
 
@@ -38,9 +39,11 @@ Themes carry no meter settings, so every poster uses its defaults (`theme` level
 - Checked on the Terminal, Late-night FM and Paper & ink themes (2026-11-13); other themes are not checked one by one.
 - The module `label` is "Poster: Name". The meter menu in the player bar lists the other meters first, then "Posters" as a group that opens in place (`visualizers/menu.js`, tested; a group is open when one of its meters is on, and shows how many are on; Posters starts open). A new group is one line in `GROUPS` there.
 
+- Airport is the one poster with a picture in it: `visualizers/airport-chart.png` is the chart's ink as a mask (alpha = how black a pixel was, 1044 x 1601, 96 KB, made from the FAA PDF with the names and data blocks painted out before the mask was cut, so no name is left in the file). The meter draws it in the theme's text colour on the theme's background (a dark theme lights the aprons instead of darkening them), and puts its own overlays on top in the picture's pixel space (700 x 1073, 130 dpi of the page). The picture is fetched once when the module loads and shared by every canvas; until it has arrived (or if it cannot load) the poster draws only its overlays and text. The overlays, the text and the colour come from the meter, not the picture, so a new theme needs nothing. The runway is chosen from the artist, title and number by `routeFor` (tested, `tests/js/poster-airport.test.mjs`, which also draws the poster on a stand-in canvas). Not ported to the Android and terminal clients.
+
 ## Thumbnails
 
-The meter menu shows the posters as a grid of pictures with the name under each. A poster's picture is drawn once per theme by `visualizers/thumb.js` on a canvas of its own, with its default settings, text off and a canned demo signal (`demo-sample.js`); `loadThumbs()` in the player store makes them one by one when the menu is first opened (about 150 ms for all fourteen) and again after a theme change. This is why the poster meters keep their state per canvas context (`stateOf`), so drawing a picture never disturbs the live meter.
+The meter menu shows the posters as a grid of pictures with the name under each. A poster's picture is drawn once per theme by `visualizers/thumb.js` on a canvas of its own, with its default settings, text off and a canned demo signal (`demo-sample.js`); `loadThumbs()` in the player store makes them one by one when the menu is first opened (about 150 ms for all fifteen) and again after a theme change. This is why the poster meters keep their state per canvas context (`stateOf`), so drawing a picture never disturbs the live meter.
 
 ## Ideas not done
 
