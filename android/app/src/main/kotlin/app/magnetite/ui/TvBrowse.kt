@@ -98,12 +98,12 @@ fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFol
                     found
                 } == true
                 Column(Modifier.tvFocus().combinedClickable(onClick = { onFolder(f.id) }, onLongClick = onFolderActions?.let { fa -> { fa(f) } }).padding(4.dp)) {
-                    Box(
-                        Modifier.fillMaxWidth().aspectRatio(1f).border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("▸ ${f.albumCount}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.headlineSmall) }
+                    // a pile of cards: the first cover in this folder or below it on top, two cards behind it (the outline folder when it holds no cover)
+                    val cover = remember(folders, albums, f.id) { folderCover(folders, albums, f.id) }
+                    Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
+                        if (cover == null) FolderIcon(MaterialTheme.colorScheme.primary) else FolderStack(cover)
+                    }
                     Text((if (holdsPlaying) "♪ " else "") + f.name, Modifier.padding(top = 4.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
-                    Text(if (f.albumCount == 1) "1 album" else "${f.albumCount} albums", color = Palette.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1)
                 }
             }
             items(here, key = { "a${it.id}" }) { a ->
@@ -123,6 +123,49 @@ fun FolderGrid(folders: List<Folder>, albums: List<Album>, folderId: Int?, onFol
                 }
             }
         }
+    }
+}
+
+/** An outlined folder: a body with a tab at the top left, drawn as one line in [color]. */
+@Composable
+private fun FolderIcon(color: androidx.compose.ui.graphics.Color) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize(0.96f)) {
+        val line = 3.dp.toPx()
+        val w = size.width - line; val h = size.height; val x0 = line / 2
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(x0, h * 0.9f); lineTo(x0, h * 0.1f); lineTo(x0 + w * 0.42f, h * 0.1f); lineTo(x0 + w * 0.42f, h * 0.3f)
+            lineTo(x0 + w, h * 0.3f); lineTo(x0 + w, h * 0.9f); close()
+        }
+        drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = line, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+    }
+}
+
+/** The cover of the first album in folder [id] or any folder below it. */
+private fun folderCover(folders: List<Folder>, albums: List<Album>, id: Int): String? {
+    val inside = HashSet<Int>().apply { add(id) }
+    var grew = true
+    while (grew) { grew = false; for (f in folders) if (f.parentId != null && f.parentId in inside && inside.add(f.id)) grew = true }
+    return albums.firstOrNull { it.folderId in inside && it.coverUrl != null }?.coverUrl
+}
+
+/** [url] as the front card of a pile: two plain cards peek out behind it to the upper right. */
+@Composable
+private fun FolderStack(url: String) {
+    val edge = MaterialTheme.colorScheme.outline
+    val face = Palette.Surface
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val s = size.width
+        val card = s * 0.8f
+        val line = 1.dp.toPx()
+        for (k in 2 downTo 1) {
+            val o = s * 0.1f * k
+            val topLeft = androidx.compose.ui.geometry.Offset(o, s - card - o)
+            drawRect(face, topLeft, androidx.compose.ui.geometry.Size(card, card))
+            drawRect(edge, topLeft, androidx.compose.ui.geometry.Size(card, card), style = androidx.compose.ui.graphics.drawscope.Stroke(line))
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
+        coil3.compose.AsyncImage(url, null, Modifier.fillMaxSize(0.8f).align(Alignment.BottomStart).border(1.dp, edge), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
     }
 }
 
