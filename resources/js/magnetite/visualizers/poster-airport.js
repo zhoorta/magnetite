@@ -46,6 +46,15 @@ function chartReady() {
     return chart && chart.complete && chart.naturalWidth > 0 ? chart : null;
 }
 
+/** Is this #rrggbb paper more green than red and blue? */
+function greenish(hex) {
+    const m = /^#([0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!m) return false;
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+
+    return g > r + 4 && g > b + 4;
+}
+
 /** The chart's ink in one colour (made once per colour and canvas). */
 function tinted(cache, color) {
     if (!cache.has(color)) {
@@ -194,6 +203,8 @@ export default {
         const look = palette(p, colors, ['paper', 'ink', 'a']);
         const view = begin(g, w, h, look.paper, { p });
         const glow = isDark(look.paper);
+        // The accent is the printed chart's red-pink only while the paper is light; on a dark paper it follows the mockup's night (amber) and radar (green, for a greenish paper) looks.
+        if (glow && p.theme < 2 && look.a === this.params.a) look.a = greenish(look.paper) ? '#d7ff6a' : '#ffb21e';
 
         const v = bars.update(bands, dt, p);
         let mean = 0;
