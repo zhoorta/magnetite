@@ -126,6 +126,20 @@ export function luminance(hex) {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** The colour `t` of the way (0..1) from `a` to `b`, both #rgb or #rrggbb; an unreadable colour counts as mid grey. Returns #rrggbb. */
+export function mixHex(a, b, t) {
+    const rgb = (hex) => {
+        const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex).trim());
+        if (!m) return [128, 128, 128];
+        const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
+
+        return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+    };
+    const [x, y] = [rgb(a), rgb(b)];
+
+    return `#${x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** Of `candidates`, the colour that reads best on `bg` (the highest contrast ratio). */
 export function readableOn(bg, candidates) {
     const lb = luminance(bg);

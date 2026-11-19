@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Reference, groupDb, stateOf, darkest, luminance, readableOn, isDark, overlap, Bars, follow, palette, posterText, metaColumns, showText } from '../../resources/js/magnetite/visualizers/poster.js';
+import { Reference, groupDb, stateOf, mixHex, darkest, luminance, readableOn, isDark, overlap, Bars, follow, palette, posterText, metaColumns, showText } from '../../resources/js/magnetite/visualizers/poster.js';
 
 const colors = { bg: '#101010', surface: '#202020', text: '#eeeeee', accent: '#ff0000', accent2: '#00ff00' };
 
@@ -107,4 +107,11 @@ test('state is kept per canvas context and per poster', () => {
     assert.equal(stateOf(b, make).n, 0, 'another canvas has its own');
     assert.deepEqual(stateOf(a, other), { bars: [] }, 'another poster on the same canvas does not get this poster\'s state');
     assert.equal(stateOf(a, make).n, 5, 'and does not lose it');
+});
+
+test('mixing two colours', () => {
+    assert.equal(mixHex('#000000', '#ffffff', 0.5), '#808080');
+    assert.equal(mixHex('#ff0000', '#0000ff', 0), '#ff0000');
+    assert.equal(mixHex('#f00', '#00f', 1), '#0000ff');
+    assert.equal(mixHex('nonsense', '#ffffff', 0), '#808080', 'an unreadable colour counts as mid grey');
 });
