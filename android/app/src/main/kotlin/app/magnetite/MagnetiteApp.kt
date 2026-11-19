@@ -64,6 +64,7 @@ class MagnetiteApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         app.magnetite.ui.Looking.current = app.magnetite.ui.Looking.byId(getSharedPreferences("look", MODE_PRIVATE).getString("id", null))
+        app.magnetite.ui.PosterAssets.init(this)
         session = Session(this)
         api = Api(session)
         player = PlayerController(this, session)

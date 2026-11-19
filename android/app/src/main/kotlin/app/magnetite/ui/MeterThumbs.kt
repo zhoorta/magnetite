@@ -44,7 +44,7 @@ private fun posterThumb(id: String): Bitmap {
     val bmp = Bitmap.createBitmap(POSTER_W, POSTER_H, Bitmap.Config.ARGB_8888)
     val g = Cv().also { it.c = Canvas(bmp) }
     val poster = Posters.make(id)!!
-    val ctx = PosterCtx().also { it.g = g; it.w = POSTER_W.toFloat(); it.h = POSTER_H.toFloat(); it.progress = 0.4f }
+    val ctx = PosterCtx().also { it.g = g; it.w = POSTER_W.toFloat(); it.h = POSTER_H.toFloat(); it.progress = 0.4f; it.sync = true }
     for (k in 0 until 1024) { ctx.gonioL[k] = 0.4f * sin(k * 0.05f); ctx.gonioR[k] = 0.3f * sin(k * 0.05f + 0.5f) }
     for (frame in 0 until 90) {
         val t = frame / 30f

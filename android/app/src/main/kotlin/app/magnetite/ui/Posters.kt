@@ -27,15 +27,15 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-// Poster meters (docs/posters.md): the web's twelve band and level posters, ported from `visualizers/poster-*.js`. Each one draws in its own
+// Poster meters (docs/posters.md): the web's band and level posters (the nine newest are in `PostersMore.kt`), ported from `visualizers/poster-*.js`. Each one draws in its own
 // 600 x 800 space, scaled to fit the cell, so the ports keep the web's numbers; `Cv` is a small stand-in for the web's 2D canvas so a poster reads
 // like its original. Theme level 1 only (paper, ink and dark panel follow the theme, the accents stay the poster's own); the web's other
-// settings keep their defaults. Circuit, Terrain and Tunnel are not ported.
+// settings keep their defaults.
 
-private const val W = 600f
-private const val H = 800f
-private const val PI_F = PI.toFloat()
-private const val BANDS = 31
+internal const val W = 600f
+internal const val H = 800f
+internal const val PI_F = PI.toFloat()
+internal const val BANDS = 31
 
 // ---- the canvas stand-in -----------------------------------------------------------------------------------------
 
@@ -47,6 +47,7 @@ class Cv {
     var alpha = 1f
     var mode: PorterDuff.Mode? = null
     var dash: FloatArray? = null
+    var dashPhase = 0f
     var round = false
     var viewScale = 1f
     private val path = Path()
@@ -59,6 +60,8 @@ class Cv {
     private val bold = Typeface.create("sans-serif", Typeface.BOLD)
     private val italicFace = Typeface.create("sans-serif", Typeface.ITALIC)
     private val boldItalic = Typeface.create("sans-serif", Typeface.BOLD_ITALIC)
+    private val faces = HashMap<Int, Typeface>()
+    private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     fun save() { c.save() }
     fun restore() { c.restore() }
@@ -70,6 +73,7 @@ class Cv {
     fun moveTo(x: Float, y: Float) { path.moveTo(x, y); has = true }
     fun lineTo(x: Float, y: Float) { if (has) path.lineTo(x, y) else moveTo(x, y) }
     fun bezierTo(x1: Float, y1: Float, x2: Float, y2: Float, x: Float, y: Float) { path.cubicTo(x1, y1, x2, y2, x, y) }
+    fun quadTo(x1: Float, y1: Float, x: Float, y: Float) { path.quadTo(x1, y1, x, y) }
     fun closePath() = path.close()
     fun rect(x: Float, y: Float, w: Float, h: Float) { path.addRect(x, y, x + w, y + h, Path.Direction.CW); has = true }
     fun roundRect(x: Float, y: Float, w: Float, h: Float, r: Float) { rect.set(x, y, x + w, y + h); path.addRoundRect(rect, r, r, Path.Direction.CW); has = true }
@@ -78,12 +82,18 @@ class Cv {
     /** The canvas `arc`: clockwise from a0 to a1 (radians), joined to the current point by a line. */
     fun arc(cx: Float, cy: Float, r: Float, a0: Float, a1: Float) = ellipse(cx, cy, r, r, a0, a1)
 
-    fun ellipse(cx: Float, cy: Float, rx: Float, ry: Float, a0: Float, a1: Float) {
+    fun ellipse(cx: Float, cy: Float, rx: Float, ry: Float, a0: Float, a1: Float, ccw: Boolean = false) {
         oval.set(cx - rx, cy - ry, cx + rx, cy + ry)
         var sweep = (a1 - a0) * 180f / PI_F
-        // The canvas goes clockwise: arc(PI, 0) is the half over the top (+180), not the half underneath (-180).
-        while (sweep < 0f) sweep += 360f
-        if (sweep >= 360f) { path.addOval(oval, Path.Direction.CW); has = true; return }
+        if (ccw) {
+            // anticlockwise: the sweep is negative
+            while (sweep > 0f) sweep -= 360f
+            if (sweep <= -360f) { path.addOval(oval, Path.Direction.CW); has = true; return }
+        } else {
+            // The canvas goes clockwise: arc(PI, 0) is the half over the top (+180), not the half underneath (-180).
+            while (sweep < 0f) sweep += 360f
+            if (sweep >= 360f) { path.addOval(oval, Path.Direction.CW); has = true; return }
+        }
         path.arcTo(oval, a0 * 180f / PI_F, sweep, !has)
         has = true
     }
@@ -99,7 +109,34 @@ class Cv {
         p.xfermode = mode?.let { PorterDuffXfermode(it) }
         p.strokeJoin = if (round) Paint.Join.ROUND else Paint.Join.MITER
         p.strokeCap = if (round) Paint.Cap.ROUND else Paint.Cap.BUTT
-        p.pathEffect = dash?.let { android.graphics.DashPathEffect(it, 0f) }
+        p.pathEffect = dash?.let { android.graphics.DashPathEffect(it, dashPhase) }
+    }
+
+    /** The path of a stand-in `Path2D`: stroked or filled with the current colours, leaving the canvas path alone. */
+    fun strokePath(shape: Path) { paint(stroke, Paint.Style.STROKE); c.drawPath(shape, p) }
+    fun fillPath(shape: Path) { paint(fill, Paint.Style.FILL); c.drawPath(shape, p) }
+
+    /** A picture drawn into the box; `tint` turns a mask picture (colour from alpha) into one colour. */
+    fun image(bmp: android.graphics.Bitmap, x: Float, y: Float, w: Float, h: Float, tint: Int? = null) {
+        imagePaint.colorFilter = tint?.let { android.graphics.PorterDuffColorFilter(it, PorterDuff.Mode.SRC_IN) }
+        imagePaint.alpha = (alpha * 255).roundToInt()
+        rect.set(x, y, x + w, y + h)
+        c.drawBitmap(bmp, null, rect, imagePaint)
+    }
+
+    /** The font by a CSS-like weight (400, 500, 600 medium, 700 and 800 bold, 900 black), in the system sans. */
+    fun fontW(sizePx: Float, weight: Int, spacing: Float = 0f) {
+        val key = when { weight >= 900 -> 900; weight >= 700 -> 700; weight >= 500 -> 500; else -> 400 }
+        tp.textSize = sizePx
+        tp.typeface = faces.getOrPut(key) { Typeface.create(when (key) { 900 -> "sans-serif-black"; 700 -> "sans-serif"; 500 -> "sans-serif-medium"; else -> "sans-serif" }, if (key == 700) Typeface.BOLD else Typeface.NORMAL) }
+        tp.letterSpacing = if (spacing == 0f) 0f else spacing / sizePx
+    }
+
+    /** A font of the poster's own (the pixel font, the monospace). */
+    fun fontFace(sizePx: Float, face: Typeface, spacing: Float = 0f) {
+        tp.textSize = sizePx
+        tp.typeface = face
+        tp.letterSpacing = if (spacing == 0f) 0f else spacing / sizePx
     }
 
     fun fill() { paint(fill, Paint.Style.FILL); c.drawPath(path, p) }
@@ -130,7 +167,16 @@ class Cv {
     }
 }
 
-private object Color {
+/** The canvas `save()` and `restore()` together: the matrix and clip as well as the colours, line width, alpha, dash and blend mode. */
+inline fun Cv.keep(block: Cv.() -> Unit) {
+    val f = fill; val st = stroke; val lw = lineWidth; val a = alpha; val d = dash; val dp = dashPhase; val r = round; val m = mode
+    save()
+    block()
+    restore()
+    fill = f; stroke = st; lineWidth = lw; alpha = a; dash = d; dashPhase = dp; round = r; mode = m
+}
+
+internal object Color {
     fun alpha(c: Int) = (c ushr 24) and 0xFF
     fun rgb(c: Int) = intArrayOf((c shr 16) and 0xFF, (c shr 8) and 0xFF, c and 0xFF)
     fun of(hex: String): Int = android.graphics.Color.parseColor(hex)
@@ -138,12 +184,12 @@ private object Color {
 
 // ---- shared pieces (visualizers/poster.js) -----------------------------------------------------------------------
 
-private fun toDb(x: Float) = 20f * log10(max(x, 1e-6f))
-private fun clamp01(x: Float) = x.coerceIn(0f, 1f)
-private fun follow(value: Float, target: Float, dt: Float, seconds: Float) = value + (target - value) * (1 - exp(-dt / (max(seconds, 0.001f) / 4.6f)))
+internal fun toDb(x: Float) = 20f * log10(max(x, 1e-6f))
+internal fun clamp01(x: Float) = x.coerceIn(0f, 1f)
+internal fun follow(value: Float, target: Float, dt: Float, seconds: Float) = value + (target - value) * (1 - exp(-dt / (max(seconds, 0.001f) / 4.6f)))
 
 /** What "full" means for a track: a level in dB that follows the track's own peaks (see the web's `Reference`). */
-private class Reference(var db: Float = -90f) {
+internal class Reference(var db: Float = -90f) {
     fun update(peakDb: Float, dt: Float, rise: Float = 40f, fall: Float = 2f): Float {
         val floor = max(db, peakDb - 30f)
         db = if (peakDb > floor) min(peakDb, floor + rise * dt) else max(peakDb, floor - fall * dt)
@@ -154,7 +200,7 @@ private class Reference(var db: Float = -90f) {
 }
 
 /** `n` groups of the third-octave bands that rise and fall like a meter, scaled against the track's own peak. */
-private class Bars(val n: Int) {
+internal class Bars(val n: Int) {
     private val db = FloatArray(n)
     val raw = FloatArray(n)
     val v = FloatArray(n)
@@ -177,25 +223,25 @@ private class Bars(val n: Int) {
     }
 }
 
-private fun luminance(c: Int): Float {
+internal fun luminance(c: Int): Float {
     val l = Color.rgb(c).map { v -> val s = v / 255f; if (s <= 0.03928f) s / 12.92f else ((s + 0.055f) / 1.055f).pow(2.4f) }
     return 0.2126f * l[0] + 0.7152f * l[1] + 0.0722f * l[2]
 }
 
-private fun isDark(c: Int) = luminance(c) < 0.2f
+internal fun isDark(c: Int) = luminance(c) < 0.2f
 
 /** Of the colours, the one that reads best on [bg]. */
-private fun readableOn(bg: Int, vararg candidates: Int): Int {
+internal fun readableOn(bg: Int, vararg candidates: Int): Int {
     val lb = luminance(bg)
     val ratio = { c: Int -> (max(lb, luminance(c)) + 0.05f) / (min(lb, luminance(c)) + 0.05f) }
     return candidates.reduce { best, c -> if (ratio(c) > ratio(best)) c else best }
 }
 
 /** How shapes on this paper add up where they overlap: darker on light paper (like ink), lighter on dark paper. */
-private fun overlap(paper: Int) = if (isDark(paper)) PorterDuff.Mode.SCREEN else PorterDuff.Mode.MULTIPLY
+internal fun overlap(paper: Int) = if (isDark(paper)) PorterDuff.Mode.SCREEN else PorterDuff.Mode.MULTIPLY
 
 /** The poster's colours at theme level 1: paper, ink and the dark panel from the theme, the rest its own. */
-private class PosterLook(own: Map<String, String>) {
+internal class PosterLook(own: Map<String, String>) {
     private val m = own.mapValues { Color.of(it.value) }.toMutableMap().apply {
         put("paper", Palette.Bg.toArgb()); put("ink", Palette.Text.toArgb()); put("dark", Palette.Surface.toArgb())
         // a colour the poster does not name follows the theme
@@ -204,7 +250,7 @@ private class PosterLook(own: Map<String, String>) {
     operator fun get(k: String) = m.getValue(k)
 }
 
-private class Say(t: Track?) {
+internal class Say(t: Track?) {
     val name = t?.artist?.takeIf { it.isNotEmpty() } ?: t?.title?.takeIf { it.isNotEmpty() } ?: "magnetite"
     val title = if (t?.artist.isNullOrEmpty()) "" else t?.title ?: ""
     val album = t?.album ?: ""
@@ -216,10 +262,10 @@ private class Say(t: Track?) {
     fun meta() = listOf(listOf(year, listOf(no, dur).filter { it.isNotEmpty() }.joinToString(" · ")), listOf(album), listOf(fmt, dr)).map { c -> c.filter { it.isNotEmpty() } }
 }
 
-private fun join(vararg s: String) = s.filter { it.isNotEmpty() }.joinToString(" · ")
+internal fun join(vararg s: String) = s.filter { it.isNotEmpty() }.joinToString(" · ")
 
 /** The 600 x 800 space as large as fits, centred on the paper; returns whether the cell is big enough to print text. Close it with `g.restore()`. */
-private fun begin(g: Cv, w: Float, h: Float, paper: Int): Boolean {
+internal fun begin(g: Cv, w: Float, h: Float, paper: Int): Boolean {
     val scale = min(w / W, h / H)
     g.viewScale = scale
     g.fill = paper
@@ -270,6 +316,9 @@ class PosterCtx {
     var progress = 0f
     val gonioL = FloatArray(1024)
     val gonioR = FloatArray(1024)
+
+    /** Thumbnails wait for the pictures a poster uses; the live meter draws without them until they have loaded. */
+    var sync = false
 }
 
 abstract class Poster(val needsBands: Boolean = true, val needsGonio: Boolean = false) {
@@ -817,7 +866,7 @@ private fun Cv.fit(text: String, maxW: Float, start: Float, bold: Boolean, minSi
     return size
 }
 
-private fun lerpColor(a: Int, b: Int, t: Float): Int {
+internal fun lerpColor(a: Int, b: Int, t: Float): Int {
     val x = Color.rgb(a); val y = Color.rgb(b)
     return (0xFF shl 24) or ((x[0] + ((y[0] - x[0]) * t).roundToInt()) shl 16) or ((x[1] + ((y[1] - x[1]) * t).roundToInt()) shl 8) or (x[2] + ((y[2] - x[2]) * t).roundToInt())
 }
@@ -1379,6 +1428,15 @@ object Posters {
         MeterInfo("poster-tunnel", "Poster: Tunnel", 260, 110) to ::Tunnel,
         MeterInfo("poster-circuit", "Poster: Circuit", 260, 110) to ::Circuit,
         MeterInfo("poster-terrain", "Poster: Terrain", 260, 110) to ::Terrain,
+        MeterInfo("poster-airport", "Poster: Airport", 260, 110) to ::Airport,
+        MeterInfo("poster-pylon", "Poster: Pylon", 260, 110) to ::Pylon,
+        MeterInfo("poster-camera", "Poster: Camera", 260, 110) to ::Camera,
+        MeterInfo("poster-stacks", "Poster: Stacks", 260, 110) to ::Stacks,
+        MeterInfo("poster-swatches", "Poster: Swatches", 260, 110) to ::Swatches,
+        MeterInfo("poster-viewdata", "Poster: Viewdata", 260, 110) to ::Viewdata,
+        MeterInfo("poster-prompt", "Poster: Prompt", 260, 110) to ::Prompt,
+        MeterInfo("poster-network", "Poster: Network", 260, 110) to ::Network,
+        MeterInfo("poster-junction", "Poster: Junction", 260, 110) to ::Junction,
     )
 
     fun make(id: String): Poster? = catalog.firstOrNull { it.first.id == id }?.second?.invoke()
