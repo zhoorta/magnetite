@@ -47,6 +47,13 @@ Their shapes follow the music. Some examples:
 - **Halftone**, **Facets**: a grid that scrolls like a spectrogram.
 - **Dials**: four gauges for short-term loudness, true peak, correlation and dynamic range.
 - **Pylon**: a black-and-white information poster with a transmission pylon. The rings behind the title are the spectrum, the pylon's three crossarms are the highs, mids and bass and light up and tremble with them, and the three bolts are the left channel, the loudness and the right channel.
+- **Camera**: a manual lens. The two grip rings are the spectrum, the aperture stops light up with the loudness, the fan shows the left and right level, and the focus index slides along the distance scale as the track plays.
+- **Stacks**: a building of curved stripes whose colours drift with the frequency ranges, a sun that swells with the loudness, and a tower whose lined shaft is a level thermometer.
+- **Swatches**: three big colour swatches that carry the title; each is a frequency range, its colour moves with the level and the hex code on it is the colour right now.
+- **Viewdata**: the old diagram of a TV with a telephone line, a mast and a computer; arcs, lamps, flowing lines and a small teletext screen with the spectrum.
+- **Prompt**: an 8-bit text screen with a block of characters that change faster where the music is louder, a German menu with the track and levels, and a blinking prompt.
+- **Network**: the Berlin U-Bahn map. Each line is a frequency range and fills with colour along its route; the line U5 carries a train for the time played.
+- **Junction**: a railway track layout where the music runs out from the two stations (left and right channel) along the tracks.
 - **Airport**: an airport diagram. A plane rolls down a runway as the track plays (a different runway for each track), the long runways light up with the left and right level, and the bars beside one of them are the frequency ranges.
 
 A poster is upright, so in full screen two posters sit side by side.

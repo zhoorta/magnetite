@@ -22,3 +22,10 @@ Check a track's licence again before adding it: some pages on these sites carry 
 ## Fonts
 
 Bundled for the theme studio, all under the [SIL Open Font License 1.1](https://openfontlicense.org/), taken from the `@fontsource` packages (latin subset, which covers Portuguese and the other western languages): Inter, Space Grotesk, IBM Plex Sans, Outfit, Quicksand, Righteous, Fraunces, Lora, JetBrains Mono, IBM Plex Mono, Courier Prime, Share Tech Mono, VT323, Silkscreen, Press Start 2P and Pixelify Sans. They are dev dependencies bundled by Vite (`resources/css/fonts.css`); each package carries its own licence text and the original authors are named in the font files.
+
+## Pictures inside the poster meters
+
+- **Airport**: the FAA airport diagram is a United States government chart and in the public domain. The picture in the app (`resources/js/magnetite/visualizers/airport-chart.png`) is its ink only, with the airport's names and data blocks painted out.
+- **Network**: the Berlin U-Bahn map is [File:U-Bahn_Berlin_-_Netzplan.svg](https://commons.wikimedia.org/wiki/File:U-Bahn_Berlin_-_Netzplan.svg) on Wikimedia Commons, by Arbalete, under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) (checked on its file page on 2026-11-19). It is modified: the station names, the line badges and the ground were left out, the route paths are drawn by the poster, and the rest (the station rings) is a picture of its ink (`berlin-ink.png`). The poster prints the credit "Map: Arbalete, CC BY-SA 4.0, Wikimedia Commons (modified)" whenever it prints text. Adaptations of a CC BY-SA 4.0 work may be shared under the GNU GPL v3 (the project's AGPL v3 builds on it), but the picture and the route data stay under CC BY-SA 4.0.
+- **Junction**: a track-layout diagram of the railway lands behind King's Cross and St Pancras, a black line drawing of unknown origin and licence (it came as a file from the web). `junction-field.png` is made from it. Find the source and its licence, or replace the drawing, before this poster is relied on.
+
