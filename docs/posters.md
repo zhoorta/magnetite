@@ -1,6 +1,6 @@
 # Poster meters
 
-Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Twelve designs of the mockup, the Tunnel, the Circuit, the Terrain and the Airport are built; Warp (stripes around an eye) and Columns were removed on 2026-11-13 and are kept on the `poster-warp` and `poster-columns` branches (`resources/js/magnetite/visualizers/poster-*.js`).
+Meters drawn like printed posters and book covers: flat shapes in a few colours, hard edges, slow movement, and the track's artist, title, album and format printed on them. Twelve designs of the mockup, the Tunnel, the Circuit, the Terrain, the Airport and the Pylon are built; Warp (stripes around an eye) and Columns were removed on 2026-11-13 and are kept on the `poster-warp` and `poster-columns` branches (`resources/js/magnetite/visualizers/poster-*.js`).
 
 Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 
@@ -24,6 +24,7 @@ Mockup of the designs, on a fake signal: `docs/mockups/poster-meters.html`.
 | Slides | Four rows of half-discs, low to high; a dome and a bowl slide towards each other with the energy and overlap | bands |
 | Tunnel | Line only, one colour: ruled boxes with the track's text, a small spectrum, a globe that turns with the level and the time played; seven circles hang from one top edge and the gap between two is a frequency range (more energy, wider gap) | bands, progress |
 | Airport | An FAA airport diagram (US government chart, public domain) with the airport's names taken out of the picture and the track printed in their place. A plane rolls down a runway as the track plays, a different one for each track (the diagonal, the two long ones, the short one, chosen from the track's name); the centreline lights behind it. The long runways fill with L and R (lights from the south end), the short one with the peak, the diagonal one with the loudness; 30 bars east of the right runway are the bands, a dot at each held peak; the terminal flashes and the tower pings on bass onsets, twelve gate lights follow band groups; the pavement data become the levels in dB | bands, levels, progress |
+| Pylon | A black-and-white information poster: heavy title over 44 concentric rings (the spectrum, bass in the middle, thin, calm and slow, with a faint ripple on a bass onset); a lattice pylon whose three crossarms are three tiers (highs on top, bass at the bottom: the arm, its insulators and its wires light and tremble with the tier, sparks from the lowest on onsets); three bolts (L, loudness, R) filling from the bottom; a dot field that is a spectrogram of the last three seconds; three stars (spectrum in polar form, held peaks, onsets); a ring in the corner for the time played; small print and a paragraph made from the track and the levels | bands, levels, progress |
 
 ## Themes
 
@@ -43,7 +44,7 @@ Themes carry no meter settings, so every poster uses its defaults (`theme` level
 
 ## Thumbnails
 
-The meter menu shows the posters as a grid of pictures with the name under each. A poster's picture is drawn once per theme by `visualizers/thumb.js` on a canvas of its own, with its default settings, text off and a canned demo signal (`demo-sample.js`); `loadThumbs()` in the player store makes them one by one when the menu is first opened (about 150 ms for all fifteen) and again after a theme change. This is why the poster meters keep their state per canvas context (`stateOf`), so drawing a picture never disturbs the live meter.
+The meter menu shows the posters as a grid of pictures with the name under each. A poster's picture is drawn once per theme by `visualizers/thumb.js` on a canvas of its own, with its default settings, text off and a canned demo signal (`demo-sample.js`); `loadThumbs()` in the player store makes them one by one when the menu is first opened (about 150 ms for all sixteen) and again after a theme change. This is why the poster meters keep their state per canvas context (`stateOf`), so drawing a picture never disturbs the live meter.
 
 ## Ideas not done
 

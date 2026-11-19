@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { fakeContext } from './fake-canvas.mjs';
 
 // The poster uses Path2D and the picture loader in the browser; Node gets stand-ins so the drawing code itself can run.
 globalThis.Path2D = class {
@@ -10,29 +11,6 @@ const { default: airport, routeFor } = await import('../../resources/js/magnetit
 const { demoSample, stepDemo } = await import('../../resources/js/magnetite/visualizers/demo-sample.js');
 
 const colors = { bg: '#101010', surface: '#202020', text: '#eeeeee', accent: '#ff0000', accent2: '#00ff00', font: 'sans-serif' };
-
-/** A canvas context that accepts everything and measures text as 6 px a letter; it records the text that was drawn. */
-function fakeContext() {
-    const said = [];
-    const ctx = new Proxy({}, {
-        get(target, prop) {
-            if (prop === 'said') return said;
-            if (prop === 'measureText') return (t) => ({ width: String(t).length * 6 });
-            if (prop in target) return target[prop];
-
-            return (...args) => {
-                if (prop === 'fillText') said.push(args[0]);
-            };
-        },
-        set(target, prop, value) {
-            target[prop] = value;
-
-            return true;
-        },
-    });
-
-    return ctx;
-}
 
 const track = { artist: 'Ana Duarte', title: 'Mare Cheia', album: 'Ilhas', year: 2024, number: 3, duration: 274, codec: 'flac', truth: { bits: 24, sample_rate: 96000, dr: 12 } };
 

@@ -46,6 +46,7 @@ Their shapes follow the music. Some examples:
 - **Lens**: one disc per channel; they overlap more as the channels become more alike.
 - **Halftone**, **Facets**: a grid that scrolls like a spectrogram.
 - **Dials**: four gauges for short-term loudness, true peak, correlation and dynamic range.
+- **Pylon**: a black-and-white information poster with a transmission pylon. The rings behind the title are the spectrum, the pylon's three crossarms are the highs, mids and bass and light up and tremble with them, and the three bolts are the left channel, the loudness and the right channel.
 - **Airport**: an airport diagram. A plane rolls down a runway as the track plays (a different runway for each track), the long runways light up with the left and right level, and the bars beside one of them are the frequency ranges.
 
 A poster is upright, so in full screen two posters sit side by side.
