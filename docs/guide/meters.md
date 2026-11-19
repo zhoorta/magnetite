@@ -52,7 +52,7 @@ Their shapes follow the music. Some examples:
 - **Swatches**: three big colour swatches that carry the title; each is a frequency range, its colour moves with the level and the hex code on it is the colour right now.
 - **Viewdata**: the old diagram of a TV with a telephone line, a mast and a computer; arcs, lamps, flowing lines and a small teletext screen with the spectrum.
 - **Prompt**: an 8-bit text screen with a block of characters that change faster where the music is louder, a German menu with the track and levels, and a blinking prompt.
-- **Network**: the Berlin U-Bahn map. Each line is a frequency range and fills with colour along its route; the line U5 carries a train for the time played.
+- **Network**: the Berlin U-Bahn map. Each line is a frequency range and fills with colour along its route. A train shows the time played, and it runs on a different line for each track.
 - **Junction**: a railway track layout where the music runs out from the two stations (left and right channel) along the tracks.
 - **Airport**: an airport diagram. A plane rolls down a runway as the track plays (a different runway for each track), the long runways light up with the left and right level, and the bars beside one of them are the frequency ranges.
 

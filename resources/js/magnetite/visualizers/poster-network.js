@@ -32,13 +32,13 @@ const ROUTES = [
     { line: 'U4', width: 8, dashed: false, length: 181.9, d: 'm 5053.8422,1348.8155 3e-4,181.9355' },
 ];
 
-// The eight band groups, the bass first; U5 is the time played.
-const ORDER = ['U9', 'U8', 'U7', 'U6', 'U3', 'U1', 'U2', 'U4'];
+// The nine lines are nine band groups, the bass first. The train that shows the time played runs on a different line for each track.
+const ORDER = ['U9', 'U8', 'U7', 'U6', 'U5', 'U3', 'U1', 'U2', 'U4'];
 const COLOR = { U1: '#7dad4c', U2: '#da421e', U3: '#007a5b', U4: '#f0d722', U5: '#7e5330', U6: '#8c6dab', U7: '#528dba', U8: '#224f86', U9: '#f3791d' };
 // On a dark ground the darkest lines would sink, so they are lifted.
 const COLOR_DARK = { ...COLOR, U3: '#13a37c', U5: '#b98457', U8: '#4f86c8' };
 
-const make = () => ({ bars: new Bars(8), pk: new Float32Array(8), tints: new Map(), st: { shapes: null } });
+const make = () => ({ bars: new Bars(ORDER.length), pk: new Float32Array(ORDER.length), tints: new Map(), st: { shapes: null } });
 
 // The picture is a shared asset (not drawing state): loaded once, when the module is first used. If it cannot be loaded the routes and the text are
 // still drawn.
@@ -92,6 +92,16 @@ function pointAt(route, fraction) {
     return route.el.getPointAtLength(route.length * clamp01(fraction));
 }
 
+/** The line the train runs on: one of the nine, fixed for a track (so a different track often has its train on a different line). */
+export function lineFor(track) {
+    const key = `${track?.artist ?? ''}${track?.title ?? ''}${track?.number ?? ''}`;
+    let h = 7;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0; // mix the bits: the low ones alone would barely change with the text
+
+    return ORDER[((h ^ (h >>> 13)) >>> 0) % ORDER.length];
+}
+
 const longest = {};
 for (const route of ROUTES) if (!longest[route.line] || route.length > longest[route.line].length) longest[route.line] = route;
 
@@ -110,9 +120,10 @@ function put(g, text, x, y, { size, font, color, weight = 700, align = 'left', s
 }
 
 /**
- * The Berlin U-Bahn map as a meter. Eight lines are the eight band groups (U9 the bass, U4 the highs): a line is coloured from the start of its route
- * as far as its band's level, and a white dot with a coloured ring rides at the held peak. U5 is the time played: a train runs along it and the line is
- * coloured behind it. The station rings sit on top, in the poster's ink colour.
+ * The Berlin U-Bahn map as a meter. The nine lines are nine band groups (U9 the bass, U4 the highs): a line is coloured from the start of its route as far
+ * as its band's level, and a white dot with a coloured ring rides at the held peak. The time played is a train on one line, a different one for each
+ * track (the mark under a badge in the key shows which): the line is coloured behind it as far as it has got. The station rings sit on top, in the
+ * poster's ink colour.
  */
 export default {
     id: 'poster-network',
@@ -135,7 +146,9 @@ export default {
         const view = begin(g, w, h, look.paper, { p });
         const lines = isDark(look.paper) ? COLOR_DARK : COLOR;
         const v = bars.update(bands, dt, p);
-        for (let i = 0; i < 8; i++) pk[i] = Math.max(v[i], pk[i] - dt * 0.18);
+        for (let i = 0; i < ORDER.length; i++) pk[i] = Math.max(v[i], pk[i] - dt * 0.18);
+        const train = lineFor(track);
+        const here = 0.02 + 0.96 * clamp01(progress);
         const level = Object.fromEntries(ORDER.map((line, i) => [line, clamp01(v[i] * 1.5)]));
         const held = Object.fromEntries(ORDER.map((line, i) => [line, clamp01(pk[i] * 1.5)]));
 
@@ -160,7 +173,7 @@ export default {
             g.globalAlpha = 0.16;
             g.stroke(shape);
             g.globalAlpha = 1;
-            const shown = route.line === 'U5' ? 0.02 + 0.96 * clamp01(progress) : level[route.line];
+            const shown = route === longest[train] && route.line === train ? Math.max(level[route.line], here) : level[route.line];
             g.strokeStyle = lines[route.line];
             if (route.dashed) {
                 g.globalAlpha = 0.25 + 0.75 * shown;
@@ -172,21 +185,21 @@ export default {
             }
         });
         g.setLineDash([]);
-        // A dot at each line's held peak, the train on U5.
+        // A dot at each line's held peak, and the train on this track's line.
         for (const line of Object.keys(longest)) {
-            const at = pointAt(longest[line], line === 'U5' ? 0.02 + 0.96 * clamp01(progress) : held[line]);
+            const at = pointAt(longest[line], line === train ? here : held[line]);
             if (!at) continue;
             g.beginPath();
-            g.arc(at.x, at.y, line === 'U5' ? 11 : 6, 0, 7);
+            g.arc(at.x, at.y, line === train ? 11 : 6, 0, 7);
             g.fillStyle = look.paper;
             g.fill();
-            g.lineWidth = line === 'U5' ? 5 : 3;
+            g.lineWidth = line === train ? 5 : 3;
             g.strokeStyle = lines[line];
             g.stroke();
-            if (line === 'U5') {
+            if (line === train) {
                 g.beginPath();
                 g.arc(at.x, at.y, 3.6, 0, 7);
-                g.fillStyle = lines.U5;
+                g.fillStyle = lines[line];
                 g.fill();
             }
         }
@@ -203,8 +216,8 @@ export default {
             g.globalAlpha = 0.6;
             put(g, [say.title ? say.name : '', say.album, say.year].filter(Boolean).join(' · '), 30, 74, { ...muted, size: 12, spacing: 0.2 });
             put(g, [say.fmt, say.dr].filter(Boolean).join(' · '), 570, 36, { ...muted, size: 12, align: 'right', spacing: 0.2 });
-            // The key: the nine lines as badges, the bass first, U5 for the time.
-            [...ORDER, 'U5'].forEach((line, i) => {
+            // The key: the nine lines as badges, the bass first, a mark under the line this track's train runs on.
+            ORDER.forEach((line, i) => {
                 const x = 30 + i * 60;
                 g.globalAlpha = 1;
                 g.fillStyle = lines[line];
@@ -212,11 +225,20 @@ export default {
                 g.roundRect(x, 768, 26, 14, 3);
                 g.fill();
                 put(g, line, x + 13, 779, { font, color: '#ffffff', size: 10, align: 'center' });
+                if (line === train) {
+                    g.fillStyle = look.ink;
+                    g.beginPath();
+                    g.moveTo(x + 13, 784);
+                    g.lineTo(x + 8, 790);
+                    g.lineTo(x + 18, 790);
+                    g.closePath();
+                    g.fill();
+                }
             });
             g.globalAlpha = 0.6;
             put(g, 'BASS', 30, 794, { ...muted, size: 8, weight: 600, spacing: 1.5 });
-            put(g, 'HIGHS', 30 + 7 * 60 + 26, 794, { ...muted, size: 8, weight: 600, align: 'right', spacing: 1.5 });
-            put(g, length ? `TIME  ${mmss(progress * length)} / ${mmss(length)}` : '', 570, 794, { ...muted, size: 8, weight: 600, align: 'right', spacing: 1.5 });
+            put(g, 'HIGHS', 30 + 8 * 60 + 26, 794, { ...muted, size: 8, weight: 600, align: 'right', spacing: 1.5 });
+            put(g, length ? `TIME  ${mmss(progress * length)} / ${mmss(length)}` : '', 283, 794, { ...muted, size: 8, weight: 600, align: 'center', spacing: 1.5 });
             put(g, CREDIT, 570, 52, { ...muted, size: 6.5, align: 'right' });
             g.globalAlpha = 1;
         }
