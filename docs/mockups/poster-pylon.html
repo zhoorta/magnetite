@@ -1,0 +1,288 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Pylon</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Pylon poster meter, in the manner of a black-and-white information poster (own drawing, nothing traced): a heavy
+   title over 44 concentric rings, a lattice transmission pylon in front of them, three lightning bolts, a field of dots, three
+   stars and a block of small print. Rings: each is a slice of the 30 bands (bass in the middle, treble outside), thicker and
+   brighter with its level; a bass onset sends a ripple outwards through them. Pylon: three crossarms are three tiers (highs on top,
+   bass at the bottom): the arm, its insulator discs and its wires light and tremble with the tier's level; sparks jump from the
+   lowest tier on onsets. Bolts: left, loudness, right, filling from the bottom. Dots: a spectrogram of the last three seconds
+   (columns are moments, rows band groups). Stars: the spectrum in polar form, the held peaks, the onsets. The ring in the corner
+   is the time played. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Pylon</h1>
+  <p>A black-and-white information poster as a meter. The 44 rings behind the title are the spectrum, clearly visible but calm (steady lines, a small slow swell with each band, one colour, a barely visible ripple on each bass onset); the pylon's three tiers are highs, mids and bass; the three bolts are left, loudness and right; the dots are the last three seconds; the three stars are polar spectrum, peaks and onsets.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Black and white', { bg:'#000', ink:'#fff', acc:'#fff', paper:false }],
+  ['Black and red', { bg:'#0a0a0a', ink:'#f2efe6', acc:'#ff3b1f', paper:false }],
+  ['Paper and orange', { bg:'#efe9d8', ink:'#14130f', acc:'#e4570f', paper:true }],
+];
+const TT = { black:'#000', green:'#2bff4a', yellow:'#ffee2e', red:'#ff3b2e', cyan:'#2ee6ff', white:'#f4f4f4', blue:'#1a2cff' };
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+// ---- small drawing helpers
+function path(g, pts) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); }
+function plen(p) { let d = 0; for (let i = 1; i < p.length; i++) d += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return d; }
+function at(p, d) {
+  for (let i = 1; i < p.length; i++) {
+    const l = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (d <= l) { const k = d / l; return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * k, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * k]; }
+    d -= l;
+  }
+  return p[p.length - 1];
+}
+function quad(a, c, b, n = 18) { return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; }); }
+function arrow(g, p, fill, size = 9) {
+  const [x, y] = p[p.length - 1], [px, py] = p[p.length - 2], a = Math.atan2(y - py, x - px);
+  g.beginPath(); g.moveTo(x + 2 * Math.cos(a), y + 2 * Math.sin(a));
+  g.lineTo(x - size * Math.cos(a - 0.42), y - size * Math.sin(a - 0.42));
+  g.lineTo(x - size * Math.cos(a + 0.42), y - size * Math.sin(a + 0.42)); g.closePath();
+  g.save(); g.fillStyle = fill; g.fill(); g.restore(); g.stroke();
+}
+function T(g, s, x, y, o) {
+  g.font = `${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function box3(g, x, y, w, h, dx, dy, bg) {
+  g.save(); g.fillStyle = bg;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx, y + dy); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w, y); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w + dx, y + h + dy); g.lineTo(x + w, y + h); g.closePath(); g.fill(); g.stroke();
+  g.fillRect(x, y, w, h); g.strokeRect(x, y, w, h); g.restore();
+}
+function cyl(g, cx, cy, rx, ry, h, amt, pal) {
+  const bot = cy + h;
+  g.beginPath(); g.moveTo(cx - rx, cy); g.lineTo(cx - rx, bot); g.ellipse(cx, bot, rx, ry, 0, Math.PI, 0, true);
+  g.lineTo(cx + rx, cy); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI, true); g.closePath();
+  g.save(); g.fillStyle = pal.bg; g.fill(); g.clip();
+  g.globalAlpha = 0.85; g.fillStyle = pal.acc; g.fillRect(cx - rx - 2, bot + ry - amt * (h + ry), rx * 2 + 4, h + ry * 2);
+  g.restore(); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.save(); g.fillStyle = pal.bg; g.fill(); g.restore(); g.stroke();
+}
+
+const HEAVY = '"Helvetica Neue", Helvetica, "Arial Black", Arial, sans-serif';
+const bandAt = (arr, x) => { const i = Math.max(0, Math.min(NB - 1, Math.floor(x))), f = Math.max(0, Math.min(1, x - i)); return arr[i] * (1 - f) + arr[Math.min(NB - 1, i + 1)] * f; };
+const grp = (arr, a, b) => { let t = 0; for (let i = a; i < b; i++) t += arr[i]; return clamp((t / (b - a)) * 1.5); };
+const dbOf = (v) => (-30 * (1 - clamp(v))).toFixed(1);
+const CX = 300, TOP = 330, BASE = 690, RCY = 340, NRING = 44;
+const hw = (y) => 12 + (y - TOP) * (80 / (BASE - TOP));
+const TIERS = [{ y: 380, len: 98, a: 20, b: 30 }, { y: 470, len: 130, a: 8, b: 20 }, { y: 560, len: 162, a: 0, b: 8 }];
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const DOTS = Array.from({ length: 12 * 9 }, (_, i) => ({ c: i % 12, r: Math.floor(i / 12), jx: (rnd() - 0.5) * 7, jy: (rnd() - 0.5) * 7 }));
+const BOLT = [[0.58, 0], [0.04, 0.56], [0.4, 0.56], [0.26, 1], [0.96, 0.38], [0.56, 0.38], [0.8, 0]];
+
+function lit(g, pal, a) { g.globalAlpha = a; }
+function bolt(g, pal, x, y, w, h, v) {
+  const pts = BOLT.map(([u, t]) => [x + u * w, y + t * h]);
+  g.save(); path(g, [...pts, pts[0]]); g.fillStyle = pal.bg; g.fill(); g.save(); g.clip();
+  g.fillStyle = pal.acc; g.globalAlpha = 0.9; g.fillRect(x - 2, y + h * (1 - v), w + 4, h * v + 2); g.restore();
+  g.lineWidth = 2; g.strokeStyle = pal.ink; path(g, [...pts, pts[0]]); g.stroke(); g.restore();
+}
+function star(g, pal, cx, cy, r, vals, rot = 0) {
+  const n = vals.length;
+  g.save(); g.lineWidth = 1.4; g.strokeStyle = pal.ink; g.beginPath(); g.arc(cx, cy, r, 0, TAU); g.stroke();
+  const pts = []; for (let i = 0; i < n * 2; i++) { const a = rot + i * Math.PI / n - Math.PI / 2, outer = i % 2 === 0, l = outer ? 0.16 + 0.8 * vals[i / 2] : 0.1; pts.push([cx + Math.cos(a) * r * l * 0.96, cy + Math.sin(a) * r * l * 0.96]); }
+  path(g, [...pts, pts[0]]); g.fillStyle = pal.acc; g.fill(); g.restore();
+}
+
+function draw(c, pal, st, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = pal.bg; g.fillRect(0, 0, c.width, c.height);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+  const tr = TRACKS[ti], ink = pal.ink, acc = pal.acc;
+
+  // ---- state
+  const k = 1 - Math.exp(-o.dt / 0.07);
+  for (let i = 0; i < NB; i++) { st.b[i] += (o.bands[i] - st.b[i]) * k; st.pk[i] = Math.max(st.b[i], st.pk[i] - o.dt * 0.2); }
+  const mean = st.b.reduce((a, b) => a + b, 0) / NB;
+  st.lv += (mean - st.lv) * (1 - Math.exp(-o.dt / 0.3));
+  st.l += (o.l - st.l) * k; st.r += (o.r - st.r) * k;
+  const bass = (o.bands[0] + o.bands[1] + o.bands[2]) / 3;
+  st.avg += (bass - st.avg) * (1 - Math.exp(-o.dt / 0.6));
+  st.cool -= o.dt; st.on = Math.max(0, st.on - o.dt * 3); st.wave += o.dt;
+  if (st.cool <= 0 && bass > st.avg * 1.3 + 0.04) { st.on = 1; st.cool = 0.16; st.wave = 0; st.rot += 0.5; }
+  st.t += o.dt; if (st.t > 0.25) { st.t = 0; st.hist.push(Array.from({ length: 9 }, (_, r) => grp(st.b, Math.floor(r * NB / 9), Math.ceil((r + 1) * NB / 9)))); st.hist.shift(); }
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  const R = st.wave * 460;
+
+  // ---- rings: quiet, slowly smoothed, a faint ripple
+  for (let i = 0; i < NRING; i++) {
+    const target = clamp(bandAt(st.b, i / (NRING - 1) * (NB - 1)) * 1.25);
+    st.rg[i] += (target - st.rg[i]) * (1 - Math.exp(-o.dt / 0.7));
+    const r = 34 + i * 5.6, v = st.rg[i], rip = Math.exp(-((r - R) ** 2) / 900) * (st.wave < 1 ? 1 - st.wave : 0);
+    g.save(); g.strokeStyle = ink; g.globalAlpha = clamp(0.42 + v * 0.14 + rip * 0.06); g.lineWidth = 1 + v * 0.25;
+    g.beginPath(); g.arc(CX, RCY, r, 0, TAU); g.stroke(); g.restore();
+  }
+
+  // ---- pylon: a mask first so the rings stop behind it
+  g.save(); g.fillStyle = pal.bg;
+  g.beginPath(); g.moveTo(CX - 12, TOP); g.lineTo(CX + 12, TOP); g.lineTo(CX + 92, BASE); g.lineTo(CX - 92, BASE); g.closePath(); g.fill();
+  for (const t of TIERS) { g.beginPath(); g.moveTo(CX - hw(t.y), t.y); g.lineTo(CX - t.len, t.y + 4); g.lineTo(CX - hw(t.y + 28), t.y + 28); g.lineTo(CX + hw(t.y + 28), t.y + 28); g.lineTo(CX + t.len, t.y + 4); g.lineTo(CX + hw(t.y), t.y); g.closePath(); g.fill(); }
+  g.restore();
+  g.save(); g.strokeStyle = ink; g.lineWidth = 2;
+  path(g, [[CX - 12, TOP], [CX - 92, BASE]]); g.stroke(); path(g, [[CX + 12, TOP], [CX + 92, BASE]]); g.stroke();
+  g.lineWidth = 1.1;
+  for (let y = TOP; y < BASE - 1; y += 30) {
+    const y1 = Math.min(BASE, y + 30);
+    path(g, [[CX - hw(y), y], [CX + hw(y1), y1]]); g.stroke(); path(g, [[CX + hw(y), y], [CX - hw(y1), y1]]); g.stroke(); path(g, [[CX - hw(y1), y1], [CX + hw(y1), y1]]); g.stroke();
+    path(g, [[CX - hw(y), y], [CX - hw(y1) * 0.9, y1 - 14]]); g.stroke(); path(g, [[CX + hw(y), y], [CX + hw(y1) * 0.9, y1 - 14]]); g.stroke();
+  }
+  path(g, [[CX, TOP], [CX, TOP - 40]]); g.lineWidth = 1.6; g.stroke(); g.beginPath(); g.arc(CX, TOP - 42, 3, 0, TAU); g.stroke();
+  g.restore();
+  // tiers: arms, insulators, wires
+  TIERS.forEach((t, ti2) => {
+    const v = grp(st.b, t.a, t.b), on = v > 0.4;
+    for (const sd of [-1, 1]) {
+      const bx = CX + sd * hw(t.y), tx = CX + sd * t.len;
+      g.save(); g.strokeStyle = on ? acc : ink; g.globalAlpha = 0.55 + v * 0.45; g.lineWidth = 1.4 + v * 1.8;
+      path(g, [[bx, t.y], [tx, t.y + 4]]); g.stroke(); path(g, [[CX + sd * hw(t.y + 28), t.y + 28], [tx, t.y + 4]]); g.stroke();
+      g.lineWidth = 1; for (let j = 1; j < 5; j++) { const u = j / 5, x1 = bx + (tx - bx) * u, y1 = t.y + 4 * u, x2 = CX + sd * hw(t.y + 28) + (tx - CX - sd * hw(t.y + 28)) * u + (j % 2 ? 0 : 0), y2 = t.y + 28 - 24 * u; path(g, [[x1, y1], [x2, y2]]); g.stroke(); }
+      g.restore();
+      // insulator string
+      for (let j = 0; j < 4; j++) { g.save(); g.beginPath(); g.ellipse(tx, t.y + 12 + j * 6.5, 4.4, 2.2, 0, 0, TAU); g.fillStyle = on && j < v * 4.5 ? acc : pal.bg; g.fill(); g.lineWidth = 1.1; g.strokeStyle = ink; g.stroke(); g.restore(); }
+      // wire out to the edge, trembling a little with the tier's level
+      const ex = sd < 0 ? -8 : 608, ey = t.y + 52 + ti2 * 6, sag = 26 + v * 3 * Math.sin(o.clock * (6 + ti2 * 2.3) + sd);
+      g.save(); g.strokeStyle = on ? acc : ink; g.globalAlpha = 0.75; g.lineWidth = 1.2; g.beginPath(); g.moveTo(tx, t.y + 38); g.quadraticCurveTo((tx + ex) / 2, (t.y + 38 + ey) / 2 + sag, ex, ey); g.stroke(); g.restore();
+    }
+  });
+  // sparks at the lowest tier on bass onsets
+  if (st.on > 0.05) for (const sd of [-1, 1]) {
+    const x = CX + sd * TIERS[2].len, y = TIERS[2].y + 40;
+    g.save(); g.strokeStyle = acc; g.globalAlpha = st.on; g.lineWidth = 1.5; for (let j = 0; j < 8; j++) { const a = j * TAU / 8 + st.rot, l = 6 + (1 - st.on) * 16; path(g, [[x + Math.cos(a) * 3, y + Math.sin(a) * 3], [x + Math.cos(a) * l, y + Math.sin(a) * l]]); g.stroke(); } g.restore();
+  }
+
+  // ---- bolts: left, loudness, right
+  bolt(g, pal, 40, 570, 46, 120, clamp(st.l * 1.1)); bolt(g, pal, 88, 546, 58, 144, clamp(st.lv * 1.5)); bolt(g, pal, 148, 570, 46, 120, clamp(st.r * 1.1));
+
+  // ---- dots: the last three seconds, newest on the right
+  for (const d of DOTS) {
+    const hrow = st.hist[d.c] || [], v = hrow[8 - d.r] || 0, x = 400 + d.c * 14 + d.jx + d.r * 1.5, y = 540 + d.r * 16 + d.jy;
+    g.save(); g.beginPath(); g.arc(x, y, 0.8 + v * 4.2, 0, TAU);
+    if (v > 0.5) { g.fillStyle = acc; g.fill(); } else { g.fillStyle = ink; g.globalAlpha = 0.25 + v * 0.7; g.fill(); }
+    g.restore();
+  }
+
+  // ---- stars: polar spectrum, peaks, onsets
+  star(g, pal, 52, 764, 24, Array.from({ length: 8 }, (_, i) => grp(st.b, Math.floor(i * NB / 8), Math.ceil((i + 1) * NB / 8))));
+  star(g, pal, 108, 764, 24, Array.from({ length: 12 }, (_, i) => clamp(bandAt(st.pk, i / 11 * (NB - 1)) * 1.25)));
+  star(g, pal, 164, 764, 24, [0.35 + st.on * 0.65, 0.2 + st.lv, 0.35 + st.on * 0.65, 0.2 + st.lv], st.rot);
+
+  // ---- ring in the corner: time played
+  g.save(); g.translate(540, 66); g.strokeStyle = ink; g.globalAlpha = 0.35; g.lineWidth = 1; g.beginPath(); g.arc(0, 0, 34, 0, TAU); g.stroke(); g.globalAlpha = 1;
+  g.strokeStyle = acc; g.lineWidth = 4; g.lineCap = 'butt'; g.beginPath(); g.arc(0, 0, 34, -Math.PI / 2, -Math.PI / 2 + o.played * TAU); g.stroke(); g.restore();
+
+  if (o.text) {
+    const txt = (s2, x, y, op = {}) => T(g, s2, x, y, { font: op.font || HEAVY, size: op.size || 8, ls: op.ls ?? 0, color: op.color || ink, weight: op.weight || 700, align: op.align });
+    txt(`${tr.album ? tr.album.toUpperCase() + (tr.year ? '  ·  ' + tr.year : '') : ''}`, 36, 30, { size: 9, ls: 2, weight: 600 });
+    // title, heavy, over the rings
+    const words = tr.title.toUpperCase().split(/\s+/);
+    let fit = null;
+    for (let size = 84; size >= 30 && !fit; size -= 2) {
+      g.font = `900 ${size}px ${HEAVY}`; g.letterSpacing = `${-size * 0.03}px`;
+      const lines = []; let cur = '';
+      for (const w of words) { const t2 = cur ? `${cur} ${w}` : w; if (g.measureText(t2).width <= 470 || !cur) cur = t2; else { lines.push(cur); cur = w; } }
+      lines.push(cur);
+      if (lines.length <= 3 && lines.every((l) => g.measureText(l).width <= 470)) fit = { size, lines };
+      g.letterSpacing = '0px';
+    }
+    fit = fit || { size: 30, lines: [tr.title.toUpperCase()] };
+    fit.lines.forEach((l, i) => {
+      const y = 36 + fit.size * 0.92 + i * fit.size * 0.9;
+      g.save(); g.font = `900 ${fit.size}px ${HEAVY}`; g.letterSpacing = `${-fit.size * 0.03}px`; g.textAlign = 'left'; g.lineJoin = 'round';
+      g.strokeStyle = pal.bg; g.lineWidth = 7; g.strokeText(l, 34, y); g.fillStyle = ink; g.fillText(l, 34, y); g.restore();
+    });
+    const ay = 36 + fit.size * 0.92 + (fit.lines.length - 1) * fit.size * 0.9 + 26;
+    g.save(); g.font = `700 13px ${HEAVY}`; g.letterSpacing = '3px'; const aw = g.measureText(tr.name.toUpperCase()).width; g.fillStyle = pal.bg; g.fillRect(30, ay - 14, aw + 10, 20); g.restore();
+    txt(tr.name.toUpperCase(), 36, ay, { size: 13, ls: 3 });
+    // ring readout
+    txt(mmss(o.played * tr.dur), 540, 70, { size: 11, align: 'center' });
+    // vertical readout
+    g.save(); g.translate(18, 470); g.rotate(-Math.PI / 2); txt(`${dbOf(st.lv * 1.5)} DB  —  ${mmss(o.played * tr.dur)} / ${mmss(tr.dur)}`, 0, 0, { size: 10, align: 'center', ls: 2.5 }); g.restore();
+    g.save(); g.strokeStyle = ink; g.lineWidth = 1; path(g, [[30, 360], [30, 600]]); g.stroke(); path(g, [[26, 592], [30, 600], [34, 592]]); g.stroke(); g.restore();
+    // small print, left
+    ['FORMAT ' + tr.codec + ' ' + tr.bits, 'DYNAMIC RANGE ' + (tr.dr || '--'), `TRACK ${tr.n} OF ${tr.of}`, 'LEFT / LOUDNESS / RIGHT'].forEach((t2, i) => txt(t2, 36, 706 + i * 9.5, { size: 7 }));
+    // the paragraph
+    const para = `${tr.title.toUpperCase()} IS TRACK ${tr.n} OF ${tr.of}${tr.album ? ' ON ' + tr.album.toUpperCase() : ''}${tr.year ? ' (' + tr.year + ')' : ''}. A ${tr.codec} FILE AT ${tr.bits}, ${mmss(tr.dur)} LONG${tr.dr ? ', WITH A DYNAMIC RANGE OF ' + tr.dr : ''}. NOW ${dbOf(st.l)} DB LEFT, ${dbOf(st.r)} DB RIGHT. THE RINGS ARE THE SPECTRUM, THE PYLON ITS THREE TIERS.`;
+    g.font = `700 7.6px ${HEAVY}`; g.letterSpacing = '0px';
+    const ws = para.split(' '); const lines = []; let cur = '';
+    for (const w of ws) { const t2 = cur ? cur + ' ' + w : w; if (g.measureText(t2).width <= 340 || !cur) cur = t2; else { lines.push(cur); cur = w; } }
+    lines.push(cur);
+    lines.slice(0, 7).forEach((l, i) => txt(l, 232, 710 + i * 10.4, { size: 7.6 }));
+  }
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0), pk: new Array(NB).fill(0), lv: 0, l: 0, r: 0, avg: 0, cool: 0, on: 0, wave: 9, rot: 0, t: 0, rg: new Array(NRING).fill(0), hist: Array.from({ length: 12 }, () => new Array(9).fill(0)) } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.15 : +$('lvl').value * 2);
+  const mean = bands.reduce((a, b) => a + b, 0) / NB;
+  const o = { dt, clock, bands, l: clamp(mean * (1.45 + 0.3 * Math.sin(clock * 0.7))), r: clamp(mean * (1.45 - 0.3 * Math.sin(clock * 0.7))),
+    played: (clock % 40) / 40, text: $('text').checked };
+  cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+requestAnimationFrame(frame);
+</script>

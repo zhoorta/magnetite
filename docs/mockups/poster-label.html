@@ -1,0 +1,259 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Label</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Label poster meter, in the manner of a retro-tech pixel label (own drawing, nothing traced): a square panel on a
+   4-pixel grid, one bright accent pair (blue, red) on near-black, then a strip with the title. Top: five stacked lines with a bump
+   that travels along them on each onset (the lower lines a little later and smaller). Middle: twelve red stripes sloping down, each
+   kinked by its band group's level along a diagonal, so the shape jags like lightning. Right: a dithered block (QR-like), the
+   spectrogram of the last three seconds (columns moments, rows bands, ordered dither). Left: a device panel (a LED that blinks
+   on onsets, left and right bars, a comb of peaks) and three tall bars (bass, mids, highs). The artist sits above a barcode made
+   from the title, with a red scan line for the time played. Pixel text uses the 8 x 8 font, whole sizes. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+@font-face { font-family: 'Press Start 2P'; font-display: block; src: url('../../node_modules/@fontsource/press-start-2p/files/press-start-2p-latin-400-normal.woff2') format('woff2'); }
+</style>
+<div class="wrap">
+  <h1>Poster: Label</h1>
+  <p>A pixel label as a meter: a bump travelling along the top lines on each onset, red stripes kinked by the spectrum, a dithered spectrogram on the right, a small device panel with a blinking LED, and a barcode with a scan line for the time played.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Blue and red', { bg:'#1d1e20', a:'#2f6fe0', b:'#d9363a', w:'#f4f1ea', hi:'#f4f1ea', lo:'#1d1e20' }],
+  ['Green and amber', { bg:'#0b110d', a:'#3ddc84', b:'#ffb000', w:'#e9f5e6', hi:'#e9f5e6', lo:'#0b110d' }],
+  ['Paper', { bg:'#e6dfcb', a:'#2a52be', b:'#cf3a2c', w:'#1b1a16', hi:'#fbf8ef', lo:'#1b1a16' }],
+];
+const TT = { black:'#000', green:'#2bff4a', yellow:'#ffee2e', red:'#ff3b2e', cyan:'#2ee6ff', white:'#f4f4f4', blue:'#1a2cff' };
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+// ---- small drawing helpers
+function path(g, pts) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); }
+function plen(p) { let d = 0; for (let i = 1; i < p.length; i++) d += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return d; }
+function at(p, d) {
+  for (let i = 1; i < p.length; i++) {
+    const l = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (d <= l) { const k = d / l; return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * k, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * k]; }
+    d -= l;
+  }
+  return p[p.length - 1];
+}
+function quad(a, c, b, n = 18) { return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; }); }
+function arrow(g, p, fill, size = 9) {
+  const [x, y] = p[p.length - 1], [px, py] = p[p.length - 2], a = Math.atan2(y - py, x - px);
+  g.beginPath(); g.moveTo(x + 2 * Math.cos(a), y + 2 * Math.sin(a));
+  g.lineTo(x - size * Math.cos(a - 0.42), y - size * Math.sin(a - 0.42));
+  g.lineTo(x - size * Math.cos(a + 0.42), y - size * Math.sin(a + 0.42)); g.closePath();
+  g.save(); g.fillStyle = fill; g.fill(); g.restore(); g.stroke();
+}
+function T(g, s, x, y, o) {
+  g.font = `${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function box3(g, x, y, w, h, dx, dy, bg) {
+  g.save(); g.fillStyle = bg;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx, y + dy); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w, y); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w + dx, y + h + dy); g.lineTo(x + w, y + h); g.closePath(); g.fill(); g.stroke();
+  g.fillRect(x, y, w, h); g.strokeRect(x, y, w, h); g.restore();
+}
+function cyl(g, cx, cy, rx, ry, h, amt, pal) {
+  const bot = cy + h;
+  g.beginPath(); g.moveTo(cx - rx, cy); g.lineTo(cx - rx, bot); g.ellipse(cx, bot, rx, ry, 0, Math.PI, 0, true);
+  g.lineTo(cx + rx, cy); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI, true); g.closePath();
+  g.save(); g.fillStyle = pal.bg; g.fill(); g.clip();
+  g.globalAlpha = 0.85; g.fillStyle = pal.acc; g.fillRect(cx - rx - 2, bot + ry - amt * (h + ry), rx * 2 + 4, h + ry * 2);
+  g.restore(); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.save(); g.fillStyle = pal.bg; g.fill(); g.restore(); g.stroke();
+}
+
+const PIX = '"Press Start 2P", ui-monospace, Menlo, monospace';
+const UN = 4, PX = 20, PY = 20;     // one grid unit = 4 poster pixels; the panel starts at 20, 20
+const clampI = (v, a, b) => Math.max(a, Math.min(b, v));
+const BAYER = [[0.125, 0.625], [0.875, 0.375]];
+let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const SPECKS = Array.from({ length: 110 }, () => ({ x: rnd() * W, y: rnd() * H, a: 0.15 + rnd() * 0.4, tw: rnd() * 6 }));
+const grpv = (arr, a, b) => { let t = 0; for (let i = a; i < b; i++) t += arr[i]; return clamp((t / (b - a)) * 1.5); };
+const bandAt = (arr, x) => { const i = Math.max(0, Math.min(NB - 1, Math.floor(x))), f = Math.max(0, Math.min(1, x - i)); return arr[i] * (1 - f) + arr[Math.min(NB - 1, i + 1)] * f; };
+const dbOf = (v) => (-30 * (1 - clamp(v))).toFixed(1);
+
+function draw(c, pal, st, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = pal.bg; g.fillRect(0, 0, c.width, c.height);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+  const tr = TRACKS[ti];
+  const U = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(PX + x * UN, PY + y * UN, w * UN, h * UN); };
+  const PT = (txt, x, y, size, col, al = 'left') => { g.font = `${size}px ${PIX}`; g.textAlign = al; g.textBaseline = 'alphabetic'; g.fillStyle = col; g.fillText(txt, PX + x * UN, PY + y * UN); };
+
+  // ---- state
+  const k = 1 - Math.exp(-o.dt / 0.07);
+  for (let i = 0; i < NB; i++) { st.b[i] += (o.bands[i] - st.b[i]) * k; st.pk[i] = Math.max(st.b[i], st.pk[i] - o.dt * 0.25); }
+  const mean = st.b.reduce((a, b) => a + b, 0) / NB;
+  st.lv += (mean - st.lv) * (1 - Math.exp(-o.dt / 0.3));
+  st.l += (o.l - st.l) * k; st.r += (o.r - st.r) * k;
+  const bass = (o.bands[0] + o.bands[1] + o.bands[2]) / 3;
+  st.avg += (bass - st.avg) * (1 - Math.exp(-o.dt / 0.6));
+  st.cool -= o.dt; st.on = Math.max(0, st.on - o.dt * 3);
+  if (st.cool <= 0 && bass > st.avg * 1.3 + 0.04) { st.on = 1; st.cool = 0.16; st.led = 1; }
+  st.led = Math.max(0, st.led - o.dt * 4);
+  st.t += o.dt;
+  if (st.t > 0.045) { st.t = 0; st.wv.unshift(clamp(st.on * 0.85 + st.lv * 0.3)); st.wv.length = 120; }
+  st.t2 += o.dt;
+  if (st.t2 > 0.1) { st.t2 = 0; st.sp.unshift(Array.from({ length: 36 }, (_, r) => clamp(bandAt(st.b, r / 35 * (NB - 1)) * 1.25))); st.sp.length = 29; }
+
+  // ---- speckled ground
+  for (const sp of SPECKS) { g.fillStyle = pal.w; g.globalAlpha = sp.a * (0.7 + 0.3 * Math.sin(o.clock * 1.3 + sp.tw)); g.fillRect(Math.round(sp.x), Math.round(sp.y), 2, 2); } g.globalAlpha = 1;
+
+  // ---- A: text row, five lines with a travelling bump, a small level plate
+  PT('SERIE', 13, 12, 8, pal.w);
+  PT(tr.codec.split('').join(' '), 28, 12, 12, pal.w);
+  PT(`+${tr.dr || '--'}/${mmss(tr.dur)}#${String(tr.n).padStart(2, '0')}`, 62, 12, 8, pal.w);
+  U(108, 8, 22, 8, pal.a); U(110, 10, 18, 4, pal.bg); U(110, 11, Math.round(18 * clamp(st.lv * 1.5)), 2, pal.b);
+  const LINES = [[22, 5, pal.a, 7, 0], [28, 2, pal.a, 6, 2], [32, 2, pal.w, 5, 4], [36, 2, pal.a, 4, 6], [39, 1, pal.b, 3, 8]];
+  for (const [y0, th, col, amp, lag] of LINES) for (let x = 0; x < 117; x++) {
+    const e = st.wv[Math.min(119, x + lag)] || 0, off = Math.round(e * amp);
+    U(13 + x, y0 - off, 1, th + (off > 0 && th > 1 ? 0 : 0), col);
+    if (off > 0) U(13 + x, y0 - off, 1, th + off, col);        // the lifted line stays joined to its base
+  }
+
+  // ---- B: ENTER row, speaker, figure
+  PT('ENTER', 14, 51, 12, pal.w);
+  PT(`FORMATO:${tr.codec} ${tr.bits}`.slice(0, 20), 36, 49, 8, pal.w); U(36 + 40, 50, 1 + Math.round(clamp(st.l) * 18), 1, pal.w);
+  PT(`DURACION:${mmss(o.played * tr.dur)}/${mmss(tr.dur)}`.slice(0, 20), 36, 56, 8, pal.w); U(36 + 40, 57, 1 + Math.round(clamp(st.r) * 18), 1, pal.w);
+  U(100, 48, 3, 5, pal.w); for (let i = 0; i < 4; i++) U(103 + i, 48 - i, 1, 5 + 2 * i, pal.w);
+  for (let i = 0; i < 3; i++) { const on = st.lv * 3.4 > i + 0.3; U(109 + i * 3, 46, 1, 1, on ? pal.b : pal.a); U(110 + i * 3, 47, 1, 6 - 0, on ? pal.b : pal.a); U(109 + i * 3, 53, 1, 1, on ? pal.b : pal.a); }
+  PT(tr.dr || '--', 119, 54, 12, pal.w);
+  PT(`FIG-${String(tr.n).padStart(2, '0')}`, 100, 62, 8, pal.w);
+  for (let i = 0; i < 12; i++) { const hgt = 1 + Math.round(clamp(st.wv[i * 3] * 1.2) * 4); U(112 + i * 1.5 | 0, 62 - hgt, 1, hgt, pal.w); }
+
+  // ---- C: twelve red stripes sloping down, kinked along a diagonal by their band group's level
+  for (let kk = 0; kk < 12; kk++) {
+    const v = grpv(st.b, Math.floor(kk * NB / 12), Math.ceil((kk + 1) * NB / 12)), xc = 28 + kk * 5.4, y0 = 64 + kk * 2.4, amp = v * 9;
+    for (let x = 13; x < 99; x++) {
+      const kink = Math.max(0, 1 - Math.abs(x - xc) / 9) * amp, y = Math.round(y0 + (x - 13) * 0.1 + Math.round(kink));
+      U(x, y, 1, 2, pal.b);
+      if (v > 0.8 && Math.abs(x - xc) < 2) U(x, y, 1, 1, pal.w);
+    }
+  }
+
+  // ---- D: dithered spectrogram, QR-like, with finder squares
+  for (let cI = 0; cI < 29; cI++) { const colv = st.sp[cI]; if (!colv) continue; for (let r = 0; r < 36; r++) for (let sub = 0; sub < 2; sub++) {
+    const v = colv[35 - r], yy = 62 + r * 2 + sub, thr = BAYER[yy & 1][(101 + cI) & 1] * 0.9 + 0.05;
+    if (v > thr) U(101 + cI, yy, 1, 1, pal.a);
+  } }
+  const finder = (x, y) => { U(x - 1, y - 1, 9, 9, pal.bg); U(x, y, 7, 7, pal.a); U(x + 1, y + 1, 5, 5, pal.bg); U(x + 2, y + 2, 3, 3, pal.a); };
+  finder(102, 63); finder(121, 63); finder(102, 125);
+
+  // ---- E: device panel, three tall bars
+  U(13, 100, 27, 32, pal.a);
+  U(17, 103, 14, 5, pal.w); PT('DIAL', 18.2, 107, 8, pal.bg); U(33, 104, 3, 3, st.led > 0.1 ? pal.b : pal.bg);
+  U(17, 111, 19, 4, pal.bg); U(17, 111, Math.round(19 * clamp(st.l * 1.1)), 4, pal.b);
+  U(17, 117, 19, 4, pal.bg); U(17, 117, Math.round(19 * clamp(st.r * 1.1)), 4, pal.b);
+  for (let i = 0; i < 12; i++) { const hh = 1 + Math.round(clamp(bandAt(st.pk, i / 11 * (NB - 1)) * 1.25) * 8); U(17 + i * 1.6 | 0, 131 - hh, 1, hh, pal.bg); }
+  [[pal.w, 0, 10], [pal.a, 10, 20], [pal.b, 20, 30]].forEach(([col, a, b], i) => { const hh = Math.round(4 + grpv(st.b, a, b) * 28); U(42 + i * 4, 100, 3, 32, pal.bg); U(42 + i * 4, 132 - hh, 3, hh, col); });
+
+  // ---- barcode with the artist above and a scan line for the time played
+  PT(tr.name.toUpperCase().slice(0, 14), 56, 108, 12, pal.w);
+  U(56, 112, 43, 19, pal.hi);
+  let sd = 0; for (const ch2 of tr.title) sd = (sd * 31 + ch2.charCodeAt(0)) | 0;
+  let x = 57, i = 0; const rb = () => { sd = (sd * 1103515245 + 12345) & 0x7fffffff; return sd / 0x7fffffff; };
+  while (x < 98) { const w = 1 + Math.floor(rb() * 3); if (i % 2 === 0) U(x, 113, Math.min(w, 98 - x), 15, pal.lo); x += w; i++; }
+  U(57 + Math.round(o.played * 41), 112, 1, 19, pal.b);
+  PT(`${tr.bits.replace('/', '-')}-${mmss(tr.dur).replace(':', '')}-${String(tr.n).padStart(2, '0')}`.slice(0, 20), 57, 134.2, 8, pal.w);
+
+  // ---- strip under the panel: title, artist, time and level bars
+  if (o.text) {
+    const t = tr.title.toUpperCase().replace(/Á|À|Â|Ã/g, 'A').replace(/É|Ê/g, 'E').replace(/Í/g, 'I').replace(/Ó|Ô|Õ/g, 'O').replace(/Ú/g, 'U').replace(/Ç/g, 'C');
+    const words = t.split(' '); let fit = null;
+    for (let size = 32; size >= 8 && !fit; size -= 4) {
+      g.font = `${size}px ${PIX}`; const lines = []; let cur = '';
+      for (const w of words) { const t2 = cur ? cur + ' ' + w : w; if (g.measureText(t2).width <= 560 || !cur) cur = t2; else { lines.push(cur); cur = w; } }
+      lines.push(cur);
+      if (lines.length <= 2 && lines.every((l) => g.measureText(l).width <= 560)) fit = { size, lines };
+    }
+    fit = fit || { size: 8, lines: [t.slice(0, 70)] };
+    fit.lines.forEach((l, i2) => { g.font = `${fit.size}px ${PIX}`; g.textAlign = 'left'; g.fillStyle = pal.w; g.fillText(l, 20, 618 + fit.size + i2 * (fit.size + 8)); });
+    const y1 = 618 + fit.lines.length * (fit.size + 8) + 14;
+    g.font = `12px ${PIX}`; g.fillStyle = pal.b; g.fillText(tr.name.toUpperCase().slice(0, 36), 20, y1);
+    g.font = `8px ${PIX}`; g.fillStyle = pal.w; g.globalAlpha = 0.8; g.fillText(`${tr.album ? tr.album.toUpperCase() : ''}${tr.year ? '  ' + tr.year : ''}`.slice(0, 60), 20, y1 + 20); g.globalAlpha = 1;
+    // time bar and two level bars, pixel segments
+    const seg = (y, frac, col, label, val) => {
+      g.font = `8px ${PIX}`; g.fillStyle = pal.w; g.textAlign = 'left'; g.fillText(label, 20, y + 8); g.textAlign = 'right'; g.fillText(val, 580, y + 8);
+      for (let q = 0; q < 56; q++) { g.fillStyle = q / 56 < frac ? col : pal.w; g.globalAlpha = q / 56 < frac ? 1 : 0.18; g.fillRect(120 + q * 6.4 - 0, y, 5, 10); } g.globalAlpha = 1;
+    };
+    seg(728, o.played, pal.a, 'TIEMPO', `${mmss(o.played * tr.dur)}/${mmss(tr.dur)}`);
+    seg(746, clamp(st.l * 1.1), pal.b, 'IZQ', `${dbOf(st.l)}DB`);
+    seg(764, clamp(st.r * 1.1), pal.b, 'DER', `${dbOf(st.r)}DB`);
+  }
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0), pk: new Array(NB).fill(0), lv: 0, l: 0, r: 0, avg: 0, cool: 0, on: 0, led: 0, t: 0, t2: 0, wv: new Array(120).fill(0), sp: Array.from({ length: 29 }, () => new Array(36).fill(0)) } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.15 : +$('lvl').value * 2);
+  const mean = bands.reduce((a, b) => a + b, 0) / NB;
+  const o = { dt, clock, bands, l: clamp(mean * (1.45 + 0.3 * Math.sin(clock * 0.7))), r: clamp(mean * (1.45 - 0.3 * Math.sin(clock * 0.7))),
+    played: (clock % 40) / 40, text: $('text').checked };
+  cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+// run the first three seconds at once so the lines and the dither are already full when the page opens
+function warm() { for (let i = 0; i < 60; i++) { clock += 0.05; const bands = fakeBands(clock, 1.15); const mean = bands.reduce((a, b) => a + b, 0) / NB; const o = { dt: 0.05, clock, bands, l: clamp(mean * 1.45), r: clamp(mean * 1.45), played: (clock % 40) / 40, text: $('text').checked }; cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o)); } }
+(document.fonts ? document.fonts.load('8px "Press Start 2P"').catch(() => {}) : Promise.resolve()).then(() => { warm(); last = performance.now(); requestAnimationFrame(frame); });
+</script>

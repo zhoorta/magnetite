@@ -1,0 +1,265 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Airport</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of an Airport poster meter: an FAA airport diagram (a US government chart, public domain; the vector drawing is in
+   airport-chart.svg, drawn once per palette, its place names and its data blocks covered and replaced by the track's). On top,
+   live overlays in the chart's own geometry: a plane rolls down a runway as the track plays (a different one for each track: the diagonal, the
+   two long parallel ones, the short one) and its centerline lights behind it; the diagonal's edge lights still fill with the loudness; the edge lights of the diagonal fill with the loudness; the two long parallel runways are the left and right level
+   (lights fill from the south threshold); the short runway is the peak; the 30 bars east of the right runway are the bands (bass
+   at the south end), each with a dot at its held peak; the terminal flashes on bass onsets and the tower sends a ping; the gate
+   lights follow band groups. The data blocks carry the track's facts and the levels in dB. Fake signal, no audio.
+   For a real poster the covered names would be removed from the SVG itself. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Airport</h1>
+  <p>The FAA airport diagram as a meter, with the chart as it is (its names covered, its data blocks replaced by the track). A plane rolls down a runway as the track plays, a different runway for each track (press next track to see it change); the two long parallel runways are also the left and right level and the short one the peak; the 30 bars east of the right runway are the bands; the terminal flashes on bass onsets.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Printed chart', { bg:'#f3f1e8', ink:'#14130f', acc:'#c4247a', dark:false }],
+  ['Night chart', { bg:'#0d1520', ink:'#cfe0f0', acc:'#ffb21e', dark:true }],
+  ['Radar', { bg:'#06100a', ink:'#7bd88f', acc:'#d7ff6a', dark:true }],
+];
+const TT = { black:'#000', green:'#2bff4a', yellow:'#ffee2e', red:'#ff3b2e', cyan:'#2ee6ff', white:'#f4f4f4', blue:'#1a2cff' };
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+// ---- small drawing helpers
+function path(g, pts) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); }
+function plen(p) { let d = 0; for (let i = 1; i < p.length; i++) d += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return d; }
+function at(p, d) {
+  for (let i = 1; i < p.length; i++) {
+    const l = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (d <= l) { const k = d / l; return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * k, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * k]; }
+    d -= l;
+  }
+  return p[p.length - 1];
+}
+function quad(a, c, b, n = 18) { return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; }); }
+function arrow(g, p, fill, size = 9) {
+  const [x, y] = p[p.length - 1], [px, py] = p[p.length - 2], a = Math.atan2(y - py, x - px);
+  g.beginPath(); g.moveTo(x + 2 * Math.cos(a), y + 2 * Math.sin(a));
+  g.lineTo(x - size * Math.cos(a - 0.42), y - size * Math.sin(a - 0.42));
+  g.lineTo(x - size * Math.cos(a + 0.42), y - size * Math.sin(a + 0.42)); g.closePath();
+  g.save(); g.fillStyle = fill; g.fill(); g.restore(); g.stroke();
+}
+function T(g, s, x, y, o) {
+  g.font = `${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function box3(g, x, y, w, h, dx, dy, bg) {
+  g.save(); g.fillStyle = bg;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx, y + dy); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w, y); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w + dx, y + h + dy); g.lineTo(x + w, y + h); g.closePath(); g.fill(); g.stroke();
+  g.fillRect(x, y, w, h); g.strokeRect(x, y, w, h); g.restore();
+}
+function cyl(g, cx, cy, rx, ry, h, amt, pal) {
+  const bot = cy + h;
+  g.beginPath(); g.moveTo(cx - rx, cy); g.lineTo(cx - rx, bot); g.ellipse(cx, bot, rx, ry, 0, Math.PI, 0, true);
+  g.lineTo(cx + rx, cy); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI, true); g.closePath();
+  g.save(); g.fillStyle = pal.bg; g.fill(); g.clip();
+  g.globalAlpha = 0.85; g.fillStyle = pal.acc; g.fillRect(cx - rx - 2, bot + ry - amt * (h + ry), rx * 2 + 4, h + ry * 2);
+  g.restore(); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.save(); g.fillStyle = pal.bg; g.fill(); g.restore(); g.stroke();
+}
+
+const COND = '"Arial Narrow", "Helvetica Neue", Helvetica, Arial, sans-serif';
+const bandAt = (arr, x) => { const i = Math.max(0, Math.min(NB - 1, Math.floor(x))), f = Math.max(0, Math.min(1, x - i)); return arr[i] * (1 - f) + arr[Math.min(NB - 1, i + 1)] * f; };
+const dbOf = (v) => (-30 * (1 - clamp(v))).toFixed(1);
+
+// The chart's own pixel space (700 x 1073, 130 dpi of the PDF) mapped onto the poster: the page is scaled to fill the height.
+const SC = 800 / 1073, OX = (600 - 700 * SC) / 2;
+const X = (x) => OX + x * SC, Y = (y) => y * SC;
+const RWL = { x: 248.5, n: 292, s: 809 }, RWR = { x: 508.5, n: 308, s: 824 }, RWS = { x: 217.5, n: 528, s: 687 };
+const DG = { x0: 90, y0: 317, x1: 355, y1: 583 };
+const DANG = Math.atan2(DG.y1 - DG.y0, DG.x1 - DG.x0), DLEN = Math.hypot(DG.x1 - DG.x0, DG.y1 - DG.y0) * SC;
+// what is covered (names, data blocks) and redrawn
+const COVER = [[448, 40, 675, 86], [448, 988, 675, 1032], [30, 84, 126, 214], [128, 90, 352, 168], [498, 200, 598, 234], [86, 224, 160, 270], [40, 862, 312, 988], [2, 370, 28, 705], [672, 370, 698, 705]];
+
+const chart = new Image();
+const bases = new Map();
+function buildBase(pal) {
+  const w = 1200, h = 1600, k = 2 * SC * 1073 / 1600 * 1.0;
+  const oc = document.createElement('canvas'); oc.width = w; oc.height = h; const g = oc.getContext('2d');
+  g.fillStyle = pal.bg; g.fillRect(0, 0, w, h);
+  const t = document.createElement('canvas'); t.width = w; t.height = h; const tg = t.getContext('2d');
+  tg.fillStyle = '#fff'; tg.fillRect(0, 0, w, h);
+  tg.drawImage(chart, 2 * OX, 0, 2 * 700 * SC, 1600);
+  if (pal.dark) {
+    tg.globalCompositeOperation = 'difference'; tg.fillStyle = '#fff'; tg.fillRect(0, 0, w, h);      // invert: white lines on black
+    tg.globalCompositeOperation = 'multiply'; tg.fillStyle = pal.ink; tg.fillRect(0, 0, w, h);        // tint them
+    g.globalCompositeOperation = 'lighten'; g.drawImage(t, 0, 0); g.globalCompositeOperation = 'source-over';
+  } else { g.globalCompositeOperation = 'multiply'; g.drawImage(t, 0, 0); g.globalCompositeOperation = 'source-over'; }
+  g.fillStyle = pal.bg; for (const [x0, y0, x1, y1] of COVER) g.fillRect(2 * X(x0), 2 * Y(y0), 2 * (X(x1) - X(x0)), 2 * (Y(y1) - Y(y0)));
+  return oc;
+}
+
+function plane(g, pal, x, y, ang) {
+  g.save(); g.translate(x, y); g.rotate(ang); g.scale(1.1, 1.1);
+  g.beginPath(); [[13, 0], [3, -2.2], [-2, -13], [-5.5, -13], [-3.6, -2.2], [-9, -1.4], [-10.5, -5], [-13, -5], [-12, 0], [-13, 5], [-10.5, 5], [-9, 1.4], [-3.6, 2.2], [-5.5, 13], [-2, 13], [3, 2.2]].forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.closePath();
+  g.fillStyle = pal.acc; g.lineWidth = 1.2; g.strokeStyle = pal.dark ? pal.bg : '#fff'; g.fill(); g.stroke(); g.restore();
+}
+function glow(g, pal, on) { g.shadowColor = pal.acc; g.shadowBlur = on && pal.dark ? 6 : 0; }
+// one runway's lights: the centerline and two rows of edge lights fill to `frac` from the start (a, b are poster points)
+function strip(g, pal, a, b, frac) {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len, nx = -uy, ny = ux, n = Math.floor(len / 6.6);
+  g.save(); g.lineCap = 'butt';
+  g.lineWidth = 2.4; g.strokeStyle = pal.acc; glow(g, pal, true); g.setLineDash([5, 4]);
+  g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(a[0] + ux * len * frac, a[1] + uy * len * frac); g.stroke(); g.setLineDash([]);
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n, lit = t < frac;
+    for (const sd of [-1, 1]) {
+      const px = a[0] + ux * len * t + nx * sd * 7.2, py = a[1] + uy * len * t + ny * sd * 7.2;
+      g.beginPath(); g.arc(px, py, lit ? 1.7 : 1.1, 0, TAU);
+      if (lit) { g.fillStyle = pal.acc; g.fill(); } else { g.shadowBlur = 0; g.globalAlpha = 0.3; g.fillStyle = pal.ink; g.fill(); g.globalAlpha = 1; glow(g, pal, true); }
+    }
+  }
+  g.restore();
+}
+
+function draw(c, pal, st, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = pal.bg; g.fillRect(0, 0, c.width, c.height);
+  if (!bases.has(pal)) bases.set(pal, buildBase(pal));
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+  g.drawImage(bases.get(pal), 0, 0, W, H);
+  const tr = TRACKS[ti], ink = pal.ink, acc = pal.acc;
+
+  const k = 1 - Math.exp(-o.dt / 0.08);
+  for (let i = 0; i < NB; i++) { st.b[i] += (o.bands[i] - st.b[i]) * k; st.pk[i] = Math.max(st.b[i], st.pk[i] - o.dt * 0.22); }
+  const mean = st.b.reduce((a, b) => a + b, 0) / NB;
+  st.lv += (mean - st.lv) * (1 - Math.exp(-o.dt / 0.35));
+  st.l += (o.l - st.l) * k; st.r += (o.r - st.r) * k;
+  const bass = (o.bands[0] + o.bands[1] + o.bands[2]) / 3;
+  st.avg += (bass - st.avg) * (1 - Math.exp(-o.dt / 0.6));
+  st.cool -= o.dt; st.on = Math.max(0, st.on - o.dt * 3); st.ping += o.dt;
+  if (st.cool <= 0 && bass > st.avg * 1.3 + 0.04) { st.on = 1; st.cool = 0.16; st.ping = 0; }
+  g.lineJoin = 'round'; g.lineCap = 'round';
+
+  // ---- the runways
+  strip(g, pal, [X(RWL.x), Y(RWL.s)], [X(RWL.x), Y(RWL.n)], clamp(st.l * 1.1));
+  strip(g, pal, [X(RWR.x), Y(RWR.s)], [X(RWR.x), Y(RWR.n)], clamp(st.r * 1.1));
+  strip(g, pal, [X(RWS.x), Y(RWS.s)], [X(RWS.x), Y(RWS.n)], clamp(Math.max(...st.pk) * 1.25));
+  const a = [X(DG.x0), Y(DG.y0)], b = [X(DG.x1), Y(DG.y1)];
+  strip(g, pal, a, b, clamp(st.lv * 1.6));
+  // the plane uses a different runway for each track: the diagonal, the two long parallel runways, the short one, then round again
+  const ROUTES = [[a, b], [[X(RWL.x), Y(RWL.s)], [X(RWL.x), Y(RWL.n)]], [[X(RWR.x), Y(RWR.s)], [X(RWR.x), Y(RWR.n)]], [[X(RWS.x), Y(RWS.s)], [X(RWS.x), Y(RWS.n)]]];
+  const [ra, rb] = ROUTES[ti % ROUTES.length], tp = 0.03 + 0.94 * o.played, rang = Math.atan2(rb[1] - ra[1], rb[0] - ra[0]), px = ra[0] + (rb[0] - ra[0]) * tp, py = ra[1] + (rb[1] - ra[1]) * tp;
+  g.save(); g.lineWidth = 3; g.strokeStyle = acc; glow(g, pal, true); g.beginPath(); g.moveTo(ra[0], ra[1]); g.lineTo(px, py); g.stroke(); g.restore();
+  plane(g, pal, px, py, rang);
+
+  // ---- the 30 bands east of the right runway, bass at the south end, a dot for each held peak
+  for (let i = 0; i < NB; i++) {
+    const y = Y(818 - i * (500 / 29)), x0 = X(520), v = clamp(st.b[i] * 1.25), pk = clamp(st.pk[i] * 1.25), full = 34 * SC / 0.7458 * 0.7458;
+    g.save(); g.lineCap = 'butt'; g.lineWidth = 1; g.globalAlpha = 0.28; g.strokeStyle = ink; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + 26, y); g.stroke(); g.globalAlpha = 1;
+    g.lineWidth = 2.6; g.strokeStyle = acc; glow(g, pal, true); g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + v * 26, y); g.stroke();
+    g.beginPath(); g.arc(x0 + pk * 26, y, 1.8, 0, TAU); g.fillStyle = acc; g.fill(); g.restore();
+  }
+
+  // ---- terminal, gate lights, tower ping
+  g.save(); g.fillStyle = acc; g.globalAlpha = st.on * 0.5; glow(g, pal, true); g.beginPath(); g.ellipse(X(410), Y(492), 58 * SC, 14 * SC, 0, 0, TAU); g.fill(); g.restore();
+  for (let i = 0; i < 12; i++) {
+    const lv = clamp((st.b[Math.floor(i * NB / 12)] + st.b[Math.min(NB - 1, Math.floor(i * NB / 12) + 1)]) * 0.7), lit = lv > 0.35;
+    g.save(); g.beginPath(); g.arc(X(360 + i * 9.4), Y(510), 1.7, 0, TAU); if (lit) { glow(g, pal, true); g.fillStyle = acc; } else { g.globalAlpha = 0.3; g.fillStyle = ink; } g.fill(); g.restore();
+  }
+  if (st.ping < 0.6) { g.save(); g.strokeStyle = acc; g.globalAlpha = 1 - st.ping / 0.6; g.lineWidth = 1.6; g.beginPath(); g.arc(X(334), Y(437), 3 + st.ping * 38, 0, TAU); g.stroke(); g.restore(); }
+
+  if (o.text) {
+    const txt = (s2, x, y, op = {}) => T(g, s2, x, y, { font: op.font || COND, size: op.size || 8, ls: op.ls ?? 0.3, color: ink, weight: op.weight || 400, align: op.align });
+    // header, top and bottom, in place of the airport's names
+    let size = 14, title = tr.title.toUpperCase();
+    g.font = `700 ${size}px ${COND}`; g.letterSpacing = '0.3px';
+    while (g.measureText(title).width > 178 && size > 9) { size -= 1; g.font = `700 ${size}px ${COND}`; }
+    while (g.measureText(title).width > 178 && title.length > 3) title = title.slice(0, -2) + '…';
+    g.letterSpacing = '0px';
+    const who = `${tr.name.toUpperCase()}${tr.album ? ', ' + tr.album.toUpperCase() : ''}`.slice(0, 40);
+    txt(title, X(668), Y(58), { size, weight: 700, align: 'right' }); txt(who, X(668), Y(76), { size: 9.5, align: 'right' });
+    txt(who, X(668), Y(1004), { size: 9.5, align: 'right' }); txt(title, X(668), Y(1023), { size, weight: 700, align: 'right' });
+    // top-left block (where the frequencies were)
+    [['FORMAT', 1], [`${tr.codec} ${tr.bits}`], ['DYNAMIC RANGE', 1], [tr.dr || '--'], ['LENGTH', 1], [mmss(tr.dur)], ['TRACK', 1], [`${String(tr.n).padStart(2, '0')}/${String(tr.of).padStart(2, '0')}`]].forEach(([t2, hd], i) => txt(t2, X(36), Y(100 + i * 14), { size: 8.2, weight: hd ? 700 : 400 }));
+    // where the notes were
+    txt(`${tr.album ? tr.album.toUpperCase() : ''}${tr.year ? ' (' + tr.year + ')' : ''}`, X(134), Y(102), { size: 8.2 });
+    ['RWY 17R-35L LEFT   RWY 17L-35R RIGHT', 'RWY 13-31 LOUDNESS   RWY 18-36 PEAK', 'BARS EAST OF 17L-35R: 30 BANDS'].forEach((t2, i) => txt(t2, X(134), Y(124 + i * 14), { size: 7.4 }));
+    // bottom-left levels, where the pavement data were
+    txt('LEVELS (DB)', X(44), Y(878), { size: 8.2, weight: 700 });
+    [['RWY 17R-35L', st.l], ['RWY 17L-35R', st.r], ['RWY 13-31', st.lv * 1.5], ['RWY 18-36', Math.max(...st.pk) * 1.25]].forEach(([l, v], i) => { txt(l, X(44), Y(896 + i * 15), { size: 8.2 }); txt(dbOf(v), X(230), Y(896 + i * 15), { size: 8.2, align: 'right' }); });
+    // the rotated side notes
+    for (const [x, t2, dir] of [[18, `${tr.codec} ${tr.bits} · ${tr.dr || '--'} · ${mmss(tr.dur)}`, -1], [686, `TRACK ${tr.n} OF ${tr.of}${tr.year ? ' · ' + tr.year : ''}`, 1]]) {
+      g.save(); g.translate(X(x), Y(540)); g.rotate(dir * Math.PI / 2); txt(t2, 0, 3, { size: 8, align: 'center', ls: 0.8 }); g.restore();
+    }
+  }
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0), pk: new Array(NB).fill(0), lv: 0, l: 0, r: 0, avg: 0, cool: 0, on: 0, ping: 9 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.15 : +$('lvl').value * 2);
+  const mean = bands.reduce((a, b) => a + b, 0) / NB;
+  const o = { dt, clock, bands, l: clamp(mean * (1.45 + 0.3 * Math.sin(clock * 0.7))), r: clamp(mean * (1.45 - 0.3 * Math.sin(clock * 0.7))),
+    played: (clock % 40) / 40, text: $('text').checked };
+  cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+chart.onload = () => requestAnimationFrame(frame);
+chart.src = 'airport-chart.svg';
+</script>

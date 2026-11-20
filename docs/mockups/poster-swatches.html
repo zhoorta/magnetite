@@ -1,0 +1,182 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Swatches</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Swatches poster meter, in the manner of a colour-palette reference card (own layout, nothing copied): a dark rounded
+   card with three big rounded swatches, each with a huge word on it and its hex code. The words are the title (a third chunk
+   from the year or the track number when it has fewer than three words). Meters: each swatch is a band group (highs on top,
+   bass at the bottom): its colour moves from its base towards a lighter one with the level and the hex code under the word is
+   the swatch's colour right now, rewritten every frame; a thin bar along the swatch's foot is the level. The big number is the
+   track number, the slate time at the bottom is the time played. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Swatches</h1>
+  <p>A palette-reference card as a meter: three big swatches carry the title, each is a band group whose colour moves with its level, and the hex code written on it is its colour right now.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Retro', { page:'#c9c7c2', card:'#1b1b1b', cream:'#e8d8c9', mid:'#4b607f', warm:'#f3701e', ink:'#161616' }],
+  ['Olive', { page:'#cfcbbd', card:'#1a1b17', cream:'#e9e2c8', mid:'#5b6b3a', warm:'#c4552b', ink:'#15160f' }],
+  ['Blush', { page:'#d8cdd3', card:'#241c26', cream:'#f6dfd8', mid:'#7d6fa8', warm:'#f0627f', ink:'#1d1620' }],
+];
+const TT = { black:'#000', green:'#2bff4a', yellow:'#ffee2e', red:'#ff3b2e', cyan:'#2ee6ff', white:'#f4f4f4', blue:'#1a2cff' };
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+// ---- small drawing helpers
+function path(g, pts) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); }
+function plen(p) { let d = 0; for (let i = 1; i < p.length; i++) d += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return d; }
+function at(p, d) {
+  for (let i = 1; i < p.length; i++) {
+    const l = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (d <= l) { const k = d / l; return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * k, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * k]; }
+    d -= l;
+  }
+  return p[p.length - 1];
+}
+function quad(a, c, b, n = 18) { return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; }); }
+function arrow(g, p, fill, size = 9) {
+  const [x, y] = p[p.length - 1], [px, py] = p[p.length - 2], a = Math.atan2(y - py, x - px);
+  g.beginPath(); g.moveTo(x + 2 * Math.cos(a), y + 2 * Math.sin(a));
+  g.lineTo(x - size * Math.cos(a - 0.42), y - size * Math.sin(a - 0.42));
+  g.lineTo(x - size * Math.cos(a + 0.42), y - size * Math.sin(a + 0.42)); g.closePath();
+  g.save(); g.fillStyle = fill; g.fill(); g.restore(); g.stroke();
+}
+function T(g, s, x, y, o) {
+  g.font = `${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function box3(g, x, y, w, h, dx, dy, bg) {
+  g.save(); g.fillStyle = bg;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx, y + dy); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w, y); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w + dx, y + h + dy); g.lineTo(x + w, y + h); g.closePath(); g.fill(); g.stroke();
+  g.fillRect(x, y, w, h); g.strokeRect(x, y, w, h); g.restore();
+}
+function cyl(g, cx, cy, rx, ry, h, amt, pal) {
+  const bot = cy + h;
+  g.beginPath(); g.moveTo(cx - rx, cy); g.lineTo(cx - rx, bot); g.ellipse(cx, bot, rx, ry, 0, Math.PI, 0, true);
+  g.lineTo(cx + rx, cy); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI, true); g.closePath();
+  g.save(); g.fillStyle = pal.bg; g.fill(); g.clip();
+  g.globalAlpha = 0.85; g.fillStyle = pal.acc; g.fillRect(cx - rx - 2, bot + ry - amt * (h + ry), rx * 2 + 4, h + ry * 2);
+  g.restore(); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.save(); g.fillStyle = pal.bg; g.fill(); g.restore(); g.stroke();
+}
+
+
+const HEAVY = '"Helvetica Neue", "Arial Black", Helvetica, Arial, sans-serif';
+const grpv = (arr, a, b) => { let t = 0; for (let i = a; i < b; i++) t += arr[i]; return clamp((t / (b - a)) * 1.5); };
+const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const toHex = (c) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+const mixc = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+
+function chunks(tr) {      // the title as three words, filled up from the year or the track number
+  const w = tr.title.split(/\s+/).filter(Boolean);
+  if (w.length >= 3) return [w[0], w[1], w.slice(2).join(' ')];
+  const extra = [tr.year || String(tr.n).padStart(2, '0'), `${tr.n}/${tr.of}`];
+  return [...w, ...extra].slice(0, 3);
+}
+
+function draw(c, pal, st, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1, cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = pal.page; g.fillRect(0, 0, c.width, c.height);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+  const tr = TRACKS[ti];
+
+  const k = 1 - Math.exp(-o.dt / 0.12);
+  for (let i = 0; i < NB; i++) st.b[i] += (o.bands[i] - st.b[i]) * k;
+  const lv = [grpv(st.b, 20, 30), grpv(st.b, 8, 20), grpv(st.b, 0, 8)];       // top swatch the highs, bottom the bass
+
+  g.fillStyle = pal.card; g.beginPath(); g.roundRect(14, 14, 572, 772, 46); g.fill();
+  const T2 = (t, x, y, size, col, al = 'left', wt = 800, ls = 0) => { g.font = `${wt} ${size}px ${HEAVY}`; g.letterSpacing = `${ls}px`; g.textAlign = al; g.fillStyle = col; g.fillText(t, x, y); g.letterSpacing = '0px'; };
+  const cream = rgb(pal.cream), mid = rgb(pal.mid), warm = rgb(pal.warm), WHITE = [255, 255, 255];
+
+  // ---- header: the track number, the artist, the album, "now playing"
+  T2(String(tr.n), 40, 168, 158, pal.cream, 'left', 900, -6);
+  T2(tr.album || tr.codec, 176, 80, 20, pal.warm, 'left', 700, 1); g.fillStyle = pal.cream; g.beginPath(); g.arc(310, 74, 8, 0, TAU); g.fill();
+  let az = 52; g.font = `800 ${az}px ${HEAVY}`; while (g.measureText(tr.name).width > 196 && az > 18) { az--; g.font = `800 ${az}px ${HEAVY}`; }
+  T2(tr.name, 176, 80 + az + 12, az, pal.mid, 'left', 800, -1);
+  T2('NOW', 560, 96, 42, pal.cream, 'right', 800, -1); T2('PLAYING', 560, 140, 42, pal.cream, 'right', 800, -1);
+
+  // ---- three swatches: each a band group, its colour moving with the level, the hex code is that colour
+  const SW = [{ base: cream, label: 'highs' }, { base: mid, label: 'mids' }, { base: warm, label: 'bass' }];
+  const words = chunks(tr);
+  SW.forEach((sw, i) => {
+    const y = 190 + i * 160, v = clamp(lv[i]), col = mixc(sw.base, WHITE, v * 0.42), hex = toHex(col);
+    g.fillStyle = `rgb(${col.map(Math.round).join(',')})`; g.beginPath(); g.roundRect(40, y, 520, 146, 26); g.fill();
+    // the level along the swatch's foot
+    g.save(); g.beginPath(); g.roundRect(40, y, 520, 146, 26); g.clip(); g.fillStyle = pal.ink; g.globalAlpha = 0.85; g.fillRect(40, y + 138, 520 * v, 8); g.restore();
+    // the word, as big as fits
+    const wd = (words[i] || '').toUpperCase(); let size = 124; g.font = `900 ${size}px ${HEAVY}`; while (g.measureText(wd).width > 330 && size > 30) { size -= 2; g.font = `900 ${size}px ${HEAVY}`; }
+    T2(wd, 58, y + 112 - (124 - size) * 0.22, size, pal.ink, 'left', 900, -2);
+    T2(sw.label, 544, y + 56, 46, pal.ink, 'right', 800, -1);
+    T2(hex, 544, y + 122, 38, pal.ink, 'right', 700, -0.5);
+  });
+
+  // ---- foot: the time played, the format
+  T2(mmss(o.played * tr.dur), 40, 750, 86, pal.mid, 'left', 900, -4);
+  T2(`/ ${mmss(tr.dur)}`, 244, 748, 22, pal.mid, 'left', 800, 1);
+  T2(`${tr.codec} ${tr.bits}`, 560, 724, 20, pal.mid, 'right', 700, 0.5); T2(`${tr.dr || ''}  ·  ${tr.n} / ${tr.of}`, 560, 750, 20, pal.mid, 'right', 700, 0.5);
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure'); const c = document.createElement('canvas'); const cap = document.createElement('figcaption');
+  cap.textContent = label; f.append(c, cap); $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0) } };
+});
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; clock += dt;
+  const auto = $('auto').checked;
+  const o = { dt, clock, bands: fakeBands(clock, auto ? 1.15 : +$('lvl').value * 2), played: (clock % 40) / 40, text: true };
+  cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+for (let i = 0; i < 40; i++) { clock += 0.05; const o = { dt: 0.05, clock, bands: fakeBands(clock, 1.15), played: (clock % 40) / 40, text: true }; cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o)); }
+last = performance.now(); requestAnimationFrame(frame);
+</script>

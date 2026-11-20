@@ -1,0 +1,300 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Model II</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Model II poster meter: the front view of a late-1970s desktop computer with a disk drive, redrawn as vector shapes (no
+   lettering or logo copied). The screen is the meter: a text-mode page (boot lines with the track, a bar graph of 32 spectrum bars in
+   whole character rows with held peaks, a progress line, a prompt with a blinking cursor). The keyboard is a second meter: 30 bands run
+   left to right across the main keys and the four rows are four levels (the bottom row lights first, the top row only on peaks); the
+   space bar is the loudness; the numeric pad is left, right and the onsets; the dark keys flash on onsets. The power rocker is lit
+   while playing, Reset flashes when the track changes, the drive's LED blinks while "loading", its slots fill with the time played and
+   the loudness. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Model II</h1>
+  <p>The front of a desktop computer with a floppy drive. The screen is a text-mode spectrum with the track on its first lines; the keyboard is a second meter: columns are 30 bands, the four rows are four levels, the space bar is the loudness and the numeric pad shows left, right and onsets. Callouts in the manual's style carry real data.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Cream and red, green phosphor', { bg:'#e6dfc9', ink:'#1c1b17', acc:'#c2331f', dark:'#1c1b17', scr:'#6dff8a' }],
+  ['Blueprint, amber', { bg:'#0f1b2d', ink:'#dce7f5', acc:'#4fd1ff', dark:'#07101c', scr:'#ffb347' }],
+  ['Terminal, white phosphor', { bg:'#0b110d', ink:'#d8f5dc', acc:'#48cf78', dark:'#050805', scr:'#d6ecff' }],
+];
+const TT = { black:'#000', green:'#2bff4a', yellow:'#ffee2e', red:'#ff3b2e', cyan:'#2ee6ff', white:'#f4f4f4', blue:'#1a2cff' };
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+// ---- small drawing helpers
+function path(g, pts) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); }
+function plen(p) { let d = 0; for (let i = 1; i < p.length; i++) d += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return d; }
+function at(p, d) {
+  for (let i = 1; i < p.length; i++) {
+    const l = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (d <= l) { const k = d / l; return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * k, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * k]; }
+    d -= l;
+  }
+  return p[p.length - 1];
+}
+function quad(a, c, b, n = 18) { return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; }); }
+function arrow(g, p, fill, size = 9) {
+  const [x, y] = p[p.length - 1], [px, py] = p[p.length - 2], a = Math.atan2(y - py, x - px);
+  g.beginPath(); g.moveTo(x + 2 * Math.cos(a), y + 2 * Math.sin(a));
+  g.lineTo(x - size * Math.cos(a - 0.42), y - size * Math.sin(a - 0.42));
+  g.lineTo(x - size * Math.cos(a + 0.42), y - size * Math.sin(a + 0.42)); g.closePath();
+  g.save(); g.fillStyle = fill; g.fill(); g.restore(); g.stroke();
+}
+function T(g, s, x, y, o) {
+  g.font = `${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function box3(g, x, y, w, h, dx, dy, bg) {
+  g.save(); g.fillStyle = bg;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx, y + dy); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w, y); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w + dx, y + h + dy); g.lineTo(x + w, y + h); g.closePath(); g.fill(); g.stroke();
+  g.fillRect(x, y, w, h); g.strokeRect(x, y, w, h); g.restore();
+}
+function cyl(g, cx, cy, rx, ry, h, amt, pal) {
+  const bot = cy + h;
+  g.beginPath(); g.moveTo(cx - rx, cy); g.lineTo(cx - rx, bot); g.ellipse(cx, bot, rx, ry, 0, Math.PI, 0, true);
+  g.lineTo(cx + rx, cy); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI, true); g.closePath();
+  g.save(); g.fillStyle = pal.bg; g.fill(); g.clip();
+  g.globalAlpha = 0.85; g.fillStyle = pal.acc; g.fillRect(cx - rx - 2, bot + ry - amt * (h + ry), rx * 2 + 4, h + ry * 2);
+  g.restore(); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.save(); g.fillStyle = pal.bg; g.fill(); g.restore(); g.stroke();
+}
+
+// ---- geometry (600 x 800): the machine is drawn from y = 186, shifted down 26
+const P = (u, v) => { const l = 76 - 36 * v, r = 524 + 36 * v; return [l + u * (r - l), 470 + 86 * v]; };
+const THR = [0.8, 0.58, 0.36, 0.12];            // level a key row stands for, top row first
+const rowV = (r) => [0.04 + r * 0.17 + 0.012, 0.04 + r * 0.17 + 0.15];
+const bandAt = (arr, x) => { const i = Math.max(0, Math.min(NB - 1, Math.floor(x))), f = Math.max(0, Math.min(1, x - i)); return arr[i] * (1 - f) + arr[Math.min(NB - 1, i + 1)] * f; };
+
+function key(g, pal, u0, v0, u1, v1, o = {}) {
+  const du = 0.0035, dv = 0.012;
+  const q = [P(u0 + du, v0 + dv), P(u1 - du, v0 + dv), P(u1 - du, v1 - dv), P(u0 + du, v1 - dv)];
+  g.save(); path(g, [...q, q[0]]);
+  g.fillStyle = o.dark ? pal.dark : pal.bg; g.fill();
+  if (o.a > 0) { g.globalAlpha = o.a; g.fillStyle = pal.acc; g.fill(); g.globalAlpha = 1; }
+  g.lineWidth = o.pk ? 1.8 : 1.1; g.strokeStyle = o.pk ? pal.acc : pal.ink; g.stroke(); g.restore();
+}
+
+function draw(c, pal, st, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = pal.bg; g.fillRect(0, 0, c.width, c.height);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+  const tr = TRACKS[ti], ink = pal.ink, acc = pal.acc, scr = pal.scr;
+
+  // ---- state
+  const k = 1 - Math.exp(-o.dt / 0.07);
+  for (let i = 0; i < NB; i++) { st.b[i] += (o.bands[i] - st.b[i]) * k; st.pk[i] = Math.max(st.b[i], st.pk[i] - o.dt * 0.25); }
+  const mean = st.b.reduce((a, b) => a + b, 0) / NB;
+  st.lv += (mean - st.lv) * (1 - Math.exp(-o.dt / 0.35));
+  st.l += (o.l - st.l) * k; st.r += (o.r - st.r) * k;
+  const bass = (o.bands[0] + o.bands[1] + o.bands[2]) / 3;
+  st.avg += (bass - st.avg) * (1 - Math.exp(-o.dt / 0.6));
+  st.cool -= o.dt; st.on = Math.max(0, st.on - o.dt * 3.2);
+  if (st.cool <= 0 && bass > st.avg * 1.3 + 0.04) { st.on = 1; st.cool = 0.16; }
+  if (st.ti !== ti) { st.ti = ti; st.reset = 1; }
+  st.reset = Math.max(0, st.reset - o.dt * 1.4);
+  const led = (o.clock % 9) < 1.3;
+  g.lineWidth = 3; g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = ink; g.fillStyle = ink;
+
+  // ---- header text
+  if (o.text) {
+    if (tr.album) T(g, `${tr.album.toUpperCase()}${tr.year ? '  ·  ' + tr.year : ''}`, 40, 50, { size: 12, color: ink, ls: 2.6 });
+    const words = tr.title.toUpperCase().split(/\s+/);
+    let fit = null;
+    for (let size = 38; size >= 20 && !fit; size -= 2) {
+      g.font = `700 ${size}px ${SANS}`; g.letterSpacing = '2px';
+      const lines = []; let cur = '';
+      for (const w of words) { const t = cur ? `${cur} ${w}` : w; if (g.measureText(t).width <= 520 || !cur) cur = t; else { lines.push(cur); cur = w; } }
+      lines.push(cur);
+      if (lines.length <= 2 && lines.every((l) => g.measureText(l).width <= 520)) fit = { size, lines };
+      g.letterSpacing = '0px';
+    }
+    fit = fit || { size: 20, lines: [tr.title.toUpperCase()] };
+    fit.lines.forEach((l, i) => T(g, l, 40, 90 + i * (fit.size + 6), { size: fit.size, weight: 700, color: ink, ls: 2 }));
+    T(g, tr.name.toUpperCase(), 40, 90 + fit.lines.length * (fit.size + 6) + 2, { size: 14, color: acc, ls: 3.4, weight: 700 });
+  }
+
+  g.save(); g.translate(0, 26);
+  // ---- casing: top, front, keyboard tray
+  g.save(); g.fillStyle = pal.bg;
+  g.beginPath(); g.moveTo(96, 160); g.lineTo(504, 160); g.lineTo(556, 202); g.lineTo(44, 202); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.roundRect(40, 200, 520, 262, [8, 8, 12, 12]); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(76, 468); g.lineTo(524, 468); g.lineTo(560, 556); g.lineTo(40, 556); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.roundRect(40, 556, 520, 24, 4); g.fill(); g.stroke();
+  g.fillStyle = pal.dark; g.beginPath(); g.roundRect(52, 212, 496, 226, 16); g.fill();
+  g.restore();
+  g.save(); g.lineWidth = 1.6; for (let i = 0; i < 9; i++) { path(g, [[150 + i * 36, 170], [160 + i * 36, 192]]); g.stroke(); } g.restore();
+
+  // ---- screen: 64 x 24 characters of text mode
+  const sx = 62, sy = 222, sw = 334, sh = 206;
+  g.save(); g.fillStyle = '#000'; g.beginPath(); g.roundRect(sx, sy, sw, sh, 40); g.fill(); g.clip();
+  const ix = sx + 12, iy = sy + 10, cwc = (sw - 24) / 64, rhc = (sh - 20) / 24;
+  g.font = `700 ${rhc * 1.02}px ${MONO}`; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = scr; g.shadowColor = scr; g.shadowBlur = 3;
+  const line = (r, txt) => { for (let i = 0; i < txt.length && i < 64; i++) if (txt[i] !== ' ') g.fillText(txt[i], ix + i * cwc, iy + (r + 0.82) * rhc); };
+  const fmt = (t) => t.toUpperCase().slice(0, 56);
+  if (o.text) {
+    line(0, `A>PLAY "${fmt(tr.title)}"`.slice(0, 63));
+    line(1, `   ${fmt(tr.name)}`);
+    if (tr.album) line(2, `   ${fmt(tr.album)}${tr.year ? ' (' + tr.year + ')' : ''}`);
+  }
+  // bars: 32 bars of 2 characters, 17 rows, held peak
+  const BR = 17, by0 = iy + 4 * rhc;
+  for (let j = 0; j < 32; j++) {
+    const x = (j + 0.5) / 32 * (NB - 1), v = clamp(bandAt(st.b, x) * 1.25), n = Math.round(v * BR), pk = Math.round(clamp(bandAt(st.pk, x) * 1.25) * BR);
+    for (let r = 0; r < n; r++) g.fillRect(ix + j * 2 * cwc + 0.25, by0 + (BR - 1 - r) * rhc + 0.7, 2 * cwc - 0.9, rhc - 1.4);
+    if (pk > n && pk > 0) g.fillRect(ix + j * 2 * cwc + 0.25, by0 + (BR - pk) * rhc + 0.7, 2 * cwc - 0.9, rhc - 1.4);
+  }
+  if (o.text) {
+    const bar = 36, done = Math.round(o.played * bar);
+    line(21, `${mmss(o.played * tr.dur).padStart(4)} [${'#'.repeat(done)}${'.'.repeat(bar - done)}] ${mmss(tr.dur)}`);
+    line(22, `${tr.codec} ${tr.bits} ${tr.dr}`.trim() + `  TRACK ${tr.n}/${tr.of}`);
+    line(23, 'A>' + (Math.floor(o.clock * 2) % 2 ? '█' : ''));
+  }
+  g.shadowBlur = 0; g.fillStyle = 'rgba(0,0,0,0.2)'; for (let y = sy; y < sy + sh; y += 2.4) g.fillRect(sx, y, sw, 1);
+  g.restore();
+  g.save(); g.lineWidth = 2; g.strokeStyle = ink; g.beginPath(); g.roundRect(sx, sy, sw, sh, 40); g.stroke(); g.restore();
+
+  // ---- plates, rockers
+  g.save(); g.fillStyle = pal.bg; g.strokeStyle = ink; g.lineWidth = 1.6;
+  g.beginPath(); g.roundRect(406, 226, 54, 40, 4); g.fill(); g.stroke();
+  g.beginPath(); g.roundRect(406, 272, 54, 46, 4); g.fill(); g.stroke();
+  g.fillStyle = pal.dark; g.beginPath(); g.roundRect(404, 330, 58, 98, 4); g.fill(); g.restore();
+  if (o.text) {
+    T(g, 'MAGNETITE', 433, 250, { size: 8, weight: 700, color: ink, align: 'center', ls: 0.4 });
+    T(g, 'MODEL II', 433, 289, { size: 6.5, color: ink, align: 'center', ls: 0.8 });
+    T(g, 'PLAYER', 433, 299, { size: 6.5, color: ink, align: 'center', ls: 0.8 });
+    T(g, `${tr.n}/${tr.of}`, 433, 311, { size: 6.5, color: acc, align: 'center', ls: 0.8, weight: 700 });
+    T(g, 'ON', 433, 341, { size: 5.5, color: pal.ink, align: 'center', ls: 0.6 });
+    T(g, 'POWER', 433, 387, { size: 5.5, color: pal.ink, align: 'center', ls: 0.6 });
+    T(g, 'RESET', 433, 400, { size: 5.5, color: pal.ink, align: 'center', ls: 0.6 });
+  }
+  const rocker = (y, a) => { g.save(); g.fillStyle = pal.bg; g.beginPath(); g.roundRect(420, y, 26, 22, 3); g.fill(); if (a > 0) { g.globalAlpha = a; g.fillStyle = acc; g.fill(); g.globalAlpha = 1; } g.lineWidth = 1.6; g.strokeStyle = pal.ink; g.stroke(); g.restore(); };
+  rocker(344, o.playing ? 0.6 : 0); rocker(404, st.reset);
+  g.save(); g.beginPath(); g.arc(433, 394, 2.6, 0, TAU); g.fillStyle = o.playing ? acc : pal.bg; g.fill(); g.lineWidth = 1; g.strokeStyle = pal.ink; g.stroke(); g.restore();
+
+  // ---- drive
+  g.save(); g.fillStyle = pal.bg; g.lineWidth = 1.8; g.beginPath(); g.roundRect(470, 222, 80, 206, 10); g.fill(); g.stroke();
+  const slot = (x, amt) => { g.fillStyle = pal.dark; g.fillRect(x, 236, 24, 176); g.globalAlpha = 0.85; g.fillStyle = acc; g.fillRect(x, 412 - 176 * amt, 24, 176 * amt); g.globalAlpha = 1; g.lineWidth = 1.4; g.strokeRect(x, 236, 24, 176); };
+  slot(482, o.played); slot(516, clamp(st.lv * 1.5));
+  g.beginPath(); g.arc(494, 394 - 0, 0.01, 0, TAU); g.restore();
+  g.save(); g.beginPath(); g.arc(494, 421, 3.4, 0, TAU); g.fillStyle = led ? acc : pal.bg; g.fill(); g.lineWidth = 1.2; g.strokeStyle = ink; g.stroke(); g.restore();
+
+  // ---- keyboard
+  const dk = (u0, u1, r, a) => { const [v0, v1] = rowV(r); key(g, pal, u0, v0, u1, v1, { dark: true, a }); };
+  for (let r = 0; r < 4; r++) { dk(0.02, 0.095, r, 0); dk(0.665, 0.745, r, st.on * (r % 2 ? 0.9 : 0.5) > 0.2 ? st.on * 0.8 : 0); }
+  const cols = [13, 12, 12, 11], offs = [0, 0.5, 0.75, 1.25], kw = 0.56 / 13.5;
+  const pkRowOf = (v) => { for (let r = 0; r < 4; r++) if (v > THR[r]) return r; return -1; };
+  for (let r = 0; r < 4; r++) {
+    const [v0, v1] = rowV(r);
+    for (let i = 0; i < cols[r]; i++) {
+      const u0 = 0.10 + (offs[r] + i) * kw, uc = u0 + kw / 2, x = (uc - 0.10) / 0.56 * (NB - 1);
+      const v = clamp(bandAt(st.b, x) * 1.25), pk = clamp(bandAt(st.pk, x) * 1.25);
+      const lit = v > THR[r];
+      key(g, pal, u0, v0, u0 + kw, v1, { a: lit ? 0.55 + 0.45 * clamp((v - THR[r]) / 0.2) : 0, pk: !lit && pkRowOf(pk) === r });
+    }
+  }
+  { // space bar = loudness
+    const [v0, v1] = rowV(4), u0 = 0.22, u1 = 0.52, f = clamp(st.lv * 1.5);
+    key(g, pal, u0, v0, u1, v1, {});
+    key(g, pal, u0, v0, u0 + (u1 - u0) * f, v1, { a: 0.8 });
+  }
+  // numeric pad: left, right, onsets
+  for (let r = 0; r < 4; r++) {
+    const [v0, v1] = rowV(r);
+    [st.l, st.r, st.on].forEach((val, ci) => { const u0 = 0.79 + ci * 0.062; key(g, pal, u0, v0, u0 + 0.058, v1, { a: val > THR[r] ? 0.55 + 0.45 * clamp((val - THR[r]) / 0.2) : 0 }); });
+  }
+  { const [v0, v1] = rowV(4); key(g, pal, 0.79, v0, 0.852, v1, { a: o.playing ? 0.5 : 0 }); key(g, pal, 0.852, v0, 0.914, v1, { a: st.on }); }
+
+  // ---- callouts, in the manual's style
+  const leader = (x0, y0, x1, y1) => {
+    g.save(); g.lineWidth = 1.2; g.globalAlpha = 0.85; path(g, [[x0, y0], [x1, y1]]); g.stroke(); g.globalAlpha = 1;
+    arrow(g, [[x0, y0], [x1, y1]], ink, 8); g.restore();
+  };
+  if (o.text) {
+    const col = (x, tx, ty, title, lines, tip) => {
+      leader(x + 34, 622, tip[0], tip[1]);
+      title.forEach((t, i) => T(g, t, x, 646 + i * 16, { size: 13, weight: 700, color: ink, ls: 0 }));
+      lines.forEach((t, i) => T(g, t, x, 646 + title.length * 16 + i * 15, { size: 11.5, color: ink, ls: 0 }));
+    };
+    col(40, 0, 0, ['Keyboard –'], ['30 bands, four levels:', 'the top row lights', 'only on peaks'], [120, 578]);
+    col(170, 0, 0, ['File –'], [`${tr.codec} ${tr.bits}`, `${tr.dr || 'no DR'}, ${mmss(tr.dur)}`], [440, 302]);
+    col(300, 0, 0, ['Reset –'], ['Flashes when the', 'track changes'], [438, 428]);
+    col(430, 0, 0, ['Drive Select', 'LED –'], ['Lights up while', 'the next track', 'loads'], [494, 432]);
+  }
+  g.restore();
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0), pk: new Array(NB).fill(0), lv: 0, l: 0, r: 0, avg: 0, cool: 0, on: 0, reset: 0, ti: 0 } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.15 : +$('lvl').value * 2);
+  const mean = bands.reduce((a, b) => a + b, 0) / NB;
+  const o = { dt, clock, bands, playing: true, l: clamp(mean * (1.45 + 0.3 * Math.sin(clock * 0.7))), r: clamp(mean * (1.45 - 0.3 * Math.sin(clock * 0.7))),
+    played: (clock % 40) / 40, text: $('text').checked };
+  cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+requestAnimationFrame(frame);
+</script>

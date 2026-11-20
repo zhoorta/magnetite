@@ -1,0 +1,215 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Stacks</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a Stacks poster meter, in the manner of a modern travel print (own flat-colour drawing, nothing traced): a big sun
+   in the corner, one building of curved stripes (a lower part on the left, a taller part on the right, sharing their rows), a TV
+   tower. Building: each row is a band (bass at the bottom); the stripe keeps its shape and its colour drifts from the base
+   towards a hotter one as its band gets louder (the same all the way across the building). Pink lines on the right part: the
+   loudness of the last three seconds, one line a moment. Sun: the core follows the loudness and the rings pop on bass onsets.
+   Tower: the lined lower shaft is a thermometer (L and R mean), the tip lights on peaks. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Stacks</h1>
+  <p>A modern travel print as a meter: one building of curved stripes whose colours drift with the spectrum (each stripe is a band, from its base colour towards a hotter one as it gets louder; the edges stay still), pink lines for the last three seconds, a sun that swells with the loudness, and a tower whose lined shaft is a thermometer.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Orange and red', { bg:'#e8dfd0', s0:'#e8531e', s1:'#e63a2e', s2:'#e8458f', core:'#f28200', sl:'#e8531e', sr:'#e63a2e', hotL:'#f6a21a', hotR:'#ee3f9a', pink:'#e8458f', tower:'#f28200', ink:'#0f1416' }],
+  ['Teal and blue', { bg:'#e2e7e3', s0:'#2a9aa6', s1:'#2c58b0', s2:'#6a3fa0', core:'#7fc4e8', sl:'#2a9aa6', sr:'#2c58b0', hotL:'#8fd3ee', hotR:'#7a4cc0', pink:'#6a3fa0', tower:'#2a9aa6', ink:'#0b1418' }],
+  ['Night', { bg:'#0f1114', s0:'#e8531e', s1:'#e63a2e', s2:'#e8458f', core:'#f28200', sl:'#e8531e', sr:'#e63a2e', hotL:'#f6a21a', hotR:'#ee3f9a', pink:'#e8458f', tower:'#f28200', ink:'#e8e0d0' }],
+];
+const TT = { black:'#000', green:'#2bff4a', yellow:'#ffee2e', red:'#ff3b2e', cyan:'#2ee6ff', white:'#f4f4f4', blue:'#1a2cff' };
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+// ---- small drawing helpers
+function path(g, pts) { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); }
+function plen(p) { let d = 0; for (let i = 1; i < p.length; i++) d += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return d; }
+function at(p, d) {
+  for (let i = 1; i < p.length; i++) {
+    const l = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+    if (d <= l) { const k = d / l; return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * k, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * k]; }
+    d -= l;
+  }
+  return p[p.length - 1];
+}
+function quad(a, c, b, n = 18) { return Array.from({ length: n + 1 }, (_, i) => { const t = i / n, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; }); }
+function arrow(g, p, fill, size = 9) {
+  const [x, y] = p[p.length - 1], [px, py] = p[p.length - 2], a = Math.atan2(y - py, x - px);
+  g.beginPath(); g.moveTo(x + 2 * Math.cos(a), y + 2 * Math.sin(a));
+  g.lineTo(x - size * Math.cos(a - 0.42), y - size * Math.sin(a - 0.42));
+  g.lineTo(x - size * Math.cos(a + 0.42), y - size * Math.sin(a + 0.42)); g.closePath();
+  g.save(); g.fillStyle = fill; g.fill(); g.restore(); g.stroke();
+}
+function T(g, s, x, y, o) {
+  g.font = `${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function box3(g, x, y, w, h, dx, dy, bg) {
+  g.save(); g.fillStyle = bg;
+  g.beginPath(); g.moveTo(x, y); g.lineTo(x + dx, y + dy); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w, y); g.closePath(); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(x + w, y); g.lineTo(x + w + dx, y + dy); g.lineTo(x + w + dx, y + h + dy); g.lineTo(x + w, y + h); g.closePath(); g.fill(); g.stroke();
+  g.fillRect(x, y, w, h); g.strokeRect(x, y, w, h); g.restore();
+}
+function cyl(g, cx, cy, rx, ry, h, amt, pal) {
+  const bot = cy + h;
+  g.beginPath(); g.moveTo(cx - rx, cy); g.lineTo(cx - rx, bot); g.ellipse(cx, bot, rx, ry, 0, Math.PI, 0, true);
+  g.lineTo(cx + rx, cy); g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI, true); g.closePath();
+  g.save(); g.fillStyle = pal.bg; g.fill(); g.clip();
+  g.globalAlpha = 0.85; g.fillStyle = pal.acc; g.fillRect(cx - rx - 2, bot + ry - amt * (h + ry), rx * 2 + 4, h + ry * 2);
+  g.restore(); g.stroke();
+  g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.save(); g.fillStyle = pal.bg; g.fill(); g.restore(); g.stroke();
+}
+
+const GROT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const bandAt = (arr, x) => { const i = Math.max(0, Math.min(NB - 1, Math.floor(x))), f = Math.max(0, Math.min(1, x - i)); return arr[i] * (1 - f) + arr[Math.min(NB - 1, i + 1)] * f; };
+
+function mixc(a, b, t) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16), f = (sh) => Math.round(((pa >> sh) & 255) * (1 - t) + ((pb >> sh) & 255) * t); return `rgb(${f(16)},${f(8)},${f(0)})`; }
+// part of the building: `n` stripes from row `r0` (the rows are shared, so a stripe is one band all the way across), fixed curved ends,
+// each stripe's colour drifting from its base towards `hot` with the level of its band
+function block(g, base, hot, xL, xR, y0, p, r0, n, vals) {
+  g.save(); g.lineWidth = p - 4.5; g.lineJoin = 'round'; g.lineCap = 'round';
+  for (let j = 0; j < n; j++) {
+    const v = vals(r0 + j), y = y0 + j * p + p / 2, dy = 16;
+    g.strokeStyle = mixc(base, hot, clamp(v) * 0.6);
+    g.beginPath(); g.moveTo(xL + p / 2, y + dy); g.bezierCurveTo(xL + 24 + p / 2, y + dy, xL + 38, y, xL + 74, y); g.lineTo(xR, y); g.stroke();
+  }
+  g.restore();
+}
+
+function draw(c, pal, st, o) {
+  const g = c.getContext('2d');
+  const dpr = devicePixelRatio || 1;
+  const cw = c.clientWidth, ch = c.clientHeight;
+  if (c.width !== Math.round(cw * dpr)) { c.width = Math.round(cw * dpr); c.height = Math.round(ch * dpr); }
+  const s = Math.min(c.width / W, c.height / H);
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = pal.bg; g.fillRect(0, 0, c.width, c.height);
+  g.setTransform(s, 0, 0, s, (c.width - W * s) / 2, (c.height - H * s) / 2);
+  const tr = TRACKS[ti];
+
+  const k = 1 - Math.exp(-o.dt / 0.11);
+  for (let i = 0; i < NB; i++) { st.b[i] += (o.bands[i] - st.b[i]) * k; st.pk[i] = Math.max(st.b[i], st.pk[i] - o.dt * 0.2); }
+  const mean = st.b.reduce((a, b) => a + b, 0) / NB;
+  st.lv += (mean - st.lv) * (1 - Math.exp(-o.dt / 0.3));
+  st.l += (o.l - st.l) * k; st.r += (o.r - st.r) * k;
+  st.cool -= o.dt; st.on = Math.max(0, st.on - o.dt * 2.5);
+  const bass = (o.bands[0] + o.bands[1] + o.bands[2]) / 3; st.avg += (bass - st.avg) * (1 - Math.exp(-o.dt / 0.6));
+  if (st.cool <= 0 && bass > st.avg * 1.3 + 0.04) { st.on = 1; st.cool = 0.2; }
+  st.t += o.dt; if (st.t > 0.1) { st.t = 0; st.hist.unshift(clamp(st.lv * 1.5 + st.on * 0.2)); st.hist.length = 30; }
+  const lv = clamp(st.lv * 1.5), peak = clamp(Math.max(...st.pk) * 1.25);
+
+  // ---- sun: rings pop on onsets, the core follows the loudness, the arc is the time played
+  const SX = 60, SY = 100;
+  g.fillStyle = pal.s0; g.beginPath(); g.arc(SX, SY, 200 + st.on * 5, 0, TAU); g.fill();
+  g.fillStyle = pal.s1; g.beginPath(); g.arc(SX, SY, 122 + st.on * 10, 0, TAU); g.fill();
+  g.fillStyle = pal.s2; g.beginPath(); g.arc(SX, SY, 95 + st.on * 8, 0, TAU); g.fill();
+  g.fillStyle = pal.core; g.beginPath(); g.arc(SX, SY, 50 + lv * 26, 0, TAU); g.fill();
+
+  // ---- the two blocks of stripes
+  const val = (r) => clamp(bandAt(st.b, (19 - r) / 19 * (NB - 1)) * 1.25);      // row 0 is the top (highs), row 19 the bottom (bass)
+  block(g, pal.sl, pal.hotL, 158, 330, 140 + 6 * 33, 33, 6, 14, val);
+  block(g, pal.sr, pal.hotR, 352, 612, 140, 33, 0, 20, val);
+  // pink lines: the loudness of the last three seconds, newest on the right
+  g.save(); g.fillStyle = pal.pink;
+  for (let r = 0; r < 4; r++) for (let i = 0; i < 30; i++) { g.globalAlpha = 0.12 + 0.88 * (st.hist[29 - i] || 0); g.fillRect(442 + i * 4.2, 140 + r * 33 + 2.25, 2.2, 28.5); }
+  g.restore();
+
+  // ---- tower: antenna, saucers, cone, shaft; the lined lower shaft is a thermometer
+  const T = pal.tower, TX = 70;
+  g.fillStyle = T;
+  g.fillRect(TX - 1.5, 352, 3, 80); g.beginPath(); g.arc(TX, 352, 2.2, 0, TAU); g.fill();
+  [[438, 36, 5], [451, 29, 5], [463, 21, 5]].forEach(([y, w, hh]) => { g.beginPath(); g.ellipse(TX, y, w, hh, 0, 0, TAU); g.fill(); });
+  g.beginPath(); g.moveTo(TX - 34, 474); g.lineTo(TX + 34, 474); g.lineTo(TX + 9, 520); g.lineTo(TX - 9, 520); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(TX - 9, 518); g.lineTo(TX + 9, 518); g.lineTo(TX + 13, 656); g.lineTo(TX - 13, 656); g.closePath(); g.fill();
+  const NS = 22, y1 = 800, y0 = 658, sp = (y1 - y0) / NS, level = clamp((st.l + st.r) * 0.55);
+  for (let i = 0; i < NS; i++) { const y = y1 - (i + 1) * sp, lit = i / NS < level; g.globalAlpha = lit ? 1 : 0.2; g.fillRect(TX - 14, y + 1.2, 28, sp - 2.6); }
+  g.globalAlpha = 1;
+  if (peak > 0.7) { g.save(); g.fillStyle = pal.core; g.globalAlpha = (peak - 0.7) * 3; g.beginPath(); g.arc(TX, 350, 6, 0, TAU); g.fill(); g.restore(); }
+
+  if (o.text) {
+    const T2 = (t, x, y, size, al = 'right', wt = 700, ls = 0, col = pal.ink) => { g.font = `${wt} ${size}px ${GROT}`; g.letterSpacing = `${ls}px`; g.textAlign = al; g.fillStyle = col; g.fillText(t, x, y); g.letterSpacing = '0px'; };
+    const words = tr.title.split(/\s+/); let fit = null;
+    for (let size = 40; size >= 18 && !fit; size -= 1) {
+      g.font = `700 ${size}px ${GROT}`; const lines = []; let cur = '';
+      for (const w of words) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width <= 250 || !cur) cur = t; else { lines.push(cur); cur = w; } }
+      lines.push(cur);
+      if (lines.length <= 2 && lines.every((l) => g.measureText(l).width <= 250)) fit = { size, lines };
+    }
+    fit = fit || { size: 18, lines: [tr.title] };
+    fit.lines.forEach((l, i) => T2(l, 580, 56 + i * fit.size * 1.04, fit.size, 'right', 700, -0.8));
+    const y = 56 + (fit.lines.length - 1) * fit.size * 1.04 + 22;
+    T2(`${tr.name}${tr.album ? ' · ' + tr.album : ''}`.slice(0, 36), 580, y, 11, 'right', 400, 0.2);
+    T2(`${tr.codec} ${tr.bits}${tr.dr ? ' · ' + tr.dr : ''} · ${mmss(o.played * tr.dur)} / ${mmss(tr.dur)}`, 580, y + 15, 11, 'right', 400, 0.2);
+  }
+}
+
+const cards = PALS.map(([label, pal]) => {
+  const f = document.createElement('figure');
+  const c = document.createElement('canvas');
+  const cap = document.createElement('figcaption');
+  cap.textContent = label;
+  f.append(c, cap);
+  $('grid').append(f);
+  return { c, pal, st: { b: new Array(NB).fill(0), pk: new Array(NB).fill(0), lv: 0, l: 0, r: 0, avg: 0, cool: 0, on: 0, t: 0, hist: new Array(30).fill(0) } };
+});
+
+let last = performance.now(), clock = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now; clock += dt;
+  const auto = $('auto').checked;
+  const bands = fakeBands(clock, auto ? 1.15 : +$('lvl').value * 2);
+  const mean = bands.reduce((a, b) => a + b, 0) / NB;
+  const o = { dt, clock, bands, l: clamp(mean * (1.45 + 0.3 * Math.sin(clock * 0.7))), r: clamp(mean * (1.45 - 0.3 * Math.sin(clock * 0.7))), played: (clock % 40) / 40, text: $('text').checked };
+  cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o));
+  requestAnimationFrame(frame);
+}
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+// run the first four seconds at once so the pink lines and the blocks are already in place when the page opens
+for (let i = 0; i < 80; i++) { clock += 0.05; const bands = fakeBands(clock, 1.15), mean = bands.reduce((a, b) => a + b, 0) / NB; const o = { dt: 0.05, clock, bands, l: clamp(mean * 1.45), r: clamp(mean * 1.45), played: (clock % 40) / 40, text: true }; cards.forEach((kd) => draw(kd.c, kd.pal, kd.st, o)); }
+last = performance.now();
+requestAnimationFrame(frame);
+</script>
