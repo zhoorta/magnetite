@@ -1437,6 +1437,8 @@ object Posters {
         MeterInfo("poster-prompt", "Poster: Prompt", 260, 110) to ::Prompt,
         MeterInfo("poster-network", "Poster: Network", 260, 110) to ::Network,
         MeterInfo("poster-junction", "Poster: Junction", 260, 110) to ::Junction,
+        MeterInfo("poster-gamewatch", "Poster: Play & Watch", 260, 110) to ::Gamewatch,
+        MeterInfo("poster-mothership", "Poster: Mothership", 260, 110) to ::Mothership,
     )
 
     fun make(id: String): Poster? = catalog.firstOrNull { it.first.id == id }?.second?.invoke()

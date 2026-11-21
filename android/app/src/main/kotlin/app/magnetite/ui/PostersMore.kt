@@ -1480,3 +1480,544 @@ internal class Junction : Poster() {
         }
     }
 }
+
+// ---- Mothership --------------------------------------------------------------------------------------------------
+
+/** A one-colour title screen on a 240 x 320 pixel grid (the web's `poster-mothership.js`): stars, a saucer, tall condensed title letters. */
+internal class Mothership : Poster() {
+    private val m = Meas(30, 0.07f, 0.4f)
+    private var clk = 0f
+    private var avg = 0.3f
+    private var last = -9f
+    private var beam = -9f
+    private var beats = 0
+    private val stars = FloatArray(STARS)
+    private val pos: Array<IntArray> = seeded(5).let { r -> Array(STARS) { val px = 3 + floor(r() * 234).toInt(); intArrayOf(px, 12 + floor(r() * 284).toInt()) } }
+    private class Streak(val i: Int, val t0: Float)
+    private var streaks = listOf<Streak>()
+
+    private class Ch(val ch: Char, val marks: List<IntArray>)
+    private class Lay(val u: Int, val lines: List<List<Ch>>)
+
+    private companion object {
+        const val LW = 240f
+        const val LH = 320f
+        const val STARS = 64
+        const val ZONE_BOTTOM = 290
+        const val ZONE_H = 96
+
+        fun seeded(seed: Long): () -> Float {
+            var s = seed
+            return { s = (s * 16807) % 2147483647; (s / 2147483647.0).toFloat() }
+        }
+
+        // The 5 x 7 glyphs of the title, rows separated by "/".
+        val SRC = mapOf(
+            'A' to ".###./#...#/#...#/#####/#...#/#...#/#...#", 'B' to "####./#...#/#...#/####./#...#/#...#/####.", 'C' to ".###./#...#/#..../#..../#..../#...#/.###.",
+            'D' to "####./#...#/#...#/#...#/#...#/#...#/####.", 'E' to "#####/#..../#..../####./#..../#..../#####", 'F' to "#####/#..../#..../####./#..../#..../#....",
+            'G' to ".###./#...#/#..../#.###/#...#/#...#/.###.", 'H' to "#...#/#...#/#...#/#####/#...#/#...#/#...#", 'I' to ".###./..#../..#../..#../..#../..#../.###.",
+            'J' to "..###/...#./...#./...#./...#./#..#./.##..", 'K' to "#...#/#..#./#.#../##.../#.#../#..#./#...#", 'L' to "#..../#..../#..../#..../#..../#..../#####",
+            'M' to "#...#/##.##/#.#.#/#.#.#/#...#/#...#/#...#", 'N' to "#...#/##..#/#.#.#/#..##/#...#/#...#/#...#", 'O' to ".###./#...#/#...#/#...#/#...#/#...#/.###.",
+            'P' to "####./#...#/#...#/####./#..../#..../#....", 'Q' to ".###./#...#/#...#/#...#/#.#.#/#..#./.##.#", 'R' to "####./#...#/#...#/####./#.#../#..#./#...#",
+            'S' to ".####/#..../#..../.###./....#/....#/####.", 'T' to "#####/..#../..#../..#../..#../..#../..#..", 'U' to "#...#/#...#/#...#/#...#/#...#/#...#/.###.",
+            'V' to "#...#/#...#/#...#/#...#/#...#/.#.#./..#..", 'W' to "#...#/#...#/#...#/#.#.#/#.#.#/##.##/#...#", 'X' to "#...#/#...#/.#.#./..#../.#.#./#...#/#...#",
+            'Y' to "#...#/#...#/.#.#./..#../..#../..#../..#..", 'Z' to "#####/....#/...#./..#../.#.../#..../#####",
+            '0' to ".###./#...#/#..##/#.#.#/##..#/#...#/.###.", '1' to "..#../.##../..#../..#../..#../..#../.###.", '2' to ".###./#...#/....#/...#./..#../.#.../#####",
+            '3' to ".###./#...#/....#/..##./....#/#...#/.###.", '4' to "...#./..##./.#.#./#..#./#####/...#./...#.", '5' to "#####/#..../####./....#/....#/#...#/.###.",
+            '6' to ".###./#..../#..../####./#...#/#...#/.###.", '7' to "#####/....#/...#./..#../.#.../.#.../.#...", '8' to ".###./#...#/#...#/.###./#...#/#...#/.###.",
+            '9' to ".###./#...#/#...#/.####/....#/....#/.###.",
+            '-' to "...../...../...../#####/...../...../.....", '.' to "...../...../...../...../...../.##../.##..", ',' to "...../...../...../...../.##../..#../.#...",
+            ':' to "...../.##../.##../...../.##../.##../.....", '!' to "..#../..#../..#../..#../..#../...../..#..", '?' to ".###./#...#/....#/...#./..#../...../..#..",
+            '\'' to "..#../..#../...../...../...../...../.....", '/' to "....#/...#./...#./..#../.#.../.#.../#....", '&' to ".##../#..#./#.#../.#.../#.#.#/#..#./.##.#",
+            '(' to "...#./..#../.#.../.#.../.#.../..#../...#.", ')' to ".#.../..#../...#./...#./...#./..#../.#...", '+' to "...../..#../..#../#####/..#../..#../.....",
+            ' ' to "...../...../...../...../...../...../.....",
+        )
+        val GLYPH: Map<Char, List<IntArray>> = SRC.mapValues { (_, s) ->
+            s.split("/").flatMapIndexed { y, row -> row.mapIndexedNotNull { x, c -> if (c == '#') intArrayOf(x, y) else null } }
+        }
+
+        // Accent marks as rectangles in glyph units [x, y, w, h]: a glyph is 7 units wide and 12 tall, y 0 its top.
+        val MARKS = mapOf(
+            '́' to listOf(intArrayOf(3, -3, 2, 1), intArrayOf(2, -2, 2, 1)),
+            '̀' to listOf(intArrayOf(1, -3, 2, 1), intArrayOf(2, -2, 2, 1)),
+            '̂' to listOf(intArrayOf(2, -3, 2, 1), intArrayOf(1, -2, 1, 1), intArrayOf(4, -2, 1, 1)),
+            '̃' to listOf(intArrayOf(1, -3, 4, 1)),
+            '̈' to listOf(intArrayOf(1, -3, 1, 2), intArrayOf(4, -3, 1, 2)),
+            '̧' to listOf(intArrayOf(2, 12, 2, 1)),
+        )
+        val COLX = intArrayOf(0, 2, 3, 4, 5)
+        val COLW = intArrayOf(2, 1, 1, 1, 2)
+        val ROWY = intArrayOf(0, 1, 3, 6, 7, 9, 11)
+        val ROWH = intArrayOf(1, 2, 3, 1, 2, 2, 1)
+        val layouts = ConcurrentHashMap<String, Lay>()
+    }
+
+    private fun plain(s: String?) = Normalizer.normalize((s ?: "").uppercase(), Normalizer.Form.NFD).replace(Regex("\\p{Mn}"), "").replace("ß", "SS")
+
+    private fun chars(text: String, keepMarks: Boolean): List<Ch> {
+        val out = ArrayList<Ch>()
+        val marks = ArrayList<MutableList<IntArray>>()
+        for (c in Normalizer.normalize(text, Normalizer.Form.NFD).uppercase()) {
+            val mk = MARKS[c]
+            if (mk != null) { if (out.isNotEmpty() && keepMarks) marks.last().addAll(mk); continue }
+            out.add(Ch(if (GLYPH.containsKey(c)) c else ' ', emptyList())); marks.add(ArrayList())
+        }
+        return out.mapIndexed { i, c -> Ch(c.ch, marks[i]) }
+    }
+
+    /** The title on a unit grid: the largest unit (1 to 5 pixels) that fits one to three lines. */
+    private fun layout(title: String): Lay = layouts.getOrPut(title) {
+        if (layouts.size > 64) layouts.clear()
+        val cs = chars(title, true)
+        val words = ArrayList<List<Ch>>()
+        var cur = ArrayList<Ch>()
+        for (c in cs) { if (c.ch == ' ') { if (cur.isNotEmpty()) words.add(cur); cur = ArrayList() } else cur.add(c) }
+        if (cur.isNotEmpty()) words.add(cur)
+        var best: Lay? = null
+        for (u in intArrayOf(5, 4, 3, 2, 1)) {
+            val limit = 224 / (8 * u)
+            val lines = ArrayList<List<Ch>>()
+            var line = ArrayList<Ch>()
+            var ok = true
+            for (w in words) {
+                if (w.size > limit) { ok = false; break }
+                if (line.isNotEmpty() && line.size + 1 + w.size > limit) { lines.add(line); line = ArrayList() }
+                if (line.isNotEmpty()) line.add(Ch(' ', emptyList()))
+                line.addAll(w)
+            }
+            if (!ok) continue
+            lines.add(line)
+            if (lines.size > 3 || lines.size * 16 * u > ZONE_H + 4) continue
+            best = Lay(u, lines); break
+        }
+        best ?: Lay(1, listOf(cs.take(28)))
+    }
+
+    /** Dither levels 0 (none) to 4 (solid) as rectangles added to the current path. */
+    private fun Cv.dither(x0: Int, y0: Int, w: Int, h: Int, level: Int) {
+        if (level <= 0) return
+        for (y in y0 until y0 + h) for (x in x0 until x0 + w) {
+            val on = level >= 4 || (level == 3 && !(x % 2 == 1 && y % 2 == 1)) || (level == 2 && (x + y) % 2 == 0) || (level == 1 && x % 2 == 0 && y % 2 == 0)
+            if (on) rect(x.toFloat(), y.toFloat(), 1f, 1f)
+        }
+    }
+
+    private fun levelOf(v: Float) = when { v < 0.12f -> 0; v < 0.35f -> 1; v < 0.6f -> 2; v < 0.82f -> 3; else -> 4 }
+
+    private fun mean(v: FloatArray, from: Int, to: Int): Float { var t = 0f; for (i in from until to) t += v[i]; return t / (to - from) }
+
+    override fun draw(x: PosterCtx) {
+        with(x.g) {
+            val look = PosterLook(mapOf("paper" to "#000000"))
+            val ink = look["ink"]; val bg = look["paper"]
+            val txt = begin(this, x.w, x.h, bg)
+            val v = m.update(x)
+            val dt = x.dt
+            clk += dt
+            val t = clk
+            val bass = mean(m.bars.raw, 0, 4)
+            val rise = mean(v, 0, 4); val mid = mean(v, 4, 16); val high = mean(v, 16, 30); val level = mean(v, 0, 30)
+            avg = follow(avg, bass, dt, 3.3f)
+            if (bass > avg * 1.22f + 0.04f && t - last > 0.42f) {
+                last = t; beats++
+                if (bass > 0.55f) { beam = t; val r = seeded(beats * 13L + 1); streaks = List(5) { Streak(floor(r() * STARS).toInt(), t) } }
+            }
+            save(); scale(2.5f)
+            fill = bg; fillRect(0f, 0f, LW, LH)
+
+            // the stars: two per band; a dot, then a small cross, then a bigger one
+            fill = ink; beginPath()
+            pos.forEachIndexed { i, (px, py) ->
+                val target = clamp01(v[i % 30] * 1.8f)
+                stars[i] = follow(stars[i], target, dt, if (target > stars[i]) 0.05f else 0.45f)
+                val b = stars[i]
+                val fx = px.toFloat(); val fy = py.toFloat()
+                if (i % 2 == 0 || b > 0.22f) rect(fx, fy, 1f, 1f)
+                if (b > 0.55f) { rect(fx - 1, fy, 1f, 1f); rect(fx + 1, fy, 1f, 1f); rect(fx, fy - 1, 1f, 1f); rect(fx, fy + 1, 1f, 1f) }
+                if (b > 0.85f) { rect(fx - 2, fy, 1f, 1f); rect(fx + 2, fy, 1f, 1f); rect(fx, fy - 2, 1f, 1f); rect(fx, fy + 2, 1f, 1f) }
+            }
+            streaks = streaks.filter { t - it.t0 < 0.3f }
+            for (s in streaks) {
+                val (px, py) = pos[s.i]
+                val k = (t - s.t0) / 0.3f
+                val len = (6 + k * 12).roundToInt()
+                for (d in 0 until len) if (d % 2 == 0 || k < 0.5f) rect((px - d - k * 10).roundToInt().toFloat(), py.toFloat(), 1f, 1f)
+            }
+            fill()
+
+            // the saucer drifts with the time played; it bobs and its legs follow the bass
+            val cx = (54 + clamp01(x.progress) * 132).roundToInt()
+            val y0 = 44 + (sin(t * 1.2f) * 2 + rise * 4).roundToInt()
+            val say = Say(x.track)
+            val tl = if (txt) layout(say.title.ifEmpty { say.name }) else null
+            val belly = y0 + 40
+            val titleBand = if (tl != null) ZONE_BOTTOM - tl.lines.size * 16 * tl.u else 200
+            val beamA = clamp01(1 - (t - beam) / 0.5f)
+            if (beamA > 0.05f) {
+                val lv = if (beamA > 0.66f) 3 else if (beamA > 0.33f) 2 else 1
+                fill = ink; beginPath()
+                for (y in belly + 6 until titleBand) {
+                    val half = (5 + clamp01((y - belly).toFloat() / (ZONE_BOTTOM - belly)) * (6 + level * 46)).roundToInt()
+                    for (px in cx - half..cx + half) {
+                        val on = when (lv) { 3 -> (px + (y shr 1)) % 4 != 0; 2 -> (px + (y shr 1)) % 2 == 0; else -> (px + (y shr 1)) % 4 == 0 }
+                        if (on) rect(px.toFloat(), y.toFloat(), 1f, 1f)
+                    }
+                }
+                fill()
+            }
+            val tiers = listOf(Triple(36, y0, high), Triple(60, y0 + 8, mid), Triple(84, y0 + 16, rise))
+            fill = bg
+            tiers.forEach { (w, y, _) -> fillRect(cx - w / 2f, y.toFloat(), w.toFloat(), 8f) }
+            fillRect(cx - 52f, y0 + 24f, 104f, 14f)
+            fill = ink; beginPath()
+            tiers.forEach { (w, y, value) ->
+                val l = cx - w / 2
+                rect(l.toFloat(), y.toFloat(), w.toFloat(), 1f); rect(l.toFloat(), y + 7f, w.toFloat(), 1f)
+                rect(l.toFloat(), y.toFloat(), 1f, 8f); rect(l + w - 1f, y.toFloat(), 1f, 8f)
+                dither(l + 1, y + 1, w - 2, 6, levelOf(clamp01(value * 1.7f)))
+            }
+            rect(cx - 52f, y0 + 24f, 104f, 14f)
+            val leg = 6f + (clamp01(rise * 1.6f) * 12).roundToInt()
+            rect(cx - 32f, y0 + 38f, 12f, leg); rect(cx + 20f, y0 + 38f, 12f, leg)
+            fill()
+            fill = bg
+            intArrayOf(-36, -12, 12, 36).forEachIndexed { i, dx -> if (clamp01(v[16 + i * 3] * 1.9f) > 0.4f) fillRect(cx + dx - 1f, y0 + 29f, 3f, 3f) }
+
+            if (txt && tl != null) {
+                // the title: static tall letters, the bottoms of a row on one line
+                val u = tl.u
+                fill = ink; beginPath()
+                var top = ZONE_BOTTOM - tl.lines.size * 16 * u
+                for (line in tl.lines) {
+                    val x0 = (LW / 2 - (line.size * 8 * u - u) / 2f).roundToInt()
+                    val base = top + 15 * u
+                    line.forEachIndexed { k, c ->
+                        val lx = x0 + k * 8 * u
+                        for ((gx, gy) in GLYPH.getValue(c.ch)) rect((lx + COLX[gx] * u).toFloat(), (base - (12 - ROWY[gy]) * u).toFloat(), (COLW[gx] * u).toFloat(), (ROWH[gy] * u).toFloat())
+                        for (mk in c.marks) rect((lx + mk[0] * u).toFloat(), (base - (12 - mk[1]) * u).toFloat(), (mk[2] * u).toFloat(), (mk[3] * u).toFloat())
+                    }
+                    top += 16 * u
+                }
+                fill()
+
+                // the credits and the header, in the bitmap font on its 8 pixel grid
+                fontFace(8f, PosterAssets.pixelFont)
+                val length = x.track?.duration?.toFloat() ?: 0f
+                val credit = listOf(plain(say.name), if (say.album.isNotEmpty()) plain(say.album) + (if (say.year.isNotEmpty()) " (${say.year})" else "") else "").filter { it.isNotEmpty() }.joinToString(" - ")
+                text(credit.take(29), LW / 2, 297f + 7, ink, Paint.Align.CENTER)
+                val spec = plain(listOf(say.fmt.replace(" · ", " ").replace(Regex("-bit / "), "/").replace(" kHz", ""), say.dr).filter { it.isNotEmpty() }.joinToString(" ")).take(16)
+                text("$spec  ${if (length > 0) "${clock(x.progress * length)} / ${clock(length)}" else ""}".trim().take(29), LW / 2, 309f + 7, ink, Paint.Align.CENTER)
+                text("NOW PLAYING", 6f, 5f + 7, ink)
+                if (say.no.isNotEmpty()) text("TRACK ${say.no}", LW - 6, 5f + 7, ink, Paint.Align.RIGHT)
+            }
+            restore()
+            restore()
+        }
+    }
+}
+
+// ---- Play & Watch ------------------------------------------------------------------------------------------------
+
+/** A 1980s handheld LCD game (the web's `poster-gamewatch.js`): the helicopter drops a parachutist on each bass onset and the boat catches it. */
+internal class Gamewatch : Poster() {
+    private val m = Meas(30, 0.07f, 0.4f)
+    private class Jump(val t0: Float, val lane: Int)
+    private var jumps = listOf<Jump>()
+    private var clk = 0f
+    private var slow = 0.3f
+    private var last = -9f
+    private var n = 0
+    private var boatLane = 1
+    private var alarm = -9f
+
+    private class Pal(val shell: Int, val face: Int, val bezel: Int, val btn: Int, val red: Int, val label: Int, val badge: Int)
+
+    private companion object {
+        val LANES = floatArrayOf(96f, 188f, 280f)
+        const val HX = 330f
+        const val HY = 36f
+        const val STEP = 0.26f
+        const val FALL = 8
+        const val WATER = 206f
+        const val GHOST = 0.07f
+        val TAU = (2 * Math.PI).toFloat()
+        val LCD_INK = Color.of("#1c1c18")
+        val LCD_1 = Color.of("#b4b09c")
+        val LCD_2 = Color.of("#d8d6c4")
+        val SEA = Color.of("#3f8fc0")
+        val PALM = Color.of("#2f8f4a")
+        val BLACK = 0xFF000000.toInt()
+        val SEGMENTS = arrayOf("abcdef", "bc", "abdeg", "abcdg", "bcfg", "acdfg", "acdefg", "abc", "abcdefg", "abcdfg")
+    }
+
+    private fun mean(v: FloatArray, from: Int, to: Int): Float { var t = 0f; for (i in from until to) t += v[i]; return t / (to - from) }
+
+    private fun Cv.label(s: String, x: Float, y: Float, size: Float, weight: Int, color: Int, align: Paint.Align = Paint.Align.LEFT, spacing: Float = 1.3f, face: Typeface? = null) {
+        if (s.isEmpty()) return
+        if (face != null) fontFace(size, face, spacing) else fontW(size, weight, spacing)
+        text(s, x, y, color, align)
+    }
+
+    /** [s] cut with an ellipsis until it fits [max]. */
+    private fun Cv.cut(s: String, max: Float, size: Float, weight: Int): String {
+        fontW(size, weight)
+        var t = s
+        while (t.length > 3 && measure(t) > max) t = t.dropLast(2).trimEnd() + "…"
+        return t
+    }
+
+    private fun Cv.digit(x: Float, y: Float, h: Float, d: Int, on: Int, off: Int) {
+        val w = h * 0.55f; val t = h * 0.13f; val hh = h / 2
+        val bars = mapOf(
+            'a' to floatArrayOf(x + t, y, w - 2 * t, t), 'g' to floatArrayOf(x + t, y + hh - t / 2, w - 2 * t, t), 'd' to floatArrayOf(x + t, y + h - t, w - 2 * t, t),
+            'f' to floatArrayOf(x, y + t, t, hh - t * 1.3f), 'b' to floatArrayOf(x + w - t, y + t, t, hh - t * 1.3f),
+            'e' to floatArrayOf(x, y + hh + t * 0.3f, t, hh - t * 1.3f), 'c' to floatArrayOf(x + w - t, y + hh + t * 0.3f, t, hh - t * 1.3f),
+        )
+        for (k in "abcdefg") { fill = if (SEGMENTS[d].contains(k)) on else off; val b = bars.getValue(k); fillRect(b[0], b[1], b[2], b[3]) }
+    }
+
+    /** The four digits and the colon; [all] draws every segment in [off] (the faint positions under the lit ones). */
+    private fun Cv.clockFace(x: Float, y: Float, h: Float, secs: Float, on: Int, off: Int, all: Boolean = false) {
+        val mm = (secs / 60).toInt() % 100; val ss = (secs % 60).toInt()
+        val w = h * 0.55f; val gap = h * 0.2f
+        intArrayOf(mm / 10, mm % 10, ss / 10, ss % 10).forEachIndexed { i, d -> digit(x + i * (w + gap) + (if (i > 1) gap * 1.4f else 0f), y, h, if (all) 8 else d, if (all) off else on, off) }
+        val cx = x + 2 * (w + gap)
+        fill = if (all) off else on
+        fillRect(cx - 1.5f, y + h * 0.3f, 3f, 3f); fillRect(cx - 1.5f, y + h * 0.65f, 3f, 3f)
+    }
+
+    private fun Cv.parachutist(x: Float, y: Float, k: Int, phase: Float) {
+        save(); translate(x, y)
+        if (k > 0) {
+            beginPath(); ellipse(0f, -14f, 14f, 11f, PI_F, 0f); closePath(); fill()
+            lineWidth = 1.3f
+            beginPath(); moveTo(-14f, -14f); lineTo(-3f, 0f); moveTo(14f, -14f); lineTo(3f, 0f); moveTo(0f, -14f); lineTo(0f, 0f); stroke()
+        }
+        lineWidth = 2.6f
+        beginPath(); circle(0f, 4f, 3.6f); fill()
+        beginPath(); moveTo(0f, 8f); lineTo(0f, 17f)
+        if (k > 0) {
+            moveTo(-6f, 11f); lineTo(0f, 9f); lineTo(6f, 11f); moveTo(0f, 17f); lineTo(-4f, 23 + phase); moveTo(0f, 17f); lineTo(4f, 23 - phase)
+        } else {
+            moveTo(-9f, 6f); lineTo(0f, 10f); lineTo(9f, 6 + phase * 2); moveTo(0f, 17f); lineTo(-7f, 22f); moveTo(0f, 17f); lineTo(8f, 21f)
+        }
+        stroke(); restore()
+    }
+
+    private fun Cv.boat(x: Float, y: Float, phase: Float) {
+        beginPath(); moveTo(x - 30, y); lineTo(x + 30, y); lineTo(x + 22, y + 11); lineTo(x - 22, y + 11); closePath(); fill()
+        beginPath(); circle(x - 2, y - 14, 3.8f); fill()
+        beginPath(); moveTo(x - 2, y - 10); lineTo(x - 2, y - 2); moveTo(x - 2, y - 8); lineTo(x + 14, y - 14 + phase * 3); moveTo(x - 2, y - 8); lineTo(x - 14, y - 4 - phase * 3); stroke()
+    }
+
+    private fun Cv.shark(x: Float, y: Float, v: Float) {
+        val h = 6 + v * 14
+        beginPath(); moveTo(x - 14, y); quadTo(x - 4, y - h * 0.4f, x + 2, y - h); quadTo(x + 4, y - h * 0.3f, x + 16, y); closePath(); fill()
+    }
+
+    private fun Cv.helicopter(x: Float, y: Float, blade: Boolean) {
+        beginPath(); ellipse(x, y, 24f, 11f, 0f, TAU); fill()
+        beginPath(); moveTo(x + 18, y - 4); lineTo(x + 46, y - 12); lineTo(x + 46, y - 4); lineTo(x + 20, y + 4); closePath(); fill()
+        lineWidth = 2.6f
+        beginPath(); moveTo(x, y - 11); lineTo(x, y - 17)
+        if (blade) { moveTo(x - 36, y - 17); lineTo(x + 36, y - 17) } else { moveTo(x - 24, y - 19); lineTo(x + 30, y - 15) }
+        moveTo(x - 14, y + 14); lineTo(x + 16, y + 14); moveTo(x - 8, y + 10); lineTo(x - 8, y + 14); moveTo(x + 8, y + 10); lineTo(x + 8, y + 14); stroke()
+    }
+
+    private fun Cv.palm(x: Float, y: Float, dir: Float, sway: Float) {
+        keep {
+            stroke = PALM
+            lineWidth = 7f; beginPath(); moveTo(x, 205f); quadTo(x + dir * 6, 140f, x + dir * 2, y); stroke()
+            lineWidth = 4f
+            for (a in floatArrayOf(-1.2f, -0.6f, 0f, 0.6f, 1.2f)) {
+                val aa = a + sway * (if (a < 0) -1 else 1)
+                beginPath(); moveTo(x + dir * 2, y)
+                quadTo(x + dir * 2 + sin(aa) * 26, y - 20 - abs(cos(aa)) * 6, x + dir * 2 + sin(aa) * 40, y + 8 + abs(aa) * 12); stroke()
+            }
+        }
+    }
+
+    /** The LCD, in its own 412 x 266 space: the printed background, the faint positions, then what is lit. */
+    private fun Cv.lcd(v: FloatArray, rise: Float, txt: Boolean, lossless: Boolean, elapsed: Float) {
+        val t = clk
+        val high = mean(v, 18, 30)
+        fun frame(j: Jump) = floor((t - j.t0) / STEP).toInt()
+        fun where(lane: Int, k: Int) = (HX + (LANES[lane] - HX) * min(1f, k / 3f)) to (46f + k * 20)
+        val faint = fade(BLACK, GHOST)
+
+        // what is printed under the glass: water and palms
+        keep {
+            alpha = 0.5f; fill = SEA; fillRect(0f, WATER, 412f, 266 - WATER)
+            stroke = SEA; lineWidth = 2f; alpha = 0.9f
+            var y = WATER + 6
+            while (y < 262f) {
+                beginPath()
+                var px = 0
+                while (px <= 412) { lineTo(px.toFloat(), y + (if ((px / 12) % 2 == 1) 2f else -2f)); px += 12 }
+                stroke(); y += 12f
+            }
+            alpha = 0.65f
+            palm(22f, 112f, 1f, 0.12f * sin(t * 7) * high * 3); palm(392f, 150f, -1f, 0.12f * sin(t * 6 + 1) * high * 3)
+        }
+
+        // every position that can light, faintly, as on the real thing
+        keep {
+            fill = LCD_INK; stroke = LCD_INK; round = true; alpha = GHOST
+            for (l in 0 until 3) {
+                for (k in 0 until FALL) { val (px, py) = where(l, k); parachutist(px, py, k, 0f) }
+                boat(LANES[l], WATER - 2, 0f)
+            }
+            for (px in floatArrayOf(90f, 200f, 310f)) shark(px, 258f, 0.5f)
+            helicopter(HX, HY, true); helicopter(HX, HY, false)
+        }
+        clockFace(44f, 8f, 30f, 0f, faint, faint, all = true)
+
+        // what is lit: the score is the time played
+        clockFace(44f, 8f, 30f, elapsed, LCD_INK, faint)
+        fill = LCD_INK; stroke = LCD_INK; round = true; lineWidth = 2.6f
+        helicopter(HX, HY + (if (rise > 0.5f) 2f else 0f), floor(t * 8).toInt() % 2 == 1)
+
+        // the boat steps to the lane of the first parachutist that is about to land
+        jumps.filter { frame(it) >= 3 }.minByOrNull { it.t0 }?.let { boatLane = it.lane }
+        boat(LANES[boatLane], WATER - 2 + (if (jumps.any { frame(it) >= FALL - 1 && it.lane == boatLane }) 3f else 0f), (floor(t * 5).toInt() % 2).toFloat())
+        for (j in jumps) {
+            val k = frame(j)
+            if (k >= FALL - 1) continue
+            val (px, py) = where(j.lane, k)
+            parachutist(px, py, k, (floor(t * 6).toInt() % 2).toFloat())
+        }
+        // three fins in the water: the mids, in three groups
+        floatArrayOf(90f, 200f, 310f).forEachIndexed { i, px ->
+            val value = mean(v, 4 + i * 5, 9 + i * 5) * 1.3f
+            if (value > 0.18f) shark(px, 260f, clamp01(value))
+        }
+        round = false
+
+        if (txt) {
+            label("AM", 24f, 30f, 12f, 700, LCD_INK, spacing = 0.3f)
+            // both game names show faintly; the one for this file (A lossless, B lossy) is lit
+            label("GAME A", 6f, 262f, 11f, 700, fade(LCD_INK, 0.15f), spacing = 0.3f)
+            label("GAME B", 406f, 262f, 11f, 700, fade(LCD_INK, 0.15f), Paint.Align.RIGHT, 0.3f)
+            if (lossless) label("GAME A", 6f, 262f, 11f, 700, LCD_INK, spacing = 0.3f) else label("GAME B", 406f, 262f, 11f, 700, LCD_INK, Paint.Align.RIGHT, 0.3f)
+        }
+    }
+
+    /** The whole handheld, in its own 874 x 529 space. */
+    private fun Cv.device(v: FloatArray, rise: Float, pal: Pal, say: Say, txt: Boolean, lossless: Boolean, elapsed: Float, l: Float, r: Float) {
+        val t = clk
+        val ink = pal.label
+        fill = pal.shell; beginPath(); roundRect(0f, 0f, 874f, 529f, 16f); fill()
+        fill = pal.face; beginPath(); roundRect(14f, 26f, 846f, 474f, 8f); fill()
+        fill = pal.bezel; beginPath(); roundRect(172f, 52f, 520f, 420f, 14f); fill()
+        stroke = fade(BLACK, 0.18f); lineWidth = 2f; stroke()
+        // the black frame line, open where the two labels sit
+        stroke = ink; lineWidth = 2.5f
+        beginPath()
+        moveTo(330f, 97f); lineTo(207f, 97f); quadTo(195f, 97f, 195f, 109f); lineTo(195f, 423f); quadTo(195f, 435f, 207f, 435f); lineTo(350f, 435f)
+        moveTo(520f, 435f); lineTo(665f, 435f); quadTo(677f, 435f, 677f, 423f); lineTo(677f, 109f); quadTo(677f, 97f, 665f, 97f); lineTo(500f, 97f)
+        stroke()
+        if (txt) {
+            label(cut((say.title.ifEmpty { say.name }).uppercase(), 150f, 17f, 700), 436f, 104f, 17f, 700, ink, Paint.Align.CENTER, 0f)
+            label(cut((say.album.ifEmpty { say.fmt }).uppercase(), 160f, 17f, 700), 436f, 442f, 17f, 700, ink, Paint.Align.CENTER, 0f)
+        }
+
+        // the screen's rim and the LCD
+        fill = pal.shell; beginPath(); roundRect(210f, 113f, 452f, 305f, 16f); fill()
+        fill = Color.of("#0d1b3a"); beginPath(); roundRect(225f, 127f, 422f, 276f, 8f); fill()
+        save(); translate(230f, 132f)
+        beginPath(); roundRect(0f, 0f, 412f, 266f, 6f); clip()
+        fill = LCD_2; fillRect(0f, 0f, 412f, 266f)
+        fill = fade(LCD_1, 0.45f); fillRect(0f, 0f, 412f, 70f); fillRect(0f, 205f, 412f, 61f)
+        lcd(v, rise, txt, lossless, elapsed)
+        fill = fade(0xFFFFFFFF.toInt(), 0.12f); beginPath(); moveTo(0f, 0f); lineTo(240f, 0f); lineTo(0f, 156f); closePath(); fill()
+        restore()
+
+        // the badge
+        fill = pal.badge; beginPath(); roundRect(38f, 84f, 106f, 62f, 6f); fill()
+        stroke = Color.of("#1a1a1a"); lineWidth = 1.5f; stroke()
+        if (txt) {
+            val dark = Color.of("#1a1a1a")
+            label("PLAY", 91f, 113f, 26f, 800, dark, Paint.Align.CENTER, -1f)
+            label("& WATCH", 91f, 138f, 22f, 800, dark, Paint.Align.CENTER, -0.5f)
+            label("Magnetite", 91f, 172f, 17f, 700, dark, Paint.Align.CENTER, 0.3f, Typeface.SERIF)
+        }
+
+        // the three small buttons, and the lamps
+        listOf("GAME A" to 72f, "GAME B" to 132f, "TIME" to 193f).forEach { (name, y) ->
+            fill = pal.shell; beginPath(); roundRect(733f, y - 20, 54f, 38f, 19f); fill()
+            fill = pal.btn; beginPath(); roundRect(739f, y - 14, 42f, 26f, 13f); fill()
+            if (txt) label(name, 759f, y + 38, 13f, 600, ink, Paint.Align.CENTER, 0.4f)
+        }
+        listOf(Triple("ALARM", 102f, t - alarm < 0.22f), Triple("ACL", 162f, lossless)).forEach { (name, y, on) ->
+            fill = if (on) pal.red else Color.of("#7d7d78"); beginPath(); circle(819f, y, 8f); fill()
+            stroke = Color.of("#3a3a38"); lineWidth = 2f; stroke()
+            if (txt) label(name, 819f, y + 24, 10.5f, 600, ink, Paint.Align.CENTER, 0.4f)
+        }
+
+        // the two big buttons press with the left and right channel
+        listOf(Triple(98f, l, "◄ LEFT"), Triple(773f, r, "RIGHT ►")).forEach { (cx, level, name) ->
+            val press = if (level > 0.5f) (level - 0.5f) * 2 else 0f
+            fill = pal.shell; beginPath(); circle(cx, 372f, 41f); fill()
+            fill = fade(BLACK, 0.25f); beginPath(); circle(cx, 374f, 32f); fill()
+            fill = pal.red; beginPath(); circle(cx, 372 + press * 3, 31 - press * 1.5f); fill()
+            fill = fade(0xFFFFFFFF.toInt(), 0.28f); beginPath(); ellipse(cx - 7, 362 + press * 3, 13f, 8f, 0f, TAU); fill()
+            if (txt) label(name, if (cx < 400f) 100f else 773f, 444f, 15f, 800, ink, Paint.Align.CENTER, 0.6f)
+        }
+    }
+
+    override fun draw(x: PosterCtx) {
+        with(x.g) {
+            val look = PosterLook(mapOf("paper" to "#17120f", "shell" to "#5a3320", "face" to "#c9a96a", "bezel" to "#d8bd85", "btn" to "#8a6b52", "red" to "#d8222a", "label" to "#1a1410", "badge" to "#dfe4e8"))
+            val txt = begin(this, x.w, x.h, look["paper"])
+            val pal = Pal(look["shell"], look["face"], look["bezel"], look["btn"], look["red"], look["label"], look["badge"])
+            val v = m.update(x)
+            val dt = x.dt
+            clk += dt
+            val t = clk
+            val bass = mean(m.bars.raw, 0, 4)
+            val rise = mean(v, 0, 4)
+            slow = follow(slow, bass, dt, 3.3f)
+            val onset = bass > slow * 1.22f + 0.04f && t - last > 0.42f && jumps.size < 6
+            // the game goes on in a quiet passage too, but not in silence
+            if (onset || (t - last > 2.2f && jumps.size < 2 && mean(v, 0, 30) > 0.05f)) {
+                last = t; n++
+                jumps = jumps + Jump(t, (n * 5 + (n shr 1)) % 3)
+                if (onset && bass > 0.55f) alarm = t
+            }
+            jumps = jumps.filter { t - it.t0 < STEP * FALL }
+
+            val say = Say(x.track)
+            val length = x.track?.duration?.toFloat() ?: 0f
+            val elapsed = if (length > 0) clamp01(x.progress) * length else 0f
+            val lossless = Regex("flac|alac|wav|aiff|ape|wv", RegexOption.IGNORE_CASE).containsMatchIn(x.track?.codec ?: "")
+            val ink = look["ink"]
+            val quiet = lerpColor(look["ink"], look["paper"], 0.45f)
+            val mono = Typeface.MONOSPACE
+
+            if (txt) {
+                label("MAGNETITE  ·  NOW PLAYING", 20f, 44f, 11f, 400, quiet, spacing = 2f, face = mono)
+                label(say.no, 580f, 44f, 11f, 400, quiet, Paint.Align.RIGHT, 2f, mono)
+                label(cut(say.title.ifEmpty { say.name }, 560f, 36f, 700), 20f, 108f, 36f, 700, ink, spacing = -0.5f)
+                if (say.title.isNotEmpty()) label(say.name, 20f, 140f, 18f, 400, quiet, spacing = 0.2f)
+            }
+            save(); translate(20f, 215f); scale(560f / 874f)
+            device(v, rise, pal, say, txt, lossless, elapsed, m.l, m.r)
+            restore()
+            if (txt) {
+                val y = 622f
+                val row = if (say.album.isNotEmpty()) say.album + (if (say.year.isNotEmpty()) " · ${say.year}" else "") else ""
+                label(cut(row, 560f, 15f, 400), 20f, y, 15f, 400, ink, spacing = 0.2f)
+                label(listOf(say.fmt, say.dr).filter { it.isNotEmpty() }.joinToString("  ·  "), 20f, y + 26, 12f, 400, quiet, spacing = 1.5f, face = mono)
+                val cells = 40
+                val done = floor(clamp01(x.progress) * cells).toInt()
+                val off = lerpColor(look["paper"], look["ink"], 0.14f)
+                for (i in 0 until cells) { fill = if (i < done) ink else off; fillRect(20f + i * 14, y + 52, 10f, 12f) }
+                if (length > 0) {
+                    label(clock(elapsed), 20f, y + 88, 12f, 400, quiet, spacing = 1.5f, face = mono)
+                    label(clock(length), 580f, y + 88, 12f, 400, quiet, Paint.Align.RIGHT, 1.5f, mono)
+                }
+            }
+            restore()
+        }
+    }
+}
