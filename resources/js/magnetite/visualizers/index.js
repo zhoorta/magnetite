@@ -12,9 +12,11 @@ import posterCircuit from './poster-circuit';
 import posterDials from './poster-dials';
 import posterFacets from './poster-facets';
 import posterFan from './poster-fan';
+import posterGamewatch from './poster-gamewatch';
 import posterJunction from './poster-junction';
 import posterLens from './poster-lens';
 import posterLenses from './poster-lenses';
+import posterMothership from './poster-mothership';
 import posterNetwork from './poster-network';
 import posterOvercome from './poster-overcome';
 import posterPylon from './poster-pylon';
@@ -36,7 +38,7 @@ import vuLeds from './vu-leds';
 import vuNeedle from './vu-needle';
 import vuWide from './vu-wide';
 
-export const visualizers = Object.fromEntries([vuWide, vuNeedle, vuLeds, magicEye, scope, goniometer, loudness, kMeter, crest, lra, thirdOctave, spectrogram, posterLens, posterCircuit, posterLenses, posterArches, posterFan, posterOvercome, posterPillars, posterFacets, posterDials, posterTerrain, posterSlides, posterRings, posterHalftone, posterHeads, posterTunnel, posterAirport, posterPylon, posterCamera, posterStacks, posterSwatches, posterViewdata, posterPrompt, posterNetwork, posterJunction].map((v) => [v.id, v]));
+export const visualizers = Object.fromEntries([vuWide, vuNeedle, vuLeds, magicEye, scope, goniometer, loudness, kMeter, crest, lra, thirdOctave, spectrogram, posterLens, posterCircuit, posterLenses, posterArches, posterFan, posterOvercome, posterPillars, posterFacets, posterDials, posterTerrain, posterSlides, posterRings, posterHalftone, posterHeads, posterTunnel, posterAirport, posterPylon, posterCamera, posterStacks, posterSwatches, posterViewdata, posterPrompt, posterNetwork, posterJunction, posterGamewatch, posterMothership].map((v) => [v.id, v]));
 
 /** What the meter menu lists. */
 export const meterList = () => meterEntries(visualizers);
