@@ -1,0 +1,393 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Pinball</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a "Pinball" poster meter: a 1970s-80s pinball playfield (red frame with star lamps, blue field, pop bumpers, lightning
+   inlays, bonus ladder, apron with plaque and cards) drawn from scratch as vector shapes in an original design (no real table's art,
+   names or logos). The ball is real: a small physics loop (gravity, walls, three pop bumpers, two slingshots, two flippers) runs
+   per canvas, drains into the shooter lane and is plunged again.
+   Meters: a bass beat nudges the ball and flips the nearest flipper; each pop bumper lights with a mid band group (three groups)
+   and flashes when hit; the four top lanes are the four high band groups; the two lightning arms are the left and right channel
+   (six inserts each); the bonus ladder is the overall level with a slow fall; the rim lamps chase faster with the level; the drop
+   targets go down on the beats (one by one, all down = bonus); the score counts bumper hits; the apron plaque is the track,
+   the left card the file, the right card the position. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Pinball</h1>
+  <p>A pinball playfield as a meter, with a real ball: bass beats nudge it and flip the flippers, the three pop bumpers are the mids, the top lanes the highs, the two lightning arms the left and right channel, the bonus ladder the level. The apron carries the track.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const SERIF = 'Georgia, "Times New Roman", serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Red and blue', { bg:'#15110f', fg:'#ece3d0', mute:'#8f8574', frame:'#c8261f', field:'#14509a', field2:'#2b8be0', accent:'#f7c31c', dark:'#10203f', cream:'#efe6d2', white:'#f8f8f4', lamp:'#fff2a8', wood:'#d8c59c' }],
+  ['Night', { bg:'#0e0d14', fg:'#e8e2f0', mute:'#857f94', frame:'#7a2a8c', field:'#0d1a44', field2:'#1d7a96', accent:'#ffd23f', dark:'#0a0f28', cream:'#e8e2f0', white:'#f6f4fa', lamp:'#c6fff0', wood:'#b9aed0' }],
+  ['Sunset', { bg:'#140f0c', fg:'#f0e4cc', mute:'#8f8270', frame:'#b23a1c', field:'#0b5a58', field2:'#33ab9c', accent:'#ffb52e', dark:'#0a2c2c', cream:'#f2e4c8', white:'#faf6ea', lamp:'#fff0b0', wood:'#dcc08e' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const avg = (a, i, j) => { let s = 0; for (let k = i; k < j; k++) s += a[k]; return s / (j - i); };
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function T(g, s, x, y, o) {
+  g.font = `${o.style || ''} ${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function fit(g, s, max, o) {
+  g.font = `${o.style || ''} ${o.weight || 400} ${o.size}px ${o.font || SANS}`; g.letterSpacing = `${o.ls ?? 0}px`;
+  while (s.length > 3 && g.measureText(s).width > max) s = s.slice(0, -2).trimEnd() + '…';
+  g.letterSpacing = '0px';
+  return s;
+}
+function star(g, x, y, ro, ri, n, rot = -Math.PI / 2) {
+  g.beginPath();
+  for (let i = 0; i < n * 2; i++) { const r = i % 2 ? ri : ro, a = rot + i * Math.PI / n; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  g.closePath();
+}
+
+// ---- the table (local space 384 x 800)
+const CX = 180;                                   // centre of the main field (the shooter lane is on the right)
+const ARCC = [192, 192], ARCR = 168;
+const BUMPERS = [[130, 238], [230, 238], [180, 318]];
+const FLIP = { len: 62, rest: 0.5, up: -0.5, py: 640, px: [126, 234] };
+const SLINGS = [[[44, 478], [96, 594]], [[316, 478], [264, 594]]];
+const SEGS = (() => {
+  const s = [];
+  let p = null;
+  for (let i = 0; i <= 28; i++) { const a = Math.PI - i * Math.PI / 28, q = [ARCC[0] + Math.cos(a) * ARCR, ARCC[1] - Math.sin(a) * ARCR]; if (p) s.push([p, q]); p = q; }
+  s.push([[24, 192], [24, 560]], [[24, 560], [126, 640]], [[336, 560], [234, 640]], [[336, 230], [336, 742]], [[360, 192], [360, 800]], [[336, 792], [360, 792]]);
+  return s;
+})();
+
+const states = new WeakMap();
+function stateOf(c) {
+  if (!states.has(c)) states.set(c, {
+    prev: null, slow: 0.3, last: -9, n: 0, el: 0, L: 0, R: 0, score: 0, bonus: 0, flash: -9, alarm: -9,
+    ball: { x: 348, y: 770, vx: 0, vy: 0, mode: 'lane', wait: 0.8, still: 0 },
+    flip: [{ a: FLIP.rest, hold: 0 }, { a: FLIP.rest, hold: 0 }],
+    bump: [0, 0, 0], sling: [0, 0], drop: Array(8).fill(false), nd: 0,
+  });
+  return states.get(c);
+}
+function flipTip(i, a) { const side = i ? -1 : 1; return [FLIP.px[i], FLIP.py, FLIP.px[i] + side * Math.cos(a) * FLIP.len, FLIP.py + Math.sin(a) * FLIP.len]; }
+
+function hitSeg(b, ax, ay, bx, by, e, kick, r) {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const k = clamp(((b.x - ax) * dx + (b.y - ay) * dy) / l2);
+  const px = ax + dx * k, py = ay + dy * k;
+  let nx = b.x - px, ny = b.y - py, d = Math.hypot(nx, ny);
+  if (d >= r) return false;
+  if (d < 1e-6) { nx = -dy; ny = dx; d = Math.hypot(nx, ny); }
+  nx /= d; ny /= d;
+  b.x = px + nx * r; b.y = py + ny * r;
+  const vn = b.vx * nx + b.vy * ny;
+  if (vn < 0) { b.vx -= (1 + e) * vn * nx; b.vy -= (1 + e) * vn * ny; }
+  if (kick) { b.vx += nx * kick; b.vy += ny * kick; }
+  return true;
+}
+function toLane(b, wait = 0.9) { Object.assign(b, { x: 348, y: 770, vx: 0, vy: 0, mode: 'lane', wait, still: 0 }); }
+
+function physics(st, t, dt, beat, bass) {
+  const b = st.ball;
+  // flipper state: music beat flips the nearer flipper, and a flipper also fires when the ball is about to drain on its side
+  if (b.mode === 'play') {
+    if (beat && b.y > 470) { const i = b.x < CX ? 0 : 1; st.flip[i].hold = 0.16; }
+    if (beat) { b.vy -= 70 + 140 * bass; b.vx += (Math.random() - 0.5) * 160; }
+    for (let i = 0; i < 2; i++) {
+      const dx = (b.x - FLIP.px[i]) * (i ? -1 : 1);
+      if (b.y > 600 && b.y < 700 && dx > -14 && dx < FLIP.len + 12 && b.vy > -50) st.flip[i].hold = Math.max(st.flip[i].hold, 0.15);
+    }
+  }
+  const prevA = st.flip.map((f) => f.a);
+  st.flip.forEach((f) => {
+    f.hold = Math.max(0, f.hold - dt);
+    const target = f.hold > 0 ? FLIP.up : FLIP.rest, step = 20 * dt;
+    f.a += clamp(target - f.a, -step, step);
+  });
+  if (b.mode === 'lane') {
+    b.wait -= dt;
+    if (b.wait <= 0) { b.mode = 'play'; b.vy = -1180 - 60 * bass; b.vx = 0; }
+    return;
+  }
+  const n = Math.max(1, Math.ceil(dt / 0.004)), h = dt / n;
+  for (let s = 0; s < n; s++) {
+    b.vy += 900 * h; b.x += b.vx * h; b.y += b.vy * h;
+    const sp = Math.hypot(b.vx, b.vy); if (sp > 1300) { b.vx *= 1300 / sp; b.vy *= 1300 / sp; }
+    for (const [[ax, ay], [bx, by]] of SEGS) hitSeg(b, ax, ay, bx, by, 0.45, 0, 7);
+    BUMPERS.forEach(([x, y], i) => {
+      const dx = b.x - x, dy = b.y - y, d = Math.hypot(dx, dy);
+      if (d < 28 + 7) {
+        const nx = dx / d, ny = dy / d; b.x = x + nx * 35; b.y = y + ny * 35;
+        const v = Math.max(360, Math.hypot(b.vx, b.vy) * 0.9); b.vx = nx * v; b.vy = ny * v;
+        st.bump[i] = 1; st.score += 100;
+      }
+    });
+    SLINGS.forEach(([[ax, ay], [bx, by]], i) => { if (hitSeg(b, ax, ay, bx, by, 0.6, 300, 8)) { st.sling[i] = 1; st.score += 50; } });
+    for (let i = 0; i < 2; i++) {
+      const [x1, y1, x2, y2] = flipTip(i, st.flip[i].a), swing = Math.abs(st.flip[i].a - prevA[i]) > 1e-4 && st.flip[i].a < prevA[i];
+      hitSeg(b, x1, y1, x2, y2, 0.3, swing ? 520 : 0, 13);
+    }
+  }
+  if (b.y > 706 && b.x < 336) toLane(b);
+  if (Math.hypot(b.vx, b.vy) < 10) b.still += dt; else b.still = 0;
+  if (b.still > 1.6) toLane(b, 0.4);
+}
+
+// ---- drawing
+function lampRing(g, t, pal, lvl) {
+  const pts = [];
+  for (let i = 0; i <= 30; i++) { const a = Math.PI - i * Math.PI / 30; pts.push([192 + Math.cos(a) * 178, 192 - Math.sin(a) * 178]); }
+  for (let y = 210; y < 790; y += 36) { pts.unshift([14, y]); }
+  for (let y = 210; y < 790; y += 36) { pts.push([370, y]); }
+  const ph = t * (2 + lvl * 8);
+  pts.forEach(([x, y], i) => {
+    const lit = Math.sin(i * 0.9 - ph) > 0.2;
+    g.fillStyle = lit ? pal.lamp : pal.white; g.globalAlpha = lit ? 1 : 0.55;
+    g.beginPath(); g.arc(x, y, lit ? 3.4 : 2.6, 0, TAU); g.fill();
+    if (lit) { g.save(); g.shadowColor = pal.lamp; g.shadowBlur = 8; g.fill(); g.restore(); }
+  });
+  g.globalAlpha = 1;
+}
+function bumper(g, x, y, glow, band, pal, i) {
+  const s = 1 + 0.12 * glow;
+  g.save(); g.translate(x, y); g.scale(s, s);
+  g.fillStyle = pal.white; star(g, 0, 0, 33, 25, 16); g.fill();
+  g.fillStyle = pal.field; for (let k = 0; k < 16; k++) { const a = -Math.PI / 2 + k * TAU / 16; g.beginPath(); g.moveTo(Math.cos(a - 0.08) * 26, Math.sin(a - 0.08) * 26); g.lineTo(Math.cos(a) * 33, Math.sin(a) * 33); g.lineTo(Math.cos(a + 0.08) * 26, Math.sin(a + 0.08) * 26); g.closePath(); if (k % 2) g.fill(); }
+  g.fillStyle = pal.white; g.beginPath(); g.arc(0, 0, 22, 0, TAU); g.fill();
+  g.strokeStyle = pal.frame; g.lineWidth = 2.5; g.stroke();
+  const lit = clamp(glow * 0.9 + band * 0.9);
+  g.fillStyle = lit > 0.35 ? pal.accent : pal.cream; g.beginPath(); g.arc(0, 0, 16, 0, TAU); g.fill();
+  if (lit > 0.35) { g.save(); g.shadowColor = pal.accent; g.shadowBlur = 14 * lit; g.fill(); g.restore(); }
+  g.fillStyle = pal.frame; star(g, 0, 0, 11, 4.6, 5); g.fill();
+  g.restore();
+}
+function arm(g, side, count, pal) {
+  // a lightning arm from the upper corner to the centre; six inserts on it
+  const a = [side < 0 ? 48 : 312, 340], b = [side < 0 ? 168 : 192, 478];
+  g.save(); g.lineCap = 'round'; g.lineJoin = 'round';
+  g.strokeStyle = pal.frame; g.lineWidth = 34; g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke();
+  g.strokeStyle = pal.accent; g.lineWidth = 4; g.beginPath(); g.moveTo(a[0] + side * -8, a[1] - 10); g.lineTo(b[0] + side * -8, b[1] - 6); g.stroke();
+  g.beginPath(); g.moveTo(a[0] + side * 8, a[1] + 10); g.lineTo(b[0] + side * 8, b[1] + 6); g.stroke();
+  for (let i = 0; i < 6; i++) {
+    const k = (i + 0.7) / 6.6, x = a[0] + (b[0] - a[0]) * k, y = a[1] + (b[1] - a[1]) * k, on = i < count;
+    g.fillStyle = on ? pal.accent : pal.dark; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill();
+    g.strokeStyle = pal.cream; g.lineWidth = 1.5; g.stroke();
+    if (on) { g.save(); g.shadowColor = pal.accent; g.shadowBlur = 9; g.fill(); g.restore(); }
+  }
+  g.restore();
+}
+function ladder(g, n, pal, st, t) {
+  const spots = [];
+  for (let i = 0; i < 5; i++) spots.push([i + 1, 140 + i * 9, 446 + i * 20, 8.5]);
+  for (let i = 0; i < 4; i++) spots.push([9 - i, 220 - i * 9, 446 + i * 20, 8.5]);
+  spots.push([10, CX, 536, 11], [20, CX, 566, 14]);
+  const flash = t - st.flash < 0.5 && Math.floor(t * 12) % 2;
+  g.save(); g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const [k, x, y, r] of spots) {
+    const on = k === 20 ? n >= 10 : k === 10 ? n >= 9.5 : n >= k || flash;
+    g.fillStyle = on ? pal.accent : pal.cream; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    g.strokeStyle = pal.frame; g.lineWidth = 2; g.stroke();
+    if (on) { g.save(); g.shadowColor = pal.accent; g.shadowBlur = 10; g.fill(); g.restore(); }
+    g.fillStyle = pal.dark; g.font = `800 ${r * 1.1}px ${SANS}`; g.fillText(String(k), x, y + 0.5);
+  }
+  g.restore();
+}
+function scoreBox(g, score, pal) {
+  const d = String(Math.floor(score) % 1000000).padStart(6, '0');
+  g.fillStyle = '#0a0a0a'; rr(g, 58, 376, 244, 38, 8); g.fill(); g.strokeStyle = pal.accent; g.lineWidth = 2; g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let i = 0; i < 6; i++) {
+    const x = 84 + i * 38;
+    g.fillStyle = pal.white; g.beginPath(); g.arc(x, 395, 14, 0, TAU); g.fill();
+    g.fillStyle = pal.dark; g.font = `800 19px ${SANS}`; g.fillText(d[i], x, 396);
+  }
+  g.textBaseline = 'alphabetic';
+}
+function flipper(g, i, a, pal) {
+  const [x1, y1, x2, y2] = flipTip(i, a);
+  g.save(); g.lineCap = 'round';
+  g.strokeStyle = pal.dark; g.lineWidth = 20; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.strokeStyle = pal.white; g.lineWidth = 16; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  g.strokeStyle = pal.accent; g.lineWidth = 5; g.beginPath(); g.moveTo(x1 + (x2 - x1) * 0.12, y1 + (y2 - y1) * 0.12); g.lineTo(x1 + (x2 - x1) * 0.8, y1 + (y2 - y1) * 0.8); g.stroke();
+  g.fillStyle = pal.frame; g.beginPath(); g.arc(x1, y1, 5, 0, TAU); g.fill();
+  g.restore();
+}
+function ball(g, b) {
+  const gr = g.createRadialGradient(b.x - 2.5, b.y - 3, 1, b.x, b.y, 8);
+  gr.addColorStop(0, '#fff'); gr.addColorStop(0.5, '#a9b2bd'); gr.addColorStop(1, '#3b4350');
+  g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(b.x + 3, b.y + 4, 7, 5, 0, 0, TAU); g.fill();
+  g.fillStyle = gr; g.beginPath(); g.arc(b.x, b.y, 7, 0, TAU); g.fill();
+}
+
+function table(g, t, pal, tr, bands, st, dt, text) {
+  const bass = avg(bands, 0, 4), lvl = avg(bands, 0, NB);
+  st.slow += (bass - st.slow) * Math.min(1, dt * 1.4);
+  const beat = bass > st.slow * 1.22 + 0.04 && t - st.last > 0.42;
+  if (beat) {
+    st.last = t; st.n++;
+    st.drop[st.nd % 8] = true; st.nd++;
+    if (st.drop.every(Boolean)) { st.flash = t; st.score += 1000; }
+  }
+  if (t - st.flash > 0.5 && st.drop.every(Boolean)) st.drop.fill(false);
+  physics(st, t, dt, beat, bass);
+  st.bump = st.bump.map((v) => Math.max(0, v - dt * 7)); st.sling = st.sling.map((v) => Math.max(0, v - dt * 7));
+  st.bonus = Math.max(clamp(lvl * 1.7) * 10, st.bonus - dt * 2.5);
+
+  if (text === null) return;
+  // outer frame and star rim
+  g.fillStyle = pal.frame;
+  g.beginPath(); g.moveTo(4, 800); g.lineTo(4, 192); g.arc(192, 192, 188, Math.PI, 0); g.lineTo(380, 800); g.closePath(); g.fill();
+  lampRing(g, t, pal, lvl);
+  // field
+  g.save();
+  g.beginPath(); g.moveTo(24, 800); g.lineTo(24, 192); g.arc(192, 192, 168, Math.PI, 0); g.lineTo(360, 800); g.closePath(); g.clip();
+  const fg = g.createLinearGradient(0, 0, 0, 700); fg.addColorStop(0, pal.field); fg.addColorStop(0.55, pal.field); fg.addColorStop(1, pal.field2);
+  g.fillStyle = fg; g.fillRect(0, 0, 384, 800);
+  // sky strip with clouds behind the lower part
+  g.fillStyle = pal.white; g.globalAlpha = 0.55;
+  [[60, 600, 46, 10], [110, 612, 40, 8], [300, 596, 40, 9], [260, 610, 36, 7]].forEach(([x, y, rx, ry]) => { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill(); });
+  g.globalAlpha = 1;
+  // top: centre badge
+  g.fillStyle = pal.frame; g.beginPath(); g.moveTo(CX - 40, 52); g.lineTo(CX + 40, 52); g.lineTo(CX, 168); g.closePath(); g.fill();
+  g.strokeStyle = pal.accent; g.lineWidth = 3; g.stroke();
+  g.fillStyle = pal.accent; star(g, CX, 92, 13, 5.5, 5); g.fill();
+  T(g, 'MAGNETITE', CX, 40, { size: 11, weight: 800, color: pal.white, align: 'center', ls: 3 });
+  // four top lanes = the highs
+  [92, 128, 232, 268].forEach((x, i) => {
+    const v = avg(bands, 18 + i * 3, 21 + i * 3) * 1.5, on = v > 0.32;
+    rr(g, x - 7, 100, 14, 46, 7); g.fillStyle = on ? pal.lamp : pal.dark; g.fill(); g.strokeStyle = pal.white; g.lineWidth = 2; g.stroke();
+    if (on) { g.save(); g.shadowColor = pal.lamp; g.shadowBlur = 12; g.fill(); g.restore(); }
+  });
+  arm(g, -1, Math.round(clamp(st.L) * 6), pal); arm(g, 1, Math.round(clamp(st.R) * 6), pal);
+  ladder(g, st.bonus, pal, st, t);
+  scoreBox(g, st.score, pal);
+  BUMPERS.forEach(([x, y], i) => bumper(g, x, y, st.bump[i], avg(bands, 4 + i * 5, 9 + i * 5) * 1.2, pal, i));
+  // drop targets
+  for (let i = 0; i < 8; i++) {
+    const left = i < 4, x = left ? 27 : 321, y = 290 + (i % 4) * 28;
+    g.fillStyle = st.drop[i] ? pal.dark : pal.white; rr(g, x, y, 12, 22, 3); g.fill(); g.strokeStyle = pal.frame; g.lineWidth = 2; g.stroke();
+  }
+  // slings
+  SLINGS.forEach(([[ax, ay], [bx, by]], i) => {
+    const side = i ? 1 : -1, x0 = i ? 316 : 44;
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.lineTo(x0, 548); g.lineTo(x0, ay); g.closePath();
+    g.fillStyle = pal.frame; g.fill(); g.strokeStyle = st.sling[i] > 0 ? pal.lamp : pal.white; g.lineWidth = 2 + st.sling[i] * 2; g.stroke();
+    g.fillStyle = pal.white; for (let k = 0; k < 4; k++) { g.beginPath(); g.arc(ax + (bx - ax) * (k + 0.5) / 4 + side * -6, ay + (by - ay) * (k + 0.5) / 4, 2, 0, TAU); g.fill(); }
+  });
+  // lane + guides + apron
+  g.fillStyle = pal.wood; g.fillRect(338, 230, 22, 570);
+  g.strokeStyle = pal.frame; g.lineWidth = 7; g.lineCap = 'round';
+  [[[24, 560], [126, 640]], [[336, 560], [234, 640]]].forEach(([[ax, ay], [bx, by]]) => { g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); });
+  g.strokeStyle = pal.white; g.lineWidth = 2; g.setLineDash([1, 9]);
+  [[[24, 560], [126, 640]], [[336, 560], [234, 640]]].forEach(([[ax, ay], [bx, by]]) => { g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke(); });
+  g.setLineDash([]);
+  g.fillStyle = pal.cream;
+  g.beginPath(); g.moveTo(24, 572); g.lineTo(122, 648); g.lineTo(126, 704); g.lineTo(24, 704); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(336, 572); g.lineTo(238, 648); g.lineTo(234, 704); g.lineTo(336, 704); g.closePath(); g.fill();
+  g.fillRect(24, 704, 336, 100);
+  g.fillStyle = '#070707'; g.fillRect(126, 700, 108, 6);
+  g.fillStyle = pal.frame; g.fillRect(24, 700, 336, 4);
+  // plunger (the spring squeezes while the ball waits)
+  const sq = st.ball.mode === 'lane' ? clamp(1 - st.ball.wait / 0.9) * 14 : 0;
+  g.fillStyle = '#8a8a8a'; g.fillRect(345, 780 + sq, 6, 20); g.fillStyle = pal.frame; rr(g, 340, 776 + sq, 16, 6, 2); g.fill();
+  flipper(g, 0, st.flip[0].a, pal); flipper(g, 1, st.flip[1].a, pal);
+  ball(g, st.ball);
+
+  // apron: plaque, cards
+  if (text) {
+    g.fillStyle = pal.frame; rr(g, 140, 716, 104, 70, 10); g.fill();
+    T(g, fit(g, tr.title, 92, { size: 15, weight: 700, style: 'italic', font: SERIF }), 192, 748, { size: 15, weight: 700, style: 'italic', font: SERIF, color: pal.white, align: 'center', ls: 0 });
+    T(g, fit(g, tr.name.toUpperCase(), 92, { size: 8, weight: 700, ls: 1.2 }), 192, 768, { size: 8, weight: 700, color: pal.cream, align: 'center', ls: 1.2 });
+    const card = (x, lines) => {
+      g.fillStyle = pal.white; rr(g, x, 716, 100, 70, 3); g.fill(); g.strokeStyle = pal.frame; g.lineWidth = 1.5; g.stroke();
+      lines.forEach(([s, bold], i) => T(g, fit(g, s, 86, { size: 8, font: MONO, ls: 0.3 }), x + 8, 733 + i * 12, { size: 8, weight: bold ? 800 : 400, color: bold ? pal.frame : pal.dark, font: MONO, ls: 0.3 }));
+    };
+    card(32, [['THE FILE', 1], [tr.album || 'single', 0], [tr.year || '-', 0], [[tr.codec, tr.bits].join(' '), 0], [tr.dr || 'no DR', 0]]);
+    card(252, [['PLAYING', 1], [`TRACK ${tr.n}/${tr.of}`, 0], [`${mmss(st.el)} / ${mmss(tr.dur)}`, 0], [`BALL ${1 + (st.n >> 5) % 3}`, 0], ['SCORE ' + String(Math.floor(st.score) % 1000000), 0]]);
+  }
+  g.restore();
+}
+
+function poster(g, t, pal, tr, o) {
+  const st = stateOf(g.canvas), dt = st.prev === null ? 0.016 : clamp(t - st.prev, 0.001, 0.033); st.prev = t;
+  const base = o.auto ? 0.55 + 0.25 * Math.sin(t * 0.35) : o.lvl * 1.4;
+  const bands = fakeBands(t, base);
+  st.L = avg(bands, 0, 14) * 1.5 + 0.1 * Math.sin(t * 5.3); st.R = avg(bands, 0, 14) * 1.5 + 0.1 * Math.sin(t * 4.1 + 1);
+  st.el = t % tr.dur;
+  if (o.text === null) { table(g, t, pal, tr, bands, st, dt, null); return; }
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = pal.bg; g.fillRect(0, 0, W, H);
+  g.save(); g.translate(108, 0); table(g, t, pal, tr, bands, st, dt, o.text); g.restore();
+  if (o.text) {
+    g.save(); g.translate(58, 400); g.rotate(-Math.PI / 2);
+    T(g, 'MAGNETITE  ·  NOW PLAYING', 0, 0, { size: 11, color: pal.mute, font: MONO, align: 'center', ls: 3 });
+    g.restore();
+    const n = 40, on = Math.floor(st.el / tr.dur * n);
+    for (let i = 0; i < n; i++) { g.fillStyle = i < on ? pal.fg : 'rgba(255,255,255,0.12)'; g.fillRect(548, 740 - i * 17 - 12, 12, 12); }
+    T(g, mmss(st.el), 554, 780, { size: 11, color: pal.mute, font: MONO, align: 'center', ls: 1 });
+  }
+}
+
+// ---- page
+const grid = $('grid'), cards = [];
+PALS.forEach(([name, pal]) => {
+  const fig = document.createElement('figure'), c = document.createElement('canvas');
+  c.width = W * 2; c.height = H * 2;
+  const cap = document.createElement('figcaption'); cap.textContent = name;
+  fig.append(c, cap); grid.append(fig);
+  cards.push({ g: c.getContext('2d'), pal });
+});
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+let T0 = 0;
+function frame(ms) {
+  const t = (ms + T0) / 1000;
+  const o = { text: $('text').checked, auto: $('auto').checked, lvl: +$('lvl').value };
+  for (const { g, pal } of cards) { g.save(); g.scale(2, 2); poster(g, t, pal, TRACKS[ti], o); g.restore(); }
+  requestAnimationFrame(frame);
+}
+// ?warm=40 runs 40 s of the table before the first frame (for screenshots and checks)
+const warm = +new URLSearchParams(location.search).get('warm') || 0;
+for (let k = 0; k < warm * 60; k++) for (const { g, pal } of cards) poster(g, k / 60, pal, TRACKS[ti], { text: null, auto: true, lvl: 0.5 });
+T0 = warm * 1000;
+requestAnimationFrame(frame);
+</script>

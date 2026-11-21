@@ -1,0 +1,318 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Play &amp; Watch</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a "Play & Watch" poster meter: a 1980s handheld LCD game (wide screen, a "Parachute"-style rescue game) drawn from
+   scratch as vector shapes; the badge says PLAY & WATCH / Magnetite, no real brand or artwork is used.
+   Meters: on every bass beat the helicopter drops a parachutist who drifts to one of three lanes and is caught by the boat (the boat
+   steps to the lane of the next one to land); the three shark fins in the water are the mids (three band groups), the palms
+   shake with the highs, the helicopter bobs with the bass, the two red buttons press with the left and right channel, the ALARM
+   lamp lights on a strong beat, the LCD score is the elapsed time in 7 segments; movement is stepped (8 frames per fall) like
+   an LCD, with all positions faintly visible as on the real thing. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Play &amp; Watch</h1>
+  <p>A handheld LCD game as a meter. The helicopter drops a parachutist on every bass beat and the boat catches it; the sharks are the mids, the palms shake with the highs, the helicopter bobs with the bass, the red buttons press with the left and right channel. The score is the elapsed time.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Brown and gold', { bg:'#17120f', fg:'#ece3d0', mute:'#8f8574', shell:'#5a3320', face:'#c9a96a', bezel:'#d8bd85', ink:'#1a1410', btn:'#8a6b52', red:'#d8222a', lcd1:'#b4b09c', lcd2:'#d8d6c4', lcd:'#1c1c18', badge:'#dfe4e8', water:'#3f8fc0', palm:'#2f8f4a' }],
+  ['Silver and blue', { bg:'#12161c', fg:'#e6e9ee', mute:'#838a94', shell:'#2d4f8f', face:'#c4c8cc', bezel:'#d6d9dc', ink:'#1a1c20', btn:'#f2f2ee', red:'#e8353f', lcd1:'#b0b6b4', lcd2:'#d4d8d2', lcd:'#1a1f1c', badge:'#f4f1ea', water:'#3a86c4', palm:'#3a9a52' }],
+  ['Black and orange', { bg:'#0f0f10', fg:'#ece8e2', mute:'#868079', shell:'#232323', face:'#2e2e2e', bezel:'#3a3a3a', ink:'#e9dfcb', btn:'#d9822b', red:'#e8472b', lcd1:'#b8b7a2', lcd2:'#dad9c6', lcd:'#1c1c18', badge:'#e9dfcb', water:'#3f8fc0', palm:'#2f8f4a' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12, lossless:true },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14, lossless:true },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1, lossless:false },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const avg = (a, i, j) => { let s = 0; for (let k = i; k < j; k++) s += a[k]; return s / (j - i); };
+
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+
+function rr(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+function T(g, s, x, y, o) {
+  g.font = `${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 1.3}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function fit(g, s, max, o) {
+  g.font = `${o.weight || 400} ${o.size}px ${o.font || SANS}`; g.letterSpacing = `${o.ls ?? 0}px`;
+  while (s.length > 3 && g.measureText(s).width > max) s = s.slice(0, -2).trimEnd() + '…';
+  g.letterSpacing = '0px';
+  return s;
+}
+
+// ---- seven segments
+const SEGS = ['abcdef', 'bc', 'abdeg', 'abcdg', 'bcfg', 'acdfg', 'acdefg', 'abc', 'abcdefg', 'abcdfg'];
+function seg7(g, x, y, h, d, on, off) {
+  const w = h * 0.55, t = h * 0.13, hh = h / 2;
+  const R = { a: [x + t, y, w - 2 * t, t], g: [x + t, y + hh - t / 2, w - 2 * t, t], d: [x + t, y + h - t, w - 2 * t, t],
+              f: [x, y + t, t, hh - t * 1.3], b: [x + w - t, y + t, t, hh - t * 1.3], e: [x, y + hh + t * 0.3, t, hh - t * 1.3], c: [x + w - t, y + hh + t * 0.3, t, hh - t * 1.3] };
+  for (const k of 'abcdefg') { g.fillStyle = SEGS[d].includes(k) ? on : off; g.fillRect(...R[k]); }
+}
+function clock(g, x, y, h, secs, on, off) {
+  const m = Math.floor(secs / 60) % 100, s = Math.floor(secs % 60), ds = [Math.floor(m / 10), m % 10, Math.floor(s / 10), s % 10];
+  const w = h * 0.55, gap = h * 0.2;
+  ds.forEach((d, i) => seg7(g, x + i * (w + gap) + (i > 1 ? gap * 1.4 : 0), y, h, d, on, off));
+  const cx = x + 2 * (w + gap) - gap * 0.2 + gap * 0.2;
+  g.fillStyle = on; g.fillRect(cx - 1.5, y + h * 0.3, 3, 3); g.fillRect(cx - 1.5, y + h * 0.65, 3, 3);
+}
+
+// ---- LCD figures (all drawn in the LCD's own 412 x 266 space)
+function chutist(g, x, y, k, ph) {
+  g.save(); g.translate(x, y);
+  if (k > 0) {
+    g.beginPath(); g.ellipse(0, -14, 14, 11, 0, Math.PI, 0); g.closePath(); g.fill();
+    g.lineWidth = 1.3; g.beginPath(); g.moveTo(-14, -14); g.lineTo(-3, 0); g.moveTo(14, -14); g.lineTo(3, 0); g.moveTo(0, -14); g.lineTo(0, 0); g.stroke();
+  }
+  g.lineWidth = 2.6;
+  g.beginPath(); g.arc(0, 4, 3.6, 0, TAU); g.fill();
+  g.beginPath(); g.moveTo(0, 8); g.lineTo(0, 17);
+  if (k > 0) { g.moveTo(-6, 11); g.lineTo(0, 9); g.lineTo(6, 11); g.moveTo(0, 17); g.lineTo(-4, 23 + ph); g.moveTo(0, 17); g.lineTo(4, 23 - ph); }
+  else { g.moveTo(-9, 6); g.lineTo(0, 10); g.lineTo(9, 6 + ph * 2); g.moveTo(0, 17); g.lineTo(-7, 22); g.moveTo(0, 17); g.lineTo(8, 21); }
+  g.stroke(); g.restore();
+}
+function boat(g, x, y, ink, ph) {
+  g.beginPath(); g.moveTo(x - 30, y); g.lineTo(x + 30, y); g.lineTo(x + 22, y + 11); g.lineTo(x - 22, y + 11); g.closePath(); g.fill();
+  g.beginPath(); g.arc(x - 2, y - 14, 3.8, 0, TAU); g.fill();
+  g.beginPath(); g.moveTo(x - 2, y - 10); g.lineTo(x - 2, y - 2); g.moveTo(x - 2, y - 8); g.lineTo(x + 14, y - 14 + ph * 3); g.moveTo(x - 2, y - 8); g.lineTo(x - 14, y - 4 - ph * 3); g.stroke();
+}
+function shark(g, x, y, v) {
+  const h = 6 + v * 14;
+  g.beginPath(); g.moveTo(x - 14, y); g.quadraticCurveTo(x - 4, y - h * 0.4, x + 2, y - h); g.quadraticCurveTo(x + 4, y - h * 0.3, x + 16, y); g.closePath(); g.fill();
+}
+function heli(g, x, y, ph) {
+  g.beginPath(); g.ellipse(x, y, 24, 11, 0, 0, TAU); g.fill();
+  g.beginPath(); g.moveTo(x + 18, y - 4); g.lineTo(x + 46, y - 12); g.lineTo(x + 46, y - 4); g.lineTo(x + 20, y + 4); g.closePath(); g.fill();
+  g.lineWidth = 2.6; g.beginPath(); g.moveTo(x, y - 11); g.lineTo(x, y - 17);
+  if (ph) { g.moveTo(x - 36, y - 17); g.lineTo(x + 36, y - 17); } else { g.moveTo(x - 24, y - 19); g.lineTo(x + 30, y - 15); }
+  g.moveTo(x - 14, y + 14); g.lineTo(x + 16, y + 14); g.moveTo(x - 8, y + 10); g.lineTo(x - 8, y + 14); g.moveTo(x + 8, y + 10); g.lineTo(x + 8, y + 14); g.stroke();
+}
+function palm(g, x, y, dir, sway, pal) {
+  g.save(); g.strokeStyle = pal.palm; g.fillStyle = pal.palm;
+  g.lineWidth = 7; g.beginPath(); g.moveTo(x, 205); g.quadraticCurveTo(x + dir * 6, 140, x + dir * 2, y); g.stroke();
+  g.lineWidth = 4;
+  [-1.2, -0.6, 0, 0.6, 1.2].forEach((a) => {
+    const aa = a + sway * (a < 0 ? -1 : 1);
+    g.beginPath(); g.moveTo(x + dir * 2, y); g.quadraticCurveTo(x + dir * 2 + Math.sin(aa) * 26, y - 20 - Math.abs(Math.cos(aa)) * 6, x + dir * 2 + Math.sin(aa) * 40, y + 8 + Math.abs(aa) * 12); g.stroke();
+  });
+  g.restore();
+}
+
+// ---- per-canvas state (never module level: the thumbnails draw on another canvas)
+const states = new WeakMap();
+function stateOf(c) { if (!states.has(c)) states.set(c, { jumps: [], last: -9, slow: 0.3, prev: null, n: 0, pos: 1, alarm: -9, L: 0, R: 0, hit: -9 }); return states.get(c); }
+
+const LX = [96, 188, 280];          // the three landing lanes (and the boat's stops)
+const HX = 330, HY = 36;            // helicopter
+const STEP = 0.26, NSTEP = 8;       // one LCD frame; steps per fall
+const WATER = 206;                  // top of the water
+
+function lcd(g, t, pal, tr, bands, lv, st, dt) {
+  const bass = avg(bands, 0, 4), lvl = avg(bands, 0, NB), hi = avg(bands, 18, NB);
+  st.slow += (bass - st.slow) * Math.min(1, dt * 1.4);
+  const beat = bass > st.slow * 1.22 + 0.04 && t - st.last > 0.42 && st.jumps.length < 6;
+  if (beat || (t - st.last > 2.2 && st.jumps.length < 2)) {
+    st.last = t; st.n++;
+    st.jumps.push({ t0: t, lane: (st.n * 5 + (st.n >> 1)) % 3 });
+    if (beat && bass > 0.55) st.alarm = t;
+  }
+  st.jumps = st.jumps.filter((j) => t - j.t0 < STEP * NSTEP);
+  const ink = pal.lcd, ghost = 0.07;
+  const kOf = (j) => Math.floor((t - j.t0) / STEP);
+  const posOf = (lane, k) => {
+    const m = Math.min(1, k / 3);
+    return [HX + (LX[lane] - HX) * m, 46 + k * 20];
+  };
+
+  // printed background (colour under the LCD): water, palms
+  g.save();
+  g.globalAlpha = 0.5; g.fillStyle = pal.water; g.fillRect(0, WATER, 412, 266 - WATER);
+  g.strokeStyle = pal.water; g.lineWidth = 2; g.globalAlpha = 0.9;
+  for (let y = WATER + 6; y < 262; y += 12) { g.beginPath(); for (let x = 0; x <= 412; x += 12) g.lineTo(x, y + ((x / 12) % 2 ? 2 : -2)); g.stroke(); }
+  g.globalAlpha = 0.65; palm(g, 22, 112, 1, 0.12 * Math.sin(t * 7) * hi * 3, pal); palm(g, 392, 150, -1, 0.12 * Math.sin(t * 6 + 1) * hi * 3, pal);
+  g.restore();
+
+  // ghost layer: every position that can be lit, faintly
+  g.save(); g.fillStyle = ink; g.strokeStyle = ink; g.lineCap = 'round'; g.lineJoin = 'round'; g.globalAlpha = ghost;
+  for (let l = 0; l < 3; l++) { for (let k = 0; k < NSTEP; k++) { const [x, y] = posOf(l, k); chutist(g, x, y, k, 0); } boat(g, LX[l], WATER - 2, ink, 0); }
+  [90, 200, 310].forEach((x) => shark(g, x, 258, 0.5));
+  heli(g, HX, HY, 1); heli(g, HX, HY, 0);
+  g.restore();
+  clock(g, 44, 8, 30, 0, 'rgba(0,0,0,0)', 'rgba(0,0,0,0.07)');
+  T(g, 'AM', 24, 30, { size: 12, weight: 700, color: ink, ls: 0.3 }); g.globalAlpha = 1;
+
+  // score = elapsed time
+  clock(g, 44, 8, 30, st.el, ink, 'rgba(0,0,0,0.07)');
+
+  g.fillStyle = ink; g.strokeStyle = ink; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 2.6;
+
+  // helicopter: rotor steps, body bobs with the bass
+  heli(g, HX, HY + (bass > 0.5 ? 2 : 0), Math.floor(t * 8) % 2);
+
+  // boat: steps to the lane of the first parachutist that is about to land
+  const next = st.jumps.filter((j) => kOf(j) >= 3).sort((a, b) => a.t0 - b.t0)[0];
+  if (next) st.pos = next.lane;
+  boat(g, LX[st.pos], WATER - 2 + (st.jumps.some((j) => kOf(j) >= NSTEP - 1 && j.lane === st.pos) ? 3 : 0), ink, Math.floor(t * 5) % 2);
+
+  // parachutists
+  for (const j of st.jumps) {
+    const k = kOf(j); if (k >= NSTEP - 1) continue;
+    const [x, y] = posOf(j.lane, k);
+    chutist(g, x, y, k, Math.floor(t * 6) % 2);
+  }
+
+  // sharks: three fins in the water, the mids in three groups
+  [90, 200, 310].forEach((x, i) => { const v = avg(bands, 4 + i * 5, 9 + i * 5) * 1.3; if (v > 0.18) shark(g, x, 260, clamp(v)); });
+
+  T(g, 'GAME A', 6, 262, { size: 11, weight: 700, color: ink, ls: 0.3 }); g.globalAlpha = tr.lossless ? 1 : 0.15;
+  T(g, 'GAME A', 6, 262, { size: 11, weight: 700, color: ink, ls: 0.3 }); g.globalAlpha = 1;
+  T(g, 'GAME B', 406, 262, { size: 11, weight: 700, color: ink, align: 'right', ls: 0.3 });
+  return { bass, lvl };
+}
+
+function device(g, t, pal, tr, bands, lv, st, dt, text) {
+  const ink = pal.ink;
+  // shell and face
+  g.fillStyle = pal.shell; rr(g, 0, 0, 874, 529, 16); g.fill();
+  const fg = g.createLinearGradient(0, 28, 0, 498); fg.addColorStop(0, pal.bezel); fg.addColorStop(1, pal.face);
+  g.fillStyle = fg; rr(g, 14, 26, 846, 474, 8); g.fill();
+  // raised bezel around the screen
+  g.fillStyle = pal.bezel; rr(g, 172, 52, 520, 420, 14); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 2; g.stroke();
+  // black frame line with gaps for the two labels
+  g.strokeStyle = ink; g.lineWidth = 2.5;
+  g.beginPath();
+  g.moveTo(330, 97); g.lineTo(207, 97); g.arcTo(195, 97, 195, 109, 12); g.lineTo(195, 423); g.arcTo(195, 435, 207, 435, 12); g.lineTo(350, 435);
+  g.moveTo(520, 435); g.lineTo(665, 435); g.arcTo(677, 435, 677, 423, 12); g.lineTo(677, 109); g.arcTo(677, 97, 665, 97, 12); g.lineTo(500, 97);
+  g.stroke();
+  T(g, text ? fit(g, tr.title.toUpperCase(), 150, { size: 17, weight: 700, ls: 1 }) : 'PARACHUTE', 436, 104, { size: 17, weight: 700, color: ink, align: 'center', ls: 1 });
+  T(g, text && tr.album ? fit(g, tr.album.toUpperCase(), 160, { size: 17, weight: 700, ls: 1 }) : 'WIDE SCREEN', 436, 442, { size: 17, weight: 700, color: ink, align: 'center', ls: 1 });
+  // blue screen rim and LCD
+  g.fillStyle = pal.shell; rr(g, 210, 113, 452, 305, 16); g.fill();
+  g.fillStyle = '#0d1b3a'; rr(g, 225, 127, 422, 276, 8); g.fill();
+  g.save(); g.translate(230, 132); rr(g, 0, 0, 412, 266, 6); g.clip();
+  const lg = g.createLinearGradient(0, 0, 0, 266); lg.addColorStop(0, pal.lcd1); lg.addColorStop(0.55, pal.lcd2); lg.addColorStop(1, pal.lcd1);
+  g.fillStyle = lg; g.fillRect(0, 0, 412, 266);
+  const r = lcd(g, t, pal, tr, bands, lv, st, dt);
+  const gl = g.createLinearGradient(0, 0, 412, 266); gl.addColorStop(0, 'rgba(255,255,255,0.16)'); gl.addColorStop(0.5, 'rgba(255,255,255,0)'); gl.addColorStop(1, 'rgba(0,0,0,0.06)');
+  g.fillStyle = gl; g.fillRect(0, 0, 412, 266);
+  g.restore();
+
+  // badge
+  g.fillStyle = pal.badge; rr(g, 38, 84, 106, 62, 6); g.fill(); g.strokeStyle = '#1a1a1a'; g.lineWidth = 1.5; g.stroke();
+  T(g, 'PLAY', 91, 113, { size: 26, weight: 800, color: '#1a1a1a', align: 'center', ls: -1, font: SANS });
+  T(g, '& WATCH', 91, 138, { size: 22, weight: 800, color: '#1a1a1a', align: 'center', ls: -0.5, font: SANS });
+  T(g, 'Magnetite', 91, 172, { size: 17, weight: 700, color: '#1a1a1a', align: 'center', ls: 0.3, font: '"Times New Roman", Times, serif' });
+
+  // top-right buttons, labels, lamps
+  [['GAME A', 72], ['GAME B', 132], ['TIME', 193]].forEach(([s, y]) => {
+    g.fillStyle = pal.shell; rr(g, 733, y - 20, 54, 38, 19); g.fill();
+    g.fillStyle = pal.btn; rr(g, 739, y - 14, 42, 26, 13); g.fill();
+    T(g, s, 759, y + 38, { size: 13, weight: 600, color: ink, align: 'center', ls: 0.4 });
+  });
+  const alarm = t - st.alarm < 0.22, acl = tr.lossless;
+  [['ALARM', 102, alarm], ['ACL', 162, acl]].forEach(([s, y, on]) => {
+    g.fillStyle = on ? pal.red : '#7d7d78'; g.beginPath(); g.arc(819, y, 8, 0, TAU); g.fill();
+    g.strokeStyle = '#3a3a38'; g.lineWidth = 2; g.stroke();
+    if (on) { g.save(); g.shadowColor = pal.red; g.shadowBlur = 14; g.fill(); g.restore(); }
+    T(g, s, 819, y + 24, { size: 10.5, weight: 600, color: ink, align: 'center', ls: 0.4 });
+  });
+
+  // big buttons press with the left and right channel
+  [[98, st.L, '◄ LEFT', 100], [773, st.R, 'RIGHT ►', 773]].forEach(([cx, v, s, lx]) => {
+    const press = v > 0.5 ? (v - 0.5) * 2 : 0;
+    g.fillStyle = pal.shell; g.beginPath(); g.arc(cx, 372, 41, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.arc(cx, 374, 32, 0, TAU); g.fill();
+    g.fillStyle = pal.red; g.beginPath(); g.arc(cx, 372 + press * 3, 31 - press * 1.5, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.28)'; g.beginPath(); g.ellipse(cx - 7, 362 + press * 3, 13, 8, -0.5, 0, TAU); g.fill();
+    T(g, s, lx, 444, { size: 15, weight: 800, color: ink, align: 'center', ls: 0.6 });
+  });
+  return r;
+}
+
+function poster(g, t, pal, tr, o) {
+  const st = stateOf(g.canvas), dt = st.prev === null ? 0.016 : Math.min(0.1, t - st.prev); st.prev = t;
+  const base = o.auto ? 0.55 + 0.25 * Math.sin(t * 0.35) : o.lvl * 1.4;
+  const bands = fakeBands(t, base);
+  st.L = clamp(avg(bands, 0, 14) * 1.5 + 0.1 * Math.sin(t * 5.3)); st.R = clamp(avg(bands, 0, 14) * 1.5 + 0.1 * Math.sin(t * 4.1 + 1));
+  st.el = (t % tr.dur);
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = pal.bg; g.fillRect(0, 0, W, H);
+  const f = o.text;
+  if (f) {
+    T(g, 'MAGNETITE  ·  NOW PLAYING', 20, 44, { size: 11, color: pal.mute, font: MONO, ls: 2 });
+    T(g, `${String(tr.n).padStart(2, '0')}/${String(tr.of).padStart(2, '0')}`, 580, 44, { size: 11, color: pal.mute, font: MONO, align: 'right', ls: 2 });
+    T(g, fit(g, tr.title, 560, { size: 36, weight: 700 }), 20, 108, { size: 36, weight: 700, color: pal.fg, ls: -0.5 });
+    T(g, tr.name, 20, 140, { size: 18, color: pal.mute, ls: 0.2 });
+  }
+  g.save(); g.translate(20, 215); g.scale(560 / 874, 560 / 874);
+  device(g, t, pal, tr, bands, st, st, dt, f);
+  g.restore();
+  if (f) {
+    const y = 622;
+    const row = [tr.album && `${tr.album}${tr.year ? ' · ' + tr.year : ''}`].filter(Boolean)[0] || '';
+    T(g, fit(g, row, 560, { size: 15 }), 20, y, { size: 15, color: pal.fg, ls: 0.2 });
+    T(g, [tr.codec, tr.bits, tr.dr].filter(Boolean).join('  ·  '), 20, y + 26, { size: 12, color: pal.mute, font: MONO, ls: 1.5 });
+    // LCD-style progress: 40 cells
+    const n = 40, on = Math.floor(st.el / tr.dur * n);
+    for (let i = 0; i < n; i++) { g.fillStyle = i < on ? pal.fg : 'rgba(255,255,255,0.12)'; g.fillRect(20 + i * 14, y + 52, 10, 12); }
+    T(g, mmss(st.el), 20, y + 88, { size: 12, color: pal.mute, font: MONO, ls: 1.5 });
+    T(g, mmss(tr.dur), 580, y + 88, { size: 12, color: pal.mute, font: MONO, align: 'right', ls: 1.5 });
+  }
+}
+
+// ---- page
+const grid = $('grid'), cards = [];
+PALS.forEach(([name, pal], i) => {
+  const fig = document.createElement('figure'), c = document.createElement('canvas');
+  c.width = W * 2; c.height = H * 2;
+  const cap = document.createElement('figcaption'); cap.textContent = name;
+  fig.append(c, cap); grid.append(fig);
+  cards.push({ g: c.getContext('2d'), pal });
+});
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+function frame(ms) {
+  const t = ms / 1000;
+  const o = { text: $('text').checked, auto: $('auto').checked, lvl: +$('lvl').value };
+  for (const { g, pal } of cards) { g.save(); g.scale(2, 2); poster(g, t, pal, TRACKS[ti], o); g.restore(); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>

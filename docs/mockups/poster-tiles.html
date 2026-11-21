@@ -1,0 +1,226 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Magnetite Poster: Tiles</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Mockup of a "Tiles" poster meter: a one-ink print poster on a flat colour (halftone dot tiles, solid blocks, hatched tiles, a
+   heavy grotesque title, small italic credits, specks of print wear), in the style of a puzzle-game poster. An original design: the
+   layout idea is borrowed, no artwork, name or credits are.
+   Meters: ten columns of ten tiles, one column per band group (three of the 30 bands each); a column is filled with dotted tiles
+   to its level and ends in a solid black block, a hatched tile hangs where the peak was and falls slowly; the columns hang from the
+   top like the poster (a switch makes them rise from the bottom); three rows of letter tiles at the foot carry the track (title,
+   artist, file) and a tile turns black when its column jumps; the venn icon is bass, mids and highs (three circles that grow), the
+   stack icon counts the beats, the "Aa" box is the bit depth. Fake signal, no audio. */
+:root { --bg:#121212; --fg:#d8d8d8; --muted:#8a8a8a; --mono: ui-monospace, Menlo, monospace; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 24px 16px 48px; }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+h1 { font: 700 20px var(--mono); margin: 0; }
+p { margin: 0; color: var(--muted); max-width: 72ch; }
+.bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+button, select { font: 13px var(--mono); background: #242424; color: var(--fg); border: 1px solid #444; padding: 6px 10px; cursor: pointer; }
+label { font: 13px var(--mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+figure { margin: 0; display: grid; gap: 6px; }
+figcaption { font: 12px/1.45 var(--mono); color: var(--muted); }
+canvas { width: 100%; aspect-ratio: 3 / 4; display: block; border: 1px solid #333; }
+</style>
+<div class="wrap">
+  <h1>Poster: Tiles</h1>
+  <p>A one-ink print poster as a meter: ten columns of dotted tiles, one per band group, each ending in a solid block with a hatched tile where the peak fell from. Letter tiles at the foot carry the track and turn black when their column jumps.</p>
+  <div class="bar">
+    <button id="next">next track</button>
+    <label>columns <select id="dir"><option value="top">hang from the top</option><option value="bottom">rise from the bottom</option></select></label>
+    <label><input id="text" type="checkbox" checked> text</label>
+    <label><input id="auto" type="checkbox" checked> auto level</label>
+    <label>level <input id="lvl" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const W = 600, H = 800, TAU = Math.PI * 2;
+const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+const SERIF = 'Georgia, "Times New Roman", serif';
+const MONO = 'ui-monospace, Menlo, Consolas, monospace';
+const PALS = [
+  ['Mint', { bg:'#b1dbb8', ink:'#0e0e0c' }],
+  ['Paper', { bg:'#e8e0cc', ink:'#14110d' }],
+  ['Blush', { bg:'#efb9aa', ink:'#150f0d' }],
+  ['Night', { bg:'#0f130f', ink:'#9fe8ac' }],
+];
+const TRACKS = [
+  { name:'Ana Duarte', title:'Maré Cheia', album:'Ilhas', year:'2024', codec:'FLAC', bits:'24/96', dr:'DR12', dur:274, n:3, of:12 },
+  { name:'Night Ferry', title:'Eleven Miles of Fog and Static', album:'Long Crossings, Vol. 2', year:'1998', codec:'ALAC', bits:'16/44', dr:'DR7', dur:468, n:11, of:14 },
+  { name:'Mono', title:'Tape 3', album:'', year:'', codec:'MP3', bits:'320', dr:'', dur:125, n:1, of:1 },
+];
+let ti = 0;
+const $ = (id) => document.getElementById(id);
+const NB = 30, NC = 10, NR = 10;
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const avg = (a, i, j) => { let s = 0; for (let k = i; k < j; k++) s += a[k]; return s / (j - i); };
+function fakeBands(t, base) {
+  return Array.from({ length: NB }, (_, i) => {
+    const tilt = 1 - i / (NB * 1.7);
+    const v = 0.42 + 0.24 * Math.sin(t * (0.9 + i * 0.21) + i) + 0.4 * Math.pow(Math.max(0, Math.sin(t * (3.1 - i * 0.08) + i * 0.9)), 6);
+    return clamp(v * tilt * base);
+  });
+}
+function T(g, s, x, y, o) {
+  g.font = `${o.style || ''} ${o.weight || 400} ${o.size || 10.5}px ${o.font || SANS}`;
+  g.letterSpacing = `${o.ls ?? 0}px`;
+  g.textAlign = o.align || 'left'; g.fillStyle = o.color;
+  g.fillText(s, x, y); g.letterSpacing = '0px';
+}
+function fitSize(g, s, max, size, o) {
+  for (; size > 10; size -= 1) { g.font = `${o.weight} ${size}px ${o.font}`; g.letterSpacing = `${o.ls}px`; if (g.measureText(s).width <= max) break; }
+  g.letterSpacing = '0px';
+  return size;
+}
+
+// ---- print textures (made once per canvas)
+function dots(ink, r) {
+  const c = document.createElement('canvas'); c.width = c.height = 8;
+  const x = c.getContext('2d'); x.fillStyle = ink;
+  [[2, 2], [6, 2], [0, 6], [4, 6]].forEach(([px, py]) => { x.beginPath(); x.arc(px, py, r, 0, TAU); x.fill(); x.beginPath(); x.arc(px + 8, py, r, 0, TAU); x.fill(); });
+  return c;
+}
+function hatch(ink) {
+  const c = document.createElement('canvas'); c.width = c.height = 6;
+  const x = c.getContext('2d'); x.strokeStyle = ink; x.lineWidth = 1.6;
+  x.beginPath(); x.moveTo(-1, 7); x.lineTo(7, -1); x.moveTo(-1, 1); x.lineTo(1, -1); x.moveTo(5, 7); x.lineTo(7, 5); x.stroke();
+  return c;
+}
+const states = new WeakMap();
+function stateOf(g, pal) {
+  const c = g.canvas;
+  if (!states.has(c)) {
+    const mk = (img, k) => { const p = g.createPattern(img, 'repeat'); p.setTransform(new DOMMatrix().scale(k)); return p; };
+    // fixed specks of print wear: [x, y, r, ink or paper]
+    let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const specks = Array.from({ length: 220 }, () => [rnd() * W, rnd() * H, 0.4 + rnd() * 1.1, rnd() < 0.8]);
+    states.set(c, {
+      prev: null, L: Array(NC).fill(0), P: Array(NC).fill(0), hold: Array(NC).fill(0), flash: Array(NC).fill(0), tgt: Array(NC).fill(0),
+      beats: 0, slow: 0.3, last: -9, el: 0,
+      dark: mk(dots(pal.ink, 1.5), 1), light: mk(dots(pal.ink, 0.7), 1), hatch: mk(hatch(pal.ink), 1), specks,
+    });
+  }
+  return states.get(c);
+}
+
+// ---- pieces
+function tileDot(g, st, pal, x, y, s) {
+  g.fillStyle = st.dark; g.fillRect(x, y, s, s);
+  g.fillStyle = pal.ink; g.beginPath(); g.arc(x + s / 2, y + s / 2, s * 0.085, 0, TAU); g.fill();
+}
+function marquee(str, w, t) {
+  const s = (str || '').toUpperCase();
+  if (s.length <= w) return s.padEnd(w, ' ');
+  const loop = s + '   ';
+  const off = Math.floor(t / 0.7) % loop.length;
+  return (loop + loop).slice(off, off + w);
+}
+function icons(g, st, pal, tr, bands, t) {
+  const ink = pal.ink, bg = pal.bg;
+  // stack icon: a rounded square with a 3x3 grid of dots that fills with the beats
+  g.fillStyle = ink; g.beginPath(); g.roundRect(438, 62, 48, 48, 9); g.fill();
+  g.fillStyle = st.dark; g.save(); g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,0.0)'; g.restore();
+  g.fillStyle = bg;
+  const k = st.beats % 10;
+  for (let i = 0; i < 9; i++) { const x = 446 + (i % 3) * 12, y = 70 + Math.floor(i / 3) * 12; g.globalAlpha = i < k - 0 && k > 0 ? 1 : 0.28; g.fillRect(x, y, 9, 9); }
+  g.globalAlpha = 1;
+  // venn icon: three circles that grow with bass, mids, highs
+  g.fillStyle = ink; g.fillRect(496, 62, 48, 48);
+  const v = [avg(bands, 0, 4), avg(bands, 4, 16), avg(bands, 16, NB)].map((a) => clamp(a * 1.6));
+  [[512, 76, v[0]], [528, 76, v[1]], [520, 90, v[2]]].forEach(([cx, cy, a]) => { g.strokeStyle = bg; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, 8 + a * 6, 0, TAU); g.stroke(); });
+  // Aa box shows the bit depth
+  g.strokeStyle = ink; g.lineWidth = 2; g.strokeRect(497, 120, 46, 40);
+  T(g, tr.bits, 520, 146, { size: tr.bits.length > 5 ? 13 : 16, weight: 800, color: ink, align: 'center', ls: -0.3 });
+}
+
+function poster(g, t, pal, tr, o) {
+  const st = stateOf(g, pal), dt = st.prev === null ? 0.016 : clamp(t - st.prev, 0.001, 0.05); st.prev = t;
+  const base = o.auto ? 0.55 + 0.25 * Math.sin(t * 0.35) : o.lvl * 1.4;
+  const bands = fakeBands(t, base);
+  st.el = t % tr.dur;
+  const bass = avg(bands, 0, 4);
+  st.slow += (bass - st.slow) * Math.min(1, dt * 1.4);
+  if (bass > st.slow * 1.22 + 0.04 && t - st.last > 0.42) { st.last = t; st.beats++; }
+
+  // column levels (rows), peaks and flashes
+  for (let c = 0; c < NC; c++) {
+    const target = clamp(avg(bands, c * 3, c * 3 + 3) * 2.4) * NR, was = st.seen ? st.tgt[c] : target; st.tgt[c] = target;
+    if (target - was > 2.2) st.flash[c] = 1;
+    st.L[c] += (target - st.L[c]) * (target > st.L[c] ? Math.min(1, dt * 22) : Math.min(1, dt * 5));
+    if (st.L[c] >= st.P[c]) { st.P[c] = st.L[c]; st.hold[c] = 0.45; }
+    else { st.hold[c] -= dt; if (st.hold[c] < 0) st.P[c] = Math.max(st.L[c], st.P[c] - dt * 3.2); }
+    st.flash[c] = Math.max(0, st.flash[c] - dt * 3);
+  }
+  st.seen = true;
+
+  const { ink, bg } = pal;
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const X0 = 96, Y0 = 208, P = 40.8, S = 38.8, top = o.dir === 'top';
+
+  // columns
+  for (let c = 0; c < NC; c++) {
+    const L = st.L[c], full = Math.floor(L), pk = Math.floor(st.P[c]);
+    for (let r = 0; r < NR; r++) {
+      const x = X0 + c * P, y = Y0 + (top ? r : NR - 1 - r) * P;
+      if (r < full) tileDot(g, st, pal, x, y, S);
+      else if (r === full && L - full > 0.35) { g.fillStyle = ink; g.fillRect(x, y, S, S); }
+      else if (r === pk && pk > full + 0) { g.fillStyle = st.hatch; g.fillRect(x, y, S, S); }
+    }
+  }
+
+  // letter rows: title, artist, file; a tile turns black when its column jumps
+  const rows = o.text ? [marquee(tr.title, NC, t), marquee(tr.name, NC, t + 3), marquee([tr.codec, tr.bits, tr.dr, tr.year].filter(Boolean).join(' '), NC, t + 5)] : ['', '', ''];
+  const LY = Y0 + NR * P + 4;
+  rows.forEach((s, ri) => {
+    for (let c = 0; c < NC; c++) {
+      const x = X0 + c * P, y = LY + ri * 40, f = st.flash[c] > 0.4, ch = (s[c] || ' ');
+      g.fillStyle = f ? ink : st.light; g.fillRect(x, y, S, 37);
+      if (ch !== ' ') T(g, ch, x + S / 2, y + 27, { size: 25, weight: 800, color: f ? bg : ink, align: 'center', ls: 0 });
+    }
+  });
+
+  if (o.text) {
+    // header: title, credits, icons
+    const ts = fitSize(g, tr.title, 340, 58, { weight: 800, font: SANS, ls: -2.2 });
+    T(g, tr.title, 58, 108, { size: ts, weight: 800, color: ink, ls: -2.2 });
+    T(g, `Track ${String(tr.n).padStart(2, '0')} / ${tr.year || mmss(tr.dur)}`, 58, 138, { size: 13, weight: 700, color: ink, font: SERIF, ls: 0 });
+    [tr.name, tr.album || 'single', `${tr.codec} ${tr.bits}${tr.dr ? ' · ' + tr.dr : ''}`, `${mmss(st.el)} / ${mmss(tr.dur)}`].forEach((s, i) =>
+      T(g, s, 58, 154 + i * 10, { size: 7.5, style: 'italic', color: ink, font: SERIF, ls: 0 }));
+    icons(g, st, pal, tr, bands, t);
+    // progress: a row of tiny squares at the foot
+    const n = 40, on = Math.floor(st.el / tr.dur * n);
+    for (let i = 0; i < n; i++) { g.globalAlpha = i < on ? 1 : 0.18; g.fillStyle = ink; g.fillRect(X0 + i * 10.2, 760, 7, 7); }
+    g.globalAlpha = 1;
+  }
+
+  // specks of print wear
+  for (const [x, y, r, dark] of st.specks) { g.fillStyle = dark ? ink : bg; g.globalAlpha = dark ? 0.55 : 0.7; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+  g.globalAlpha = 1;
+}
+
+// ---- page
+const grid = $('grid'), cards = [];
+PALS.forEach(([name, pal]) => {
+  const fig = document.createElement('figure'), c = document.createElement('canvas');
+  c.width = W * 2; c.height = H * 2;
+  const cap = document.createElement('figcaption'); cap.textContent = name;
+  fig.append(c, cap); grid.append(fig);
+  cards.push({ g: c.getContext('2d'), pal });
+});
+$('next').onclick = () => { ti = (ti + 1) % TRACKS.length; };
+let T0 = 0;
+function frame(ms) {
+  const t = (ms + T0) / 1000;
+  const o = { text: $('text').checked, auto: $('auto').checked, lvl: +$('lvl').value, dir: $('dir').value };
+  for (const { g, pal } of cards) { g.save(); g.scale(2, 2); poster(g, t, pal, TRACKS[ti], o); g.restore(); }
+  requestAnimationFrame(frame);
+}
+// ?warm=N starts the animation N seconds in (for screenshots)
+T0 = (+new URLSearchParams(location.search).get('warm') || 0) * 1000;
+requestAnimationFrame(frame);
+</script>
